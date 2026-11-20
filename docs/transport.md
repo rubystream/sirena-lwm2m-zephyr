@@ -21,8 +21,9 @@ LwM2M server URI once, in the Security object, and the transport layer picks
 the plaintext or the secure binding from its scheme.
 
 The shared exchange holds the parts of the registration that both bindings use:
-the registration payload, the request paths and the server address. A change to
-the response mapping or to the path handling is therefore made once.
+the registration payload, the request paths, the server address and the request
+itself with the mapping of its response. A change to the response mapping or to
+the path handling is therefore made once.
 
 Both bindings share one CoAP endpoint, which owns the socket of the transport.
 Zephyr's CoAP client cannot be used for that: it is response only. It
@@ -60,7 +61,8 @@ int sirena_lwm2m_transport_start(void);
 The `poll` entry point lets the engine thread watch the socket of the binding.
 The engine calls it while it waits for work, so a request the server sends is
 dispatched even when no lifecycle call is running. The `notify` entry point
-publishes a resource value to the observations of the binding.
+publishes a resource value to the observations of the binding and returns the
+number of the observations it notified.
 
 `sirena_lwm2m_transport_bind()` attaches a binding to the transport interface
 and starts the engine thread. The attachment happens in engine context, so
@@ -276,6 +278,9 @@ the list, as required by LwM2M 1.2 Core 6.2.1. The Server (id 1) and the Device
 (id 3) objects are part of it: the registration is refused with `-EINVAL`
 when one of them has no instance in the registry, because the mandatory
 objects have to be part of the payload.
+
+The Update and the Deregister requests carry the Content-Format of the link
+format, as the Register request does, also when they carry no payload.
 
 The Update request carries the lifetime and the binding mode. It never carries
 the endpoint name.

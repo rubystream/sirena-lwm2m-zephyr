@@ -21,8 +21,8 @@ for every request it receives.
 | Operation | Method | URI | Success | Failure |
 | --- | --- | --- | --- | --- |
 | Read | GET | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05, 4.06 |
-| Write | PUT | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.04 Changed | 4.00, 4.04, 4.05, 4.06, 4.15 |
-| Execute | POST | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.04 Changed | 4.00, 4.04, 4.05, 4.06 |
+| Write | PUT | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.04 Changed | 4.00, 4.04, 4.05, 4.15 |
+| Execute | POST | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.04 Changed | 4.00, 4.04, 4.05 |
 | Observe | GET with Observe = 0 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 5.03 |
 | Cancel Observation | GET with Observe = 1 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05 |
 | Notify | notification | the observed resource | 2.05 Content | |
@@ -37,35 +37,46 @@ maps them to the LwM2M operations:
 | 4.00 Bad Request | The payload does not match the resource, or the write payload cannot be decoded. |
 | 4.04 Not Found | The path does not resolve to a resource of the registry. |
 | 4.05 Method Not Allowed | The resource does not support the operation. A read of a resource that only executes, a write of a read-only resource and an execute of a resource that only reads are refused with this code. |
-| 4.06 Not Acceptable | The server named no content format the client supports. |
+| 4.06 Not Acceptable | The server named no content format the client can encode the resource in, or it named more of them than the client can hold. |
 | 4.15 Unsupported Content-Format | The payload of a write uses a content format the codec cannot decode. The codec decodes the plain text, the opaque and the TLV formats; the structured formats are encoded but not decoded yet. |
+| 5.00 Internal Server Error | The client could not build the representation of the resource, for example because the encoded value does not fit the configured buffer. |
 | 5.03 Service Unavailable | The observation capacity of the client is exhausted. |
 
 The access mode of the registry decides what a resource allows. A resource that
-the registry marks as read-only is never readable or writable over the wire, and
-a resource that it marks as executable is never readable.
+the registry marks as read-only is readable over the wire and refuses a write,
+and a resource that it marks as executable is neither readable nor writable.
 
 ## Content format negotiation
 
 The server tells the client which encoding it accepts with the CoAP Accept
 option. The client picks one of the formats it supports with
-`sirena_lwm2m_content_format_negotiate()` and uses it for the response.
+`sirena_lwm2m_content_format_negotiate()` and uses it for the response. A
+format the codec cannot encode for the type of the resource is not acceptable
+for that request, so the negotiation takes the type of the resource into
+account.
 
 | Rule | Behaviour |
 | --- | --- |
-| The request carries an Accept option | The client picks the first format of the list that it supports. |
-| The request carries no Accept option | The client uses its preferred format, `CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT`. |
-| No format of the Accept list is supported | The client answers 4.06 Not Acceptable. |
-| The request is a write | The payload is decoded with the Content-Format of the request. Without a Content-Format option the negotiated format is used. |
+| The request carries an Accept option | The client picks the first format of the list that it supports and that the codec can encode the resource in. The list is in the order of the preference of the server, as RFC 7251 asks. |
+| The request carries no Accept option | The client uses its preferred format, `CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT`, when the codec can encode the resource in it. Otherwise it uses the first format it supports that the codec can encode the resource in. |
+| No format of the Accept list is supported, or none of them encodes the resource | The client answers 4.06 Not Acceptable. |
+| The Accept list is longer than `CONFIG_SIRENA_LWM2M_ACCEPTED_FORMATS_MAX` | The client answers 4.06 Not Acceptable. It never ignores the formats it cannot hold. |
+| The request is a write | The payload is decoded with the Content-Format of the request. Without a Content-Format option the preferred format is used. The Accept option of a write is ignored: the response of a write carries no representation, so there is nothing for the server to constrain. |
+| The request is an execute | The payload is passed to the execute handler as it is. The Accept option of an execute is ignored, for the same reason. |
 
 The preferred format defaults to the TLV format, because the codec encodes every
-resource type in it. The plain text format only encodes string resources, so an
-application that prefers the plain text format gets a read error for the other
-resource types.
+resource type in it. The plain text format only encodes string resources and
+the opaque format only encodes opaque resources, so a read of another resource
+type with one of those formats is refused with 4.06 Not Acceptable.
 
 The client never negotiates a format that the codec cannot encode for the
 resource. A format the codec cannot decode is refused with 4.15 Unsupported
 Content-Format instead of being parsed as something else.
+
+The response that carries a representation carries the Content-Format option of
+the negotiated format, also when the format is the plain text format, whose
+identifier is zero. A response that carries no representation carries no
+Content-Format option.
 
 The formats the codec knows are the identifiers of `sirena/lwm2m/codec.h`: plain
 text, TLV, JSON, CBOR, SenML JSON, SenML CBOR, SenML ETCH JSON, SenML ETCH CBOR
@@ -79,12 +90,13 @@ An observation is a CoAP Observe registration on a resource path.
 | Step | Behaviour |
 | --- | --- |
 | Register | A GET with the Observe option set to 0 registers an observation. The response carries the current value and the Observe option with the sequence number of the observation. |
-| Notify | `sirena_lwm2m_notify_resource()` reads the current value of the resource and sends a notification to every observation of that path. The notification carries the observation token, the Observe option with the next sequence number and the value in the format the observation negotiated. |
+| Notify | `sirena_lwm2m_notify_resource()` reads the current value of the resource and sends a notification to every observation of that path. The notification is a confirmable message, as RFC 7641 asks, so that the server acknowledges it and a loss is visible. It carries the observation token, the Observe option with the next sequence number and the value in the format the observation negotiated. |
 | Cancel | A GET with the Observe option set to 1 and the token of the observation removes it, as RFC 7641 section 3.6 asks. The client answers with the current value. The state of the cancelled observation is released, so it never leaks and it is never notified again. |
 | Capacity | The client holds at most `CONFIG_SIRENA_LWM2M_MAX_OBSERVATIONS` observations. A registration beyond that capacity is refused with 5.03 Service Unavailable, never dropped silently. |
 
 The observations live in static storage. The client never uses the heap for
-them.
+them. The client does not retransmit a notification it did not get an
+acknowledgement for.
 
 ## The application interface
 
@@ -95,9 +107,10 @@ int sirena_lwm2m_notify_resource(uint16_t object_id, uint16_t instance_id,
 
 The call publishes the current value of a resource to the observations of that
 path. It queues the work on the engine thread and waits for its completion, so
-it returns the result of the work to the caller. It returns `0` when the
-notification work succeeded, and `-ENOTSUP` when no transport is bound or when
-the engine thread does not run.
+it returns the result of the work to the caller. It returns the number of the
+observations that were notified, so `0` means that no observation of that path
+was registered. It returns `-ENOTSUP` when no transport is bound or when the
+engine thread does not run.
 
 The application sets the value before it publishes it, with the typed setters of
 `sirena/lwm2m/objects.h`, and the client reads the value from the registry when
@@ -135,6 +148,11 @@ response, and it parses the requests the server sends and dispatches them into
 the protocol core. The registration, the update and the deregistration keep
 their behaviour and their paths, and the server reaches the device management
 interface on the same socket the client registered on, as OMA LwM2M 1.2 requires.
+
+A response is only matched when it comes from the server the request was sent
+to, so a datagram of another peer never completes an exchange. A request whose
+path holds more segments than a resource path has is refused with 4.04 Not
+Found: the endpoint never copies more segments into the path than it can hold.
 
 The engine thread polls the socket with the interval of
 `CONFIG_SIRENA_LWM2M_ENGINE_POLL_INTERVAL_MS`. The interval bounds the latency
@@ -200,6 +218,8 @@ the response code, the content format, the observe option, the token and the
 payload.
 
 The suite covers the read, the write and the execute with their status codes,
-the content format negotiation with and without an Accept option, the
-observation with its notification, the capacity of the observation table and the
+the content format negotiation with and without an Accept option, the refusal
+of a format the codec cannot encode for the resource, the refusal of an Accept
+list the client cannot hold, a path with too many segments, the observation
+with its notification, the capacity of the observation table and the
 cancellation of an observation.
