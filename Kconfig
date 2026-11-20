@@ -182,6 +182,17 @@ config SIRENA_LWM2M_PSK_KEY_MAX
 	  CONFIG_MBEDTLS_PSK_MAX_LEN, which has to be raised to the same
 	  size to use a key of more than 32 bytes.
 
+config SIRENA_LWM2M_DTLS_SEC_TAG
+	int "Secure tag of the DTLS credentials"
+	default 1
+	range 1 65535
+	depends on SIRENA_LWM2M_TRANSPORT_DTLS
+	help
+	  The secure tag under which the DTLS binding registers the
+	  pre-shared key identity and the pre-shared key with the TLS
+	  credential subsystem. A secure tag identifies one set of
+	  credentials, so the value has to be unique in the application.
+
 if SIRENA_LWM2M_TRANSPORT_COAP || SIRENA_LWM2M_TRANSPORT_DTLS
 
 config COAP_EXTENDED_OPTIONS_LEN_VALUE

@@ -33,8 +33,6 @@
 #define SIRENA_LWM2M_COAP_BINDING_MODE "U"
 #define SIRENA_LWM2M_COAP_LOCATION_OPTION 7U
 
-#define SIRENA_LWM2M_DTLS_SEC_TAG 1
-
 struct sirena_lwm2m_dtls_exchange {
     int result_code;
     char location[CONFIG_SIRENA_LWM2M_LOCATION_PATH_MAX + 1U];
@@ -229,8 +227,8 @@ static int security_mode_allowed(int64_t mode)
 
 static void credentials_release(void)
 {
-    (void)tls_credential_delete(SIRENA_LWM2M_DTLS_SEC_TAG, TLS_CREDENTIAL_PSK);
-    (void)tls_credential_delete(SIRENA_LWM2M_DTLS_SEC_TAG, TLS_CREDENTIAL_PSK_ID);
+    (void)tls_credential_delete(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG, TLS_CREDENTIAL_PSK);
+    (void)tls_credential_delete(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG, TLS_CREDENTIAL_PSK_ID);
 }
 
 static int credentials_register(void)
@@ -277,13 +275,13 @@ static int credentials_register(void)
 
     credentials_release();
 
-    rc = tls_credential_add(SIRENA_LWM2M_DTLS_SEC_TAG, TLS_CREDENTIAL_PSK, secret_key,
+    rc = tls_credential_add(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG, TLS_CREDENTIAL_PSK, secret_key,
                              secret_key_length);
     if (rc != 0) {
         return rc;
     }
 
-    rc = tls_credential_add(SIRENA_LWM2M_DTLS_SEC_TAG, TLS_CREDENTIAL_PSK_ID, identity,
+    rc = tls_credential_add(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG, TLS_CREDENTIAL_PSK_ID, identity,
                              identity_length);
     if (rc != 0) {
         credentials_release();
@@ -308,7 +306,7 @@ static void dtls_session_close(void)
 static int dtls_session_open(void)
 {
     static const int ciphersuites[] = { MBEDTLS_TLS_PSK_WITH_AES_128_CCM_8 };
-    sec_tag_t tags[] = { SIRENA_LWM2M_DTLS_SEC_TAG };
+    sec_tag_t tags[] = { CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG };
     struct net_sockaddr_storage storage;
     int verify = ZSOCK_TLS_PEER_VERIFY_NONE;
     int64_t mode;

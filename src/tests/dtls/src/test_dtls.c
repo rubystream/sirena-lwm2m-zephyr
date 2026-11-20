@@ -49,6 +49,7 @@ struct peer_request {
 static struct peer_request dtls_request;
 static struct peer_request plain_request;
 static char dtls_uri[64];
+static char dtls_uri_without_port[64];
 static char plain_uri[64];
 static char custom_server_uri[64];
 static int64_t custom_security_mode;
@@ -417,6 +418,9 @@ static void *suite_setup(void)
 	rc = snprintf(dtls_uri, sizeof(dtls_uri), "coaps://127.0.0.1:%u", PEER_DTLS_PORT);
 	zassert_true(rc > 0 && rc < (int)sizeof(dtls_uri), "dtls uri build failed");
 
+	rc = snprintf(dtls_uri_without_port, sizeof(dtls_uri_without_port), "coaps://127.0.0.1");
+	zassert_true(rc > 0 && rc < (int)sizeof(dtls_uri_without_port), "dtls uri build failed");
+
 	dtls_peer_start();
 
 	return NULL;
@@ -541,6 +545,24 @@ ZTEST(sirena_lwm2m_dtls, test_dtls_binding_uses_the_secure_port)
 	zassert_true(dtls_request.received, "the peer received no request");
 	zassert_equal(net_ntohs(dtls_peer_port), PEER_DTLS_PORT,
 		      "the secure binding must use port 5684");
+}
+
+ZTEST(sirena_lwm2m_dtls, test_the_secure_binding_uses_the_default_port)
+{
+	int rc;
+
+	provision_psk(dtls_uri_without_port, PEER_PSK_IDENTITY, sizeof(PEER_PSK_IDENTITY) - 1U,
+		      PEER_PSK_KEY, sizeof(PEER_PSK_KEY) - 1U);
+
+	rc = sirena_lwm2m_transport_start();
+	zassert_equal(rc, 0, "transport start failed: %d", rc);
+
+	rc = sirena_lwm2m_transport_register();
+	zassert_equal(rc, 0, "register failed: %d", rc);
+
+	zassert_true(dtls_request.received, "the peer received no request");
+	zassert_equal(net_ntohs(dtls_peer_port), PEER_DTLS_PORT,
+		      "the secure binding must use the default port 5684");
 }
 
 ZTEST(sirena_lwm2m_dtls, test_register_stores_the_location_path)

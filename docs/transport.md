@@ -338,8 +338,11 @@ provisions a longer key raises it to the same size.
 
 The key material stays in the static storage of the Security object. The
 binding registers the identity and the key with the TLS credential subsystem
-under one secure tag and points the credentials at the storage of the Security
-object, so the material is never copied into a second buffer and never logged.
+under one secure tag, `CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG`, and points the
+credentials at the storage of the Security object, so the material is never
+copied into a second buffer and never logged. The secure tag identifies one
+set of credentials, so an application that uses credentials of its own picks a
+tag that is not used already.
 The credentials are released when the session ends and when the transport
 stops, so a re-provisioning with other credentials cannot leave the old key
 registered.
@@ -396,6 +399,7 @@ A failed handshake sends no request: the server never sees the registration.
 | `CONFIG_SIRENA_LWM2M_TRANSPORT_NOSEC` | Allows a server that uses the NoSec security mode. It is for development and testing only. | `n` |
 | `CONFIG_SIRENA_LWM2M_PSK_IDENTITY_MAX` | Maximum size of the PSK identity. | 128 |
 | `CONFIG_SIRENA_LWM2M_PSK_KEY_MAX` | Maximum size of the PSK key. | 64 |
+| `CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG` | Secure tag under which the DTLS binding registers the credentials. It has to be unique in the application. | 1 |
 | `CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX` | Size of the identity, public key and secret key buffers of the Security object. It is 128 when the DTLS binding is enabled. | 32 |
 | `CONFIG_COAP_EXTENDED_OPTIONS_LEN_VALUE` | Length of a CoAP option value. The module sizes it so that the endpoint client name fits. | 64 |
 | `CONFIG_SIRENA_LWM2M_ENGINE_QUEUE_SIZE` | Number of queued engine requests. | 8 |
