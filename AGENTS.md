@@ -4,9 +4,16 @@
 
 - **Do not write comments in code.** The code should speak for itself.
 
+## Tooling and Placement Guardrails
+
+- Zephyr tooling must run only in Docker via `docker compose` or the npm scripts. Never install or invoke it on the host.
+- Implementation code lives under `src/`; developer-facing documentation lives under `docs/`.
+
 ## Repository Layout
 
-- Implementation code lives under `src/`.
+- Implementation code lives under `src/`. Place source, headers, and
+  implementation assets there; do not put implementation files at the repository
+  root.
 - Developer-facing documentation lives under `docs/`.
 - Zephyr module build metadata (`CMakeLists.txt`, `zephyr/module.yml`) is
   retained at the repository root as expected by `west`.
@@ -51,6 +58,9 @@ Example: `feat/post-tag-filter`, `fix/sqlite-content-sync`.
 
 ## Containerized Zephyr Build Environment
 
+- Zephyr tooling (`west`, configure, build, test, and flash, including all
+  toolchain/compiler/debug-tools) runs only inside Docker. The host must not
+  compile Zephyr, flash devices, install the SDK, or run `west` directly.
 - Base image is pinned to `zephyrprojectrtos/zephyr-build:v0.30.0`.
 - The default Compose service runs without privileged access, devices, or added
   capabilities; hardware access is not granted by default.
