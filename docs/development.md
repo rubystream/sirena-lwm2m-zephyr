@@ -251,15 +251,15 @@ formats or unimplemented decode paths.
 
 The transport interface and the CoAP/UDP and CoAP/DTLS bindings use negative
 `errno` values: `-EINVAL` for an invalid argument or a client state that
-cannot be registered, `-ENOTSUP` for an unsupported scheme, a missing binding
-or a transport that is not running, `-ENOMEM` for a value that does not fit the
-configured capacity, `-ENOENT` for a missing object, a missing credential or
-an unknown registration, and `-EALREADY` for an engine thread that is already
-running. The server response codes are mapped to distinct codes so that the
-caller can tell them apart. The DTLS binding adds `-EPERM` for the closed
-noSec development gate, `-EPROTONOSUPPORT` for a security mode that is not
-implemented and `-EACCES` for a failed DTLS handshake. See
-[Transport Bindings](transport.md) for the full tables.
+cannot be registered, `-ENOTSUP` for an unsupported scheme, a missing binding,
+a transport that is not running or a security mode that is not implemented,
+`-ENOMEM` for a value that does not fit the configured capacity, `-ENOENT`
+for a missing object, a missing credential or an unknown registration, and
+`-EALREADY` for an engine thread that is already running. The server response
+codes are mapped to distinct codes so that the caller can tell them apart. The
+bindings add `-EPERM` for the closed noSec development gate and `-EACCES` for
+a failed DTLS handshake. See [Transport Bindings](transport.md) for the full
+tables.
 
 ## Objects Error Codes
 

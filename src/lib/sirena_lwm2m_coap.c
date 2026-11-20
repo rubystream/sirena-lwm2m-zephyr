@@ -150,7 +150,7 @@ static int security_mode_allowed(int64_t mode)
     case SIRENA_LWM2M_SECURITY_MODE_PSK:
         return -EINVAL;
     default:
-        return -EPROTONOSUPPORT;
+        return -ENOTSUP;
     }
 }
 

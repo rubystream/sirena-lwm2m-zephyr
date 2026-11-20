@@ -148,7 +148,7 @@ static int transport_binding_for(const char *uri, int64_t mode,
         *binding = SIRENA_LWM2M_TRANSPORT_BINDING_COAP;
         return 0;
     default:
-        return -EPROTONOSUPPORT;
+        return -ENOTSUP;
     }
 }
 

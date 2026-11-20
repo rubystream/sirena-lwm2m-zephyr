@@ -215,6 +215,18 @@ static int server_lifetime(int64_t *lifetime)
     return sirena_lwm2m_get_integer(SIRENA_LWM2M_SERVER_OBJECT_ID, 0U, 1U, lifetime);
 }
 
+static int security_mode_allowed(int64_t mode)
+{
+    switch (mode) {
+    case SIRENA_LWM2M_SECURITY_MODE_PSK:
+        return 0;
+    case SIRENA_LWM2M_SECURITY_MODE_NOSEC:
+        return -EINVAL;
+    default:
+        return -ENOTSUP;
+    }
+}
+
 static void credentials_release(void)
 {
     (void)tls_credential_delete(SIRENA_LWM2M_DTLS_SEC_TAG, TLS_CREDENTIAL_PSK);
@@ -243,12 +255,20 @@ static int credentials_register(void)
         return rc;
     }
 
-    if (identity_length == 0U || identity_length > CONFIG_SIRENA_LWM2M_PSK_IDENTITY_MAX) {
+    if (identity_length == 0U) {
         return -ENOENT;
     }
 
-    if (secret_key_length == 0U || secret_key_length > CONFIG_SIRENA_LWM2M_PSK_KEY_MAX) {
+    if (identity_length > CONFIG_SIRENA_LWM2M_PSK_IDENTITY_MAX) {
+        return -EINVAL;
+    }
+
+    if (secret_key_length == 0U) {
         return -ENOENT;
+    }
+
+    if (secret_key_length > CONFIG_SIRENA_LWM2M_PSK_KEY_MAX) {
+        return -EINVAL;
     }
 
     if (secret_key_length > MBEDTLS_PSK_MAX_LEN) {
@@ -304,8 +324,9 @@ static int dtls_session_open(void)
         return rc;
     }
 
-    if (mode != SIRENA_LWM2M_SECURITY_MODE_PSK) {
-        return -EPROTONOSUPPORT;
+    rc = security_mode_allowed(mode);
+    if (rc != 0) {
+        return rc;
     }
 
     rc = server_address(&storage);
@@ -552,6 +573,17 @@ int sirena_lwm2m_dtls_start_engine(void)
     int64_t mode;
     int rc;
 
+    rc = sirena_lwm2m_get_integer(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                  SIRENA_LWM2M_SECURITY_MODE_RESOURCE, &mode);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = security_mode_allowed(mode);
+    if (rc != 0) {
+        return rc;
+    }
+
     if (transport_started) {
         return 0;
     }
@@ -559,16 +591,6 @@ int sirena_lwm2m_dtls_start_engine(void)
     rc = server_address(&storage);
     if (rc != 0) {
         return rc;
-    }
-
-    rc = sirena_lwm2m_get_integer(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
-                                  SIRENA_LWM2M_SECURITY_MODE_RESOURCE, &mode);
-    if (rc != 0) {
-        return rc;
-    }
-
-    if (mode != SIRENA_LWM2M_SECURITY_MODE_PSK) {
-        return -EPROTONOSUPPORT;
     }
 
     rc = sirena_lwm2m_coap_client_get(&client);

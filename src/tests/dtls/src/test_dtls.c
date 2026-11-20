@@ -610,9 +610,20 @@ ZTEST(sirena_lwm2m_dtls, test_transport_refuses_the_unsupported_security_modes)
 		zassert_equal(rc, 0, "security mode update failed: %d", rc);
 
 		rc = sirena_lwm2m_transport_start();
-		zassert_equal(rc, -EPROTONOSUPPORT, "the unsupported security mode must be refused");
+		zassert_equal(rc, -ENOTSUP, "the unsupported security mode must be refused");
 	}
 
+	zassert_false(dtls_request.received, "no request must be sent");
+}
+
+ZTEST(sirena_lwm2m_dtls, test_the_dtls_binding_refuses_a_noSec_server)
+{
+	int rc;
+
+	provision_nosec(dtls_uri);
+
+	rc = sirena_lwm2m_dtls_start();
+	zassert_equal(rc, -EINVAL, "a noSec server must be refused by the secure binding");
 	zassert_false(dtls_request.received, "no request must be sent");
 }
 

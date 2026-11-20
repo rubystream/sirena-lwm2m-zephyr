@@ -68,7 +68,7 @@ plaintext binding explicitly can call `sirena_lwm2m_coap_start()` instead.
 | `coap://` | 3, NoSec | CoAP/UDP | The plaintext binding starts, but only when the noSec development gate is open. |
 | `coap://` | 0, Pre-Shared Key | none | `-EINVAL`, a pre-shared key server needs the secure scheme. |
 | `coaps://` | 3, NoSec | none | `-EINVAL`, a noSec server has no secure transport. |
-| any | 1, 2, 4 | none | `-EPROTONOSUPPORT`, the security mode is not implemented. |
+| any | 1, 2, 4 | none | `-ENOTSUP`, the security mode is not implemented. |
 
 The selection never falls back: a server that needs DTLS is never contacted in
 the clear, and a noSec server is never contacted over DTLS. The binding that
@@ -198,7 +198,7 @@ never contacted in the clear:
 | --- | --- |
 | 3, NoSec | The server is served, but only when the noSec development gate is open. |
 | 0, Pre-Shared Key | `-EINVAL`, the server needs the secure scheme and the DTLS binding. |
-| 1, 2, 4 | `-EPROTONOSUPPORT`, the security mode is not implemented. |
+| 1, 2, 4 | `-ENOTSUP`, the security mode is not implemented. |
 
 The check belongs to the binding and not only to the selection of the
 transport, so calling `sirena_lwm2m_coap_start()` directly is safe as well.
@@ -260,9 +260,8 @@ Update without a prior registration fails with `-EINVAL`.
 | `-EINVAL` | The endpoint name is missing or invalid, the server URI is malformed, the server is provisioned with the Pre-Shared Key security mode and needs the secure scheme, no registration exists for Update or Deregister, the Server (1) or the Device (3) object instance is missing from the registry, or the request path does not fit the CoAP path buffer. |
 | `-EALREADY` | The engine thread is already running. Only `sirena_lwm2m_engine_start()` returns it. |
 | `-EAGAIN` | The engine request queue is full. |
-| `-ENOTSUP` | The server URI uses the `coaps://` scheme, the host is not a numeric IPv4 address, no binding is bound to the transport interface, or the engine thread is not running. |
+| `-ENOTSUP` | The server URI uses the `coaps://` scheme, the host is not a numeric IPv4 address, no binding is bound to the transport interface, the engine thread is not running, or the security mode of the server is not implemented: Raw Public Key (1), Certificate (2) or Certificate with EST (4). |
 | `-EPERM` | The noSec development gate is closed and the server is provisioned with the NoSec security mode. |
-| `-EPROTONOSUPPORT` | The security mode of the server is not implemented: Raw Public Key (1), Certificate (2) or Certificate with EST (4). |
 | `-ENOENT` | The Security object, the Server object or the resource that holds the server URI or the lifetime does not exist, or the server answered `4.04 Not Found`, which means that the registration is unknown to the server. |
 | `-ENOMEM` | The registration payload or the request path does not fit the configured buffer. |
 | `-EBADMSG` | The server answered `4.00 Bad Request`. |
@@ -293,8 +292,9 @@ int sirena_lwm2m_dtls_get_location_path(char *buffer, size_t *length);
   thread. The work runs in the engine thread, so the call returns the result
   of the work to the application. It is idempotent and returns `0` when the
   transport is already running. A server URI that does not use the `coaps://`
-  scheme is rejected with `-EINVAL` and a security mode that is not
-  Pre-Shared Key with `-EPROTONOSUPPORT`.
+  scheme is rejected with `-EINVAL`. A server that uses the NoSec security
+  mode is rejected with `-EINVAL`, because a NoSec server has no secure
+  transport, and a security mode that is not implemented with `-ENOTSUP`.
 - `sirena_lwm2m_dtls_stop()` closes the DTLS session, releases the
   credentials and drops the registration location path. The session belongs to
   the engine thread, so the call queues the stop on the engine thread and
@@ -376,9 +376,9 @@ binding: NoSec is not a DTLS security mode.
 | Code | Meaning |
 | --- | --- |
 | `0` | The server accepted the request. |
-| `-EINVAL` | The endpoint name is missing or invalid, the server URI is malformed or does not use the `coaps://` scheme, no registration exists for Update or Deregister, the Server (1) or the Device (3) object instance is missing from the registry, or the request path does not fit the CoAP path buffer. |
-| `-EPERM` | The noSec development gate is closed and the server is provisioned with the NoSec security mode. |
-| `-EPROTONOSUPPORT` | The security mode of the server is not implemented: Raw Public Key (1), Certificate (2) or Certificate with EST (4). |
+| `-EINVAL` | The endpoint name is missing or invalid, the server URI is malformed or does not use the `coaps://` scheme, the server is provisioned with the NoSec security mode, the PSK identity or the PSK is longer than the configured limit, no registration exists for Update or Deregister, the Server (1) or the Device (3) object instance is missing from the registry, or the request path does not fit the CoAP path buffer. |
+| `-EPERM` | The noSec development gate is closed and the server is provisioned with the NoSec security mode. The transport refuses to select the secure binding for such a server. |
+| `-ENOTSUP` | The security mode of the server is not implemented: Raw Public Key (1), Certificate (2) or Certificate with EST (4). |
 | `-ENOENT` | The Security object, the Server object or the resource that holds the server URI or the lifetime does not exist, the Security object holds no PSK identity or no PSK, or the server answered `4.04 Not Found`. |
 | `-EACCES` | The DTLS handshake failed. The server rejected the pre-shared key or the key exchange did not complete. |
 | `-ENOMEM` | The registration payload or the request path does not fit the configured buffer, or the PSK is longer than `CONFIG_MBEDTLS_PSK_MAX_LEN`. |
@@ -439,7 +439,7 @@ which is 64 bytes by default. A request that does not fit is rejected with
   the protocol layer.
 - Host names and IPv6 addresses in the server URI.
 - The Raw Public Key, the Certificate and the Certificate with EST security
-  modes. They are refused with `-EPROTONOSUPPORT`.
+  modes. They are refused with `-ENOTSUP`.
 - The SNI resource of the Security object. It belongs to the certificate
   modes.
 
