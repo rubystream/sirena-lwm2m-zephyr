@@ -192,7 +192,9 @@ int sirena_lwm2m_coap_get_location_path(char *buffer, size_t *length);
   thread. The work runs in the engine thread, so the call returns the result
   of the work to the application. It is idempotent and returns `0` when the
   transport is already running. A server URI that does not use the `coap://`
-  scheme is rejected with `-EINVAL`, and a `coaps://` URI with `-ENOTSUP`.
+  scheme is rejected with `-EINVAL`, and a `coaps://` URI with `-ENOTSUP`. A
+  Security object that does not exist yet is reported with `-ENOENT`, so the
+  application provisions the client before it starts the transport.
 - `sirena_lwm2m_coap_stop()` closes the UDP socket and drops the registration
   location path. The socket belongs to the engine thread, so the call queues
   the stop on the engine thread and waits for its completion. The engine
@@ -309,7 +311,9 @@ int sirena_lwm2m_dtls_get_location_path(char *buffer, size_t *length);
   transport is already running. A server URI that does not use the `coaps://`
   scheme is rejected with `-EINVAL`. A server that uses the NoSec security
   mode is rejected with `-EINVAL`, because a NoSec server has no secure
-  transport, and a security mode that is not implemented with `-ENOTSUP`.
+  transport, and a security mode that is not implemented with `-ENOTSUP`. A
+  Security object that does not exist yet is reported with `-ENOENT`, so the
+  application provisions the client before it starts the transport.
 - `sirena_lwm2m_dtls_stop()` closes the DTLS session, releases the
   credentials and drops the registration location path. The session belongs to
   the engine thread, so the call queues the stop on the engine thread and
