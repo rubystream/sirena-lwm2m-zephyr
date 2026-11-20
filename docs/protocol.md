@@ -96,8 +96,8 @@ int sirena_lwm2m_notify_resource(uint16_t object_id, uint16_t instance_id,
 The call publishes the current value of a resource to the observations of that
 path. It queues the work on the engine thread and waits for its completion, so
 it returns the result of the work to the caller. It returns `0` when the
-notifications were sent, `-ENOTSUP` when no transport is bound and `-ENOTSUP`
-when the engine thread does not run.
+notification work succeeded, and `-ENOTSUP` when no transport is bound or when
+the engine thread does not run.
 
 The application sets the value before it publishes it, with the typed setters of
 `sirena/lwm2m/objects.h`, and the client reads the value from the registry when
