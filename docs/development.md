@@ -255,7 +255,8 @@ cannot be registered, `-ENOTSUP` for an unsupported scheme, a missing binding,
 a transport that is not running or a security mode that is not implemented,
 `-ENOMEM` for a value that does not fit the configured capacity, `-ENOENT`
 for a missing object, a missing credential or an unknown registration, and
-`-EALREADY` for an engine thread that is already running. The server response
+`-EALREADY` for an engine thread that is already running, which only
+`sirena_lwm2m_engine_start()` returns. The server response
 codes are mapped to distinct codes so that the caller can tell them apart. The
 bindings add `-EPERM` for the closed noSec development gate and `-EACCES` for
 a failed DTLS handshake. See [Transport Bindings](transport.md) for the full

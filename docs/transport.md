@@ -24,6 +24,10 @@ the request and the response, the mapping of the response code, the server
 address, the registration payload and the request paths. A change to the
 response mapping or to the path handling is therefore made once.
 
+Both bindings share one Zephyr CoAP client. Zephyr dispatches the CoAP
+responses by socket descriptor, so a second client would route the responses
+of a reused descriptor to the wrong binding.
+
 ## Transport interface
 
 ```c
@@ -44,9 +48,11 @@ int sirena_lwm2m_transport_start(void);
 ```
 
 `sirena_lwm2m_transport_bind()` attaches a binding to the transport interface
-and starts the engine thread. The three lifecycle calls queue the request on
-the engine thread and wait for its completion, so they return the result of
-the transport work to the caller.
+and starts the engine thread. The attachment happens in engine context, so
+the binding of a running transport is never replaced behind the back of the
+engine thread. The three lifecycle calls queue the request on the engine
+thread and wait for its completion, so they return the result of the
+transport work to the caller.
 
 A lifecycle call without a binding, or a call made while the engine thread
 is not running, returns `-ENOTSUP`. A build without a transport binding has no
@@ -61,10 +67,12 @@ the binding that is selected later needs it.
 `sirena_lwm2m_transport_endpoint_name()` returns it.
 
 `sirena_lwm2m_transport_start()` selects the binding and starts it. It reads
-the LwM2M server URI and the security mode from the Security object and
-starts the binding that matches them. It is the entry point for an application
-that lets the transport pick the binding; an application that wants the
-plaintext binding explicitly can call `sirena_lwm2m_coap_start()` instead.
+the LwM2M server URI and the security mode from the Security object in engine
+context and starts the binding that matches them. It is the entry point for an
+application that lets the transport pick the binding; an application that
+wants the plaintext binding explicitly can call `sirena_lwm2m_coap_start()`
+instead. The call queues the work on the engine thread and waits for its
+completion.
 
 ### Binding selection
 
@@ -465,7 +473,9 @@ npm run test:dtls-nosec
 The CoAP suite runs a real Zephyr CoAP service on 127.0.0.1 in the same
 process and registers against it, so the assertions are made on the bytes the
 server received: the method, the URI path, the query parameters, the content
-format and the payload.
+format and the payload. The suite also covers the refusal of a server that
+uses the Pre-Shared Key security mode: the plaintext binding never contacts
+such a server in the clear.
 
 `npm run test:coap` builds the shipped default configuration of the module,
 with the CoAP option length the module sizes itself. `npm run test:coap-override`
@@ -477,7 +487,17 @@ process and registers against it over DTLS 1.2, so the assertions are made on
 the bytes the server received over the secured session. The suite also covers
 the wrong pre-shared key and the unknown pre-shared key identity, which both
 have to fail the handshake, the unsupported security modes, the missing
-credentials, the port 5684 and the selection of the binding from the server
-URI scheme. `npm run test:dtls-nosec` builds the same sources with the noSec
+credentials, the port 5684, the default port of a server URI without a port
+and the selection of the binding from the server URI scheme.
+
+The DTLS suite covers the threading contract as well. It replaces the
+Security object with an object that records the thread of the read, so the
+test proves that the transport and the binding read the Security object in
+the engine thread and not in the application thread.
+
+The DTLS suite covers the plaintext binding as well: it proves that the
+plaintext binding refuses a server that uses the Pre-Shared Key security
+mode and that it honours the noSec development gate.
+`npm run test:dtls-nosec` builds the same sources with the noSec
 development gate open, to show that a NoSec server is then accepted and
 served by the plaintext binding.

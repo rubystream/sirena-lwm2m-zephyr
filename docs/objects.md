@@ -163,6 +163,7 @@ enum sirena_lwm2m_security_mode {
     SIRENA_LWM2M_SECURITY_MODE_RPK = 1,
     SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE = 2,
     SIRENA_LWM2M_SECURITY_MODE_NOSEC = 3,
+    SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE_EST = 4,
 };
 
 struct sirena_lwm2m_provisioning {
