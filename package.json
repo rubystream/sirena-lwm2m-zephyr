@@ -12,7 +12,7 @@
     "init": "docker compose run --rm -T zephyr sh -c 'test -d /opt/zephyr-workspace/.west || west init -l /workspace /opt/zephyr-workspace'",
     "update": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west update",
     "build": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -b native_sim /workspace/src/smoke -d /workspace/build",
-    "test": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -d /workspace/build",
+    "test": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/smoke -d /workspace/build",
     "clean": "docker compose run --rm -T zephyr rm -rf /workspace/build",
     "smoke": "npm run init && npm run update && npm run build"
   }
