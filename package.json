@@ -17,6 +17,7 @@
     "smoke": "npm run init && npm run update && npm run build",
     "flash": "docker compose --profile flash run --rm -w /opt/zephyr-workspace flash west flash -d /workspace/build",
     "deploy": "docker compose --profile flash run --rm -w /opt/zephyr-workspace flash west flash -d /workspace/build",
-    "test:registry": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/registry -d /workspace/build/registry"
+    "test:registry": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/registry -d /workspace/build/registry",
+    "test:codec": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/codec -d /workspace/build/codec"
   }
 }

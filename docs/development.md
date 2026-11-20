@@ -81,6 +81,7 @@ A successful run prints `sirena zephyr smoke ok`.
 | Build smoke target | `npm run build` |
 | Run smoke target | `npm run test` |
 | Build and run registry tests | `npm run test:registry` |
+| Build and run codec tests | `npm run test:codec` |
 | Remove build output | `npm run clean` |
 | Full smoke workflow | `npm run smoke` |
 | Flash firmware (opt-in) | `npm run flash` |
@@ -228,3 +229,9 @@ Flashing requires host access to USB programming/debugging hardware.
 - [Zephyr Project](https://github.com/zephyrproject-rtos/zephyr)
 - [Zephyr flashing and debugging](https://docs.zephyrproject.org/latest/develop/flash_debug/index.html)
 - [Docker Compose profiles](https://docs.docker.com/compose/profiles/)
+
+## Codec Error Codes
+
+Codec APIs use negative `errno` values: `-EINVAL` for invalid arguments, `-ENOMEM`
+for insufficient capacity or configured limits, and `-ENOTSUP` for unsupported
+formats or unimplemented decode paths.
