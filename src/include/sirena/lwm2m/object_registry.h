@@ -78,6 +78,9 @@ int sirena_lwm2m_execute(uint16_t object_id, uint16_t instance_id,
 			 size_t args_length);
 int sirena_lwm2m_find_instance(uint16_t object_id, uint16_t instance_id,
 			       struct sirena_lwm2m_instance **instance);
+int sirena_lwm2m_find_resource(uint16_t object_id, uint16_t instance_id,
+			       uint16_t resource_id,
+			       struct sirena_lwm2m_resource **resource);
 bool sirena_lwm2m_object_enabled(uint16_t object_id);
 
 #endif
