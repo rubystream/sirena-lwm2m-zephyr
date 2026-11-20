@@ -41,9 +41,9 @@ struct sirena_lwm2m_codec_value {
 bool sirena_lwm2m_content_format_supported(uint16_t format);
 int sirena_lwm2m_content_format_from_mime(const char *mime, uint16_t *format);
 const char *sirena_lwm2m_content_format_to_mime(uint16_t format);
-uint16_t sirena_lwm2m_content_format_negotiate(const uint16_t *accepted,
-                                               size_t count,
-                                               uint16_t preferred);
+int sirena_lwm2m_content_format_negotiate(const uint16_t *accepted,
+                                            size_t count,
+                                            uint16_t preferred);
 
 int sirena_lwm2m_codec_encode(uint16_t content_format,
                               const struct sirena_lwm2m_codec_value *values,

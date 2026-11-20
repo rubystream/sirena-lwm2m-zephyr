@@ -229,3 +229,9 @@ Flashing requires host access to USB programming/debugging hardware.
 - [Zephyr Project](https://github.com/zephyrproject-rtos/zephyr)
 - [Zephyr flashing and debugging](https://docs.zephyrproject.org/latest/develop/flash_debug/index.html)
 - [Docker Compose profiles](https://docs.docker.com/compose/profiles/)
+
+## Codec Error Codes
+
+Codec APIs use negative `errno` values: `-EINVAL` for invalid arguments, `-ENOMEM`
+for insufficient capacity or configured limits, and `-ENOTSUP` for unsupported
+formats or unimplemented decode paths.
