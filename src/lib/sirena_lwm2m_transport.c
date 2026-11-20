@@ -1,6 +1,7 @@
 #include "sirena_lwm2m_bindings.h"
 #include <sirena/lwm2m/engine.h>
 #include <sirena/lwm2m/objects.h>
+#include <sirena/lwm2m/protocol.h>
 #include <sirena/lwm2m/transport.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
@@ -49,6 +50,8 @@ static const struct sirena_lwm2m_transport_ops *pending_ops;
 static enum sirena_lwm2m_transport_binding transport_binding;
 static char endpoint_name[CONFIG_SIRENA_LWM2M_ENDPOINT_NAME_MAX + 1U];
 
+static int transport_poll(int timeout_ms);
+
 static const struct sirena_lwm2m_binding_entry *binding_entry(
     enum sirena_lwm2m_transport_binding binding)
 {
@@ -89,6 +92,7 @@ static int transport_stop_binding(enum sirena_lwm2m_transport_binding binding)
     if (transport_binding == binding) {
         transport_ops = NULL;
         transport_binding = SIRENA_LWM2M_TRANSPORT_BINDING_NONE;
+        (void)sirena_lwm2m_engine_set_poll_fn(NULL);
     }
 
     return rc;
@@ -113,6 +117,8 @@ static int transport_start_binding(enum sirena_lwm2m_transport_binding binding)
 
     transport_ops = entry->ops;
     transport_binding = binding;
+
+    (void)sirena_lwm2m_engine_set_poll_fn(transport_poll);
 
     rc = entry->start();
     if (rc != 0 && switched) {
@@ -203,7 +209,16 @@ static int transport_bind_pending(void)
     return 0;
 }
 
-static int transport_dispatch(enum sirena_lwm2m_engine_operation operation)
+static int transport_poll(int timeout_ms)
+{
+    if (transport_ops == NULL || transport_ops->poll == NULL) {
+        return 0;
+    }
+
+    return transport_ops->poll(timeout_ms);
+}
+
+static int transport_dispatch(enum sirena_lwm2m_engine_operation operation, void *payload)
 {
     switch (operation) {
     case SIRENA_LWM2M_ENGINE_OPERATION_START:
@@ -224,6 +239,16 @@ static int transport_dispatch(enum sirena_lwm2m_engine_operation operation)
         return transport_ops != NULL ? transport_ops->deregister() : -ENOTSUP;
     case SIRENA_LWM2M_ENGINE_OPERATION_BIND:
         return transport_bind_pending();
+    case SIRENA_LWM2M_ENGINE_OPERATION_NOTIFY: {
+        struct sirena_lwm2m_notify_request *request = payload;
+
+        if (request == NULL || transport_ops == NULL || transport_ops->notify == NULL) {
+            return -ENOTSUP;
+        }
+
+        return transport_ops->notify(request->object_id, request->instance_id,
+                                     request->resource_id);
+    }
     default:
         return -EINVAL;
     }
@@ -258,7 +283,7 @@ int sirena_lwm2m_transport_bind(const struct sirena_lwm2m_transport_ops *ops)
     pending_ops = ops;
     k_mutex_unlock(&transport_lock);
 
-    return sirena_lwm2m_engine_submit(SIRENA_LWM2M_ENGINE_OPERATION_BIND);
+    return sirena_lwm2m_engine_submit(SIRENA_LWM2M_ENGINE_OPERATION_BIND, NULL);
 }
 
 static int transport_submit(enum sirena_lwm2m_engine_operation operation)
@@ -270,7 +295,7 @@ static int transport_submit(enum sirena_lwm2m_engine_operation operation)
         return rc;
     }
 
-    return sirena_lwm2m_engine_submit(operation);
+    return sirena_lwm2m_engine_submit(operation, NULL);
 }
 
 int sirena_lwm2m_transport_register(void)

@@ -24,6 +24,47 @@ config SIRENA_LWM2M_CODEC_MAX_VALUES
 	default 8
 	range 1 64
 
+config SIRENA_LWM2M_MAX_OBSERVATIONS
+	int "Maximum number of concurrent observations"
+	default 8
+	range 1 64
+
+config SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT
+	int "Preferred content format of the client"
+	default 11542
+	range 0 65535
+	help
+	  The content format the client uses when the server does not
+	  state an acceptable format. The default is the TLV format,
+	  which the codec encodes for every resource type. The plain
+	  text format, which is the format identifier zero, only
+	  encodes string resources.
+
+config SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX
+	int "Maximum size of an encoded resource payload"
+	default 256
+	range 32 1024
+
+config SIRENA_LWM2M_PROTOCOL_VALUE_MAX
+	int "Maximum size of a raw resource value"
+	default 64
+	range 8 512
+
+config SIRENA_LWM2M_ACCEPTED_FORMATS_MAX
+	int "Maximum number of acceptable content formats in one request"
+	default 4
+	range 1 16
+
+config SIRENA_LWM2M_ENGINE_POLL_INTERVAL_MS
+	int "Engine thread poll interval in milliseconds"
+	default 20
+	range 1 1000
+	help
+	  The engine thread polls the transport socket with this
+	  interval while it waits for work. It bounds the latency of a
+	  server request and the resolution of the retransmission
+	  timers of a pending request.
+
 menu "Sirena LwM2M"
 
 config SIRENA_LWM2M
@@ -213,6 +254,11 @@ config SIRENA_LWM2M_COAP_PATH_MAX
 	int "Maximum length of a CoAP request path"
 	default 128
 	range 32 256
+
+config SIRENA_LWM2M_COAP_MESSAGE_MAX
+	int "Maximum size of a CoAP message"
+	default 512
+	range 128 2048
 
 endif
 
