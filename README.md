@@ -54,6 +54,26 @@ even the smallest devices first-class citizens of the connected world.
   Root metadata is intentionally retained at the root and not moved.
 - Generated build, cache, and output paths are ignored by Git (see `.gitignore`).
 
+
+## Host Toolchain
+
+This repository uses Node.js LTS `24.22.0` as its host toolchain. The version is
+pinned through project metadata (`.nvmrc`, `.node-version`, `mise.toml`) and
+enforced by `package.json` `engines.node` (`>=24.0.0 <25.0.0`).
+
+Contributors should use a Node.js LTS `24.x` installation. Version managers such
+as `nvm`, `mise`, or `asdf` pick up the pinned version automatically from the
+metadata files.
+
+Verify the host Node.js version:
+
+```sh
+npm run check
+```
+
+Host scripts only orchestrate repository workflows. They never compile, flash, or
+install the Zephyr SDK.
+
 ## Reference
 
 * [The Zephyr Project. Zephyr](https://github.com/zephyrproject-rtos/zephyr) - a
