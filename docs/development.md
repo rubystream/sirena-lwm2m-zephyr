@@ -84,13 +84,16 @@ A successful run prints `sirena zephyr smoke ok`.
 | Build and run codec tests | `npm run test:codec` |
 | Build and run objects tests | `npm run test:objects` |
 | Build and run objects tests with optional resources | `npm run test:objects-optional` |
+| Build and run CoAP transport tests | `npm run test:coap` |
 | Remove build output | `npm run clean` |
 | Full smoke workflow | `npm run smoke` |
 | Flash firmware (opt-in) | `npm run flash` |
 | Deploy firmware (opt-in) | `npm run deploy` |
 
 Registry APIs and the built-in objects API are not thread-safe and must be
-called from the engine thread.
+called from the engine thread. The transport API is called from the
+application, the transport work itself runs in the engine thread. See
+[Transport Bindings](transport.md).
 
 Rebuild from scratch without removing dependencies:
 
@@ -226,6 +229,7 @@ Flashing requires host access to USB programming/debugging hardware.
 
 - [Container and npm scripts](../package.json)
 - [Built-in LwM2M objects](objects.md)
+- [Transport bindings](transport.md)
 - [Compose services](../compose.yml)
 - [Docker build](../Dockerfile)
 - [Project entry point](../README.md)
