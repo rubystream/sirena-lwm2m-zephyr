@@ -4,6 +4,15 @@
 
 - **Do not write comments in code.** The code should speak for itself.
 
+## Repository Layout
+
+- Implementation code lives under `src/`.
+- Developer-facing documentation lives under `docs/`.
+- Zephyr module build metadata (`CMakeLists.txt`, `zephyr/module.yml`) is
+  retained at the repository root as expected by `west`.
+- The root `README.md` is the project entry point; detailed docs go in `docs/`.
+- Generated build/cache/output paths are ignored by Git.
+
 ## Issue tracker: GitHub
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
