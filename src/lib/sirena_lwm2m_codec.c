@@ -58,8 +58,6 @@ int sirena_lwm2m_content_format_from_mime(const char *mime, uint16_t *format)
     while (i > 0U && (base[i-1U] == ' ' || base[i-1U] == '\t')) {
         base[--i] = '\0';
     }
-    /* trim leading */
-    /* simple: use pointer offset */
     const char *p = base;
     while (*p == ' ' || *p == '\t') ++p;
     if (strcmp(p, "text/plain") == 0) {
@@ -392,6 +390,9 @@ int sirena_lwm2m_codec_encode(uint16_t content_format,
     }
     cap = *length;
     *length = 0U;
+    if (value_count == 0U) {
+        return -EINVAL;
+    }
     if (values == NULL && value_count != 0U) {
         return -EINVAL;
     }
@@ -518,11 +519,11 @@ int sirena_lwm2m_codec_encode(uint16_t content_format,
         rc = append_byte(buffer, cap, &used, arr);
         if (rc != 0) return rc;
         for (i = 0U; i < value_count; ++i) {
-            uint8_t rec = 0xA0 | 2U;
-            char rid[16];
-            snprintf(rid, sizeof(rid), "%u", effective_resource_id(&values[i]));
             char path[64];
-            snprintf(path, sizeof(path), "/%u/%u/%u", values[i].object_id, values[i].instance_id, effective_resource_id(&values[i]));
+            snprintf(path, sizeof(path), "/%u/%u/%u", values[i].object_id,
+                     values[i].instance_id,
+                     effective_resource_id(&values[i]));
+            uint8_t rec = 0xA0 | 3U;
             rc = append_byte(buffer, cap, &used, rec);
             if (rc != 0) return rc;
             rc = cbor_length(buffer, cap, &used, 3, 1);
@@ -531,11 +532,18 @@ int sirena_lwm2m_codec_encode(uint16_t content_format,
             if (rc != 0) return rc;
             rc = encode_cbor_value(buffer, cap, &used, &values[i]);
             if (rc != 0) return rc;
+            rc = cbor_length(buffer, cap, &used, 3, 1);
+            if (rc != 0) return rc;
+            rc = append(buffer, cap, &used, "n", 1U);
+            if (rc != 0) return rc;
+            rc = cbor_length(buffer, cap, &used, 3, strlen(path));
+            if (rc != 0) return rc;
+            rc = append(buffer, cap, &used, path, strlen(path));
+            if (rc != 0) return rc;
             rc = cbor_length(buffer, cap, &used, 3, 2);
             if (rc != 0) return rc;
             rc = append(buffer, cap, &used, "vb", 2U);
             if (rc != 0) return rc;
-            (void)rid; (void)path;
             rc = append_byte(buffer, cap, &used, 0xF5);
             if (rc != 0) return rc;
         }
