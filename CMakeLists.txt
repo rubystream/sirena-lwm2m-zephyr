@@ -10,13 +10,14 @@ if(CONFIG_SIRENA_LWM2M)
         src/lib/sirena_lwm2m_codec.c
         src/lib/sirena_lwm2m_objects.c
         src/lib/sirena_lwm2m_engine.c
+        src/lib/sirena_lwm2m_protocol.c
         src/lib/sirena_lwm2m_transport.c
     )
 endif()
 
 if(CONFIG_SIRENA_LWM2M_TRANSPORT_COAP OR CONFIG_SIRENA_LWM2M_TRANSPORT_DTLS)
     zephyr_library_sources(
-        src/lib/sirena_lwm2m_coap_client.c
+        src/lib/sirena_lwm2m_coap_endpoint.c
         src/lib/sirena_lwm2m_exchange.c
     )
 endif()

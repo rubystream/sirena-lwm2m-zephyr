@@ -5,6 +5,7 @@
 
 struct sirena_lwm2m_engine_request {
     enum sirena_lwm2m_engine_operation operation;
+    void *payload;
     int result;
     struct k_sem completion;
     bool busy;
@@ -18,12 +19,20 @@ static struct sirena_lwm2m_engine_request requests[CONFIG_SIRENA_LWM2M_ENGINE_QU
 static struct k_mutex engine_lock;
 static struct k_thread engine_thread;
 static sirena_lwm2m_engine_handler_t engine_handler;
+static sirena_lwm2m_engine_poll_fn engine_poll_fn;
 static k_tid_t engine_tid;
 static bool engine_running;
+
+static void engine_complete(struct sirena_lwm2m_engine_request *request)
+{
+    request->result = engine_handler(request->operation, request->payload);
+    k_sem_give(&request->completion);
+}
 
 static void engine_entry(void *first, void *second, void *third)
 {
     struct sirena_lwm2m_engine_request *request;
+    sirena_lwm2m_engine_poll_fn poll_fn;
 
     (void)first;
     (void)second;
@@ -34,9 +43,22 @@ static void engine_entry(void *first, void *second, void *third)
     k_mutex_unlock(&engine_lock);
 
     while (true) {
+        if (k_msgq_get(&engine_queue, &request, K_NO_WAIT) == 0) {
+            engine_complete(request);
+            continue;
+        }
+
+        k_mutex_lock(&engine_lock, K_FOREVER);
+        poll_fn = engine_poll_fn;
+        k_mutex_unlock(&engine_lock);
+
+        if (poll_fn != NULL) {
+            (void)poll_fn(CONFIG_SIRENA_LWM2M_ENGINE_POLL_INTERVAL_MS);
+            continue;
+        }
+
         k_msgq_get(&engine_queue, &request, K_FOREVER);
-        request->result = engine_handler(request->operation);
-        k_sem_give(&request->completion);
+        engine_complete(request);
     }
 }
 
@@ -76,7 +98,16 @@ k_tid_t sirena_lwm2m_engine_thread_id(void)
     return tid;
 }
 
-int sirena_lwm2m_engine_submit(enum sirena_lwm2m_engine_operation operation)
+int sirena_lwm2m_engine_set_poll_fn(sirena_lwm2m_engine_poll_fn poll_fn)
+{
+    k_mutex_lock(&engine_lock, K_FOREVER);
+    engine_poll_fn = poll_fn;
+    k_mutex_unlock(&engine_lock);
+
+    return 0;
+}
+
+int sirena_lwm2m_engine_submit(enum sirena_lwm2m_engine_operation operation, void *payload)
 {
     struct sirena_lwm2m_engine_request *request = NULL;
     size_t i;
@@ -102,6 +133,7 @@ int sirena_lwm2m_engine_submit(enum sirena_lwm2m_engine_operation operation)
     }
 
     request->operation = operation;
+    request->payload = payload;
     request->result = -EINPROGRESS;
     k_sem_init(&request->completion, 0, 1);
     k_msgq_put(&engine_queue, &request, K_NO_WAIT);

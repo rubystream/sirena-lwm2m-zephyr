@@ -1,13 +1,13 @@
 #include "sirena_lwm2m_bindings.h"
-#include "sirena_lwm2m_coap_client.h"
+#include "sirena_lwm2m_coap_endpoint.h"
 #include "sirena_lwm2m_exchange.h"
 #include <sirena/lwm2m/coap.h>
 #include <sirena/lwm2m/engine.h>
 #include <sirena/lwm2m/objects.h>
+#include <sirena/lwm2m/protocol.h>
 #include <sirena/lwm2m/transport.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net/coap.h>
-#include <zephyr/net/coap_client.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/util.h>
@@ -17,7 +17,6 @@
 #define SIRENA_LWM2M_SECURITY_OBJECT_ID 0U
 #define SIRENA_LWM2M_SECURITY_MODE_RESOURCE 2U
 
-static struct coap_client *client;
 static bool transport_started;
 static int client_socket = -1;
 static char location_path[CONFIG_SIRENA_LWM2M_LOCATION_PATH_MAX + 1U];
@@ -53,10 +52,10 @@ static int security_mode_check(void)
     return security_mode_allowed(mode);
 }
 
-static int coap_request(const char *path, enum coap_method method, const uint8_t *payload,
-                         size_t payload_length, char *location, size_t location_capacity)
+static int coap_request(const char *path, enum coap_method method, bool content_format_present,
+                         uint16_t content_format, const uint8_t *payload, size_t payload_length,
+                         char *location, size_t location_capacity)
 {
-    struct net_sockaddr_storage storage;
     int rc;
 
     if (!transport_started) {
@@ -68,13 +67,9 @@ static int coap_request(const char *path, enum coap_method method, const uint8_t
         return rc;
     }
 
-    rc = sirena_lwm2m_exchange_server_address(&storage, SIRENA_LWM2M_EXCHANGE_SCHEME_COAP);
-    if (rc != 0) {
-        return rc;
-    }
-
-    return sirena_lwm2m_exchange_request(client, client_socket, net_sad(&storage), path, method,
-                                         payload, payload_length, location, location_capacity);
+    return sirena_lwm2m_exchange_request(SIRENA_LWM2M_EXCHANGE_SCHEME_COAP, path, method,
+                                          content_format_present, content_format, payload,
+                                          payload_length, location, location_capacity);
 }
 
 static int coap_register(void)
@@ -89,8 +84,10 @@ static int coap_register(void)
         return rc;
     }
 
-    rc = coap_request(request_path, COAP_METHOD_POST, (const uint8_t *)registration_payload,
-                      payload_length, location_path, sizeof(location_path));
+    rc = coap_request(request_path, COAP_METHOD_POST, true,
+                      COAP_CONTENT_FORMAT_APP_LINK_FORMAT,
+                      (const uint8_t *)registration_payload, payload_length, location_path,
+                      sizeof(location_path));
     if (rc != 0) {
         return rc;
     }
@@ -115,7 +112,8 @@ static int coap_update(void)
         return rc;
     }
 
-    return coap_request(request_path, COAP_METHOD_POST, NULL, 0U, NULL, 0U);
+    return coap_request(request_path, COAP_METHOD_POST, true,
+                        COAP_CONTENT_FORMAT_APP_LINK_FORMAT, NULL, 0U, NULL, 0U);
 }
 
 static int coap_deregister(void)
@@ -126,7 +124,8 @@ static int coap_deregister(void)
         return -EINVAL;
     }
 
-    rc = coap_request(location_path, COAP_METHOD_DELETE, NULL, 0U, NULL, 0U);
+    rc = coap_request(location_path, COAP_METHOD_DELETE, true,
+                      COAP_CONTENT_FORMAT_APP_LINK_FORMAT, NULL, 0U, NULL, 0U);
     if (rc == 0) {
         location_path[0] = '\0';
     }
@@ -134,10 +133,22 @@ static int coap_deregister(void)
     return rc;
 }
 
+static int coap_poll(int timeout_ms)
+{
+    return sirena_lwm2m_coap_endpoint_poll(timeout_ms);
+}
+
+static int coap_notify(uint16_t object_id, uint16_t instance_id, uint16_t resource_id)
+{
+    return sirena_lwm2m_coap_endpoint_notify(object_id, instance_id, resource_id);
+}
+
 const struct sirena_lwm2m_transport_ops sirena_lwm2m_coap_transport_ops = {
     .register_client = coap_register,
     .update = coap_update,
     .deregister = coap_deregister,
+    .poll = coap_poll,
+    .notify = coap_notify,
 };
 
 int sirena_lwm2m_coap_set_endpoint_name(const char *name)
@@ -159,6 +170,11 @@ int sirena_lwm2m_coap_start_engine(void)
         return 0;
     }
 
+    rc = sirena_lwm2m_protocol_init();
+    if (rc != 0) {
+        return rc;
+    }
+
     rc = sirena_lwm2m_exchange_server_address(&storage, SIRENA_LWM2M_EXCHANGE_SCHEME_COAP);
     if (rc != 0) {
         return rc;
@@ -169,7 +185,7 @@ int sirena_lwm2m_coap_start_engine(void)
         return -errno;
     }
 
-    rc = sirena_lwm2m_coap_client_get(&client);
+    rc = sirena_lwm2m_coap_endpoint_start(client_socket);
     if (rc != 0) {
         (void)zsock_close(client_socket);
         client_socket = -1;
@@ -183,6 +199,8 @@ int sirena_lwm2m_coap_start_engine(void)
 
 int sirena_lwm2m_coap_stop_engine(void)
 {
+    sirena_lwm2m_coap_endpoint_stop();
+
     if (client_socket >= 0) {
         (void)zsock_close(client_socket);
         client_socket = -1;
@@ -203,7 +221,7 @@ int sirena_lwm2m_coap_start(void)
         return rc;
     }
 
-    return sirena_lwm2m_engine_submit(SIRENA_LWM2M_ENGINE_OPERATION_START_COAP);
+    return sirena_lwm2m_engine_submit(SIRENA_LWM2M_ENGINE_OPERATION_START_COAP, NULL);
 }
 
 int sirena_lwm2m_coap_stop(void)
@@ -212,7 +230,7 @@ int sirena_lwm2m_coap_stop(void)
         return 0;
     }
 
-    return sirena_lwm2m_engine_submit(SIRENA_LWM2M_ENGINE_OPERATION_STOP_COAP);
+    return sirena_lwm2m_engine_submit(SIRENA_LWM2M_ENGINE_OPERATION_STOP_COAP, NULL);
 }
 
 int sirena_lwm2m_coap_get_location_path(char *buffer, size_t *length)

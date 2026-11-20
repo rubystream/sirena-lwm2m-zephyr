@@ -438,6 +438,8 @@ ZTEST(sirena_lwm2m_coap, test_update_uses_location_path)
 	zassert_equal(peer.query_count, 2, "the query must carry one option per parameter");
 	zassert_true(peer_has_query("lt=300"), "missing lifetime");
 	zassert_true(peer_has_query("b=U"), "missing binding mode");
+	zassert_equal(peer.content_format, COAP_CONTENT_FORMAT_APP_LINK_FORMAT,
+		      "the update must carry the link format");
 }
 
 ZTEST(sirena_lwm2m_coap, test_deregister_uses_location_path)
@@ -456,6 +458,8 @@ ZTEST(sirena_lwm2m_coap, test_deregister_uses_location_path)
 	zassert_true(peer.received, "peer received no request");
 	zassert_equal(peer.method, COAP_METHOD_DELETE, "unexpected method");
 	zassert_str_equal(peer.path, "/rd/1", "unexpected path");
+	zassert_equal(peer.content_format, COAP_CONTENT_FORMAT_APP_LINK_FORMAT,
+		      "the deregistration must carry the link format");
 }
 
 ZTEST(sirena_lwm2m_coap, test_deregister_without_registration)
