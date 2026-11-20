@@ -193,6 +193,10 @@ static int transport_bind_pending(void)
         return -EINVAL;
     }
 
+    if (transport_ops != NULL && transport_ops != ops) {
+        return -EBUSY;
+    }
+
     transport_ops = ops;
     transport_binding = binding_of(ops);
 

@@ -50,8 +50,9 @@ int sirena_lwm2m_transport_start(void);
 `sirena_lwm2m_transport_bind()` attaches a binding to the transport interface
 and starts the engine thread. The attachment happens in engine context, so
 the binding of a running transport is never replaced behind the back of the
-engine thread. The three lifecycle calls queue the request on the engine
-thread and wait for its completion, so they return the result of the
+engine thread. It refuses with `-EBUSY` to replace the binding of a running
+transport with another one. The three lifecycle calls queue the request on the
+engine thread and wait for its completion, so they return the result of the
 transport work to the caller.
 
 A lifecycle call without a binding, or a call made while the engine thread
