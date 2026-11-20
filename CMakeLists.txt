@@ -8,5 +8,6 @@ if(CONFIG_SIRENA_LWM2M)
     zephyr_library_sources(
         src/lib/sirena_lwm2m_object_registry.c
         src/lib/sirena_lwm2m_codec.c
+        src/lib/sirena_lwm2m_objects.c
     )
 endif()

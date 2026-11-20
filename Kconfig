@@ -10,6 +10,7 @@ config SIRENA_LWM2M_MAX_INSTANCES
 
 config SIRENA_LWM2M_MAX_RESOURCES_PER_INSTANCE
 	int "Maximum number of resources per instance"
+	default 25 if SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL || SIRENA_LWM2M_OBJECT_DEVICE_OPTIONAL
 	default 16
 	range 1 256
 
@@ -31,17 +32,37 @@ config SIRENA_LWM2M
 
 if SIRENA_LWM2M
 
-config SIRENA_LWM2M_OBJECT_SECURITY
-	bool "Enable Security object (0)"
-	default y
+config SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL
+	bool "Enable optional Security object (0) resources"
+	default n
 
-config SIRENA_LWM2M_OBJECT_SERVER
-	bool "Enable Server object (1)"
-	default y
+config SIRENA_LWM2M_OBJECT_SERVER_OPTIONAL
+	bool "Enable optional Server object (1) resources"
+	default n
 
-config SIRENA_LWM2M_OBJECT_DEVICE
-	bool "Enable Device object (3)"
-	default y
+config SIRENA_LWM2M_OBJECT_DEVICE_OPTIONAL
+	bool "Enable optional Device object (3) resources"
+	default n
+
+config SIRENA_LWM2M_SERVER_URI_MAX
+	int "Maximum length of the LwM2M server URI"
+	default 64
+	range 16 512
+
+config SIRENA_LWM2M_CREDENTIAL_MAX
+	int "Maximum size of a credential (identity, public key, secret key)"
+	default 32
+	range 8 1024
+
+config SIRENA_LWM2M_SERVER_STRING_MAX
+	int "Maximum length of a server side string (binding, optional strings)"
+	default 32
+	range 8 512
+
+config SIRENA_LWM2M_DEVICE_STRING_MAX
+	int "Maximum length of a device metadata string"
+	default 32
+	range 8 512
 
 endif
 

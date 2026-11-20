@@ -62,11 +62,9 @@ bool sirena_lwm2m_object_enabled(uint16_t object_id)
 {
     switch (object_id) {
     case 0:
-        return IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SECURITY);
     case 1:
-        return IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SERVER);
     case 3:
-        return IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_DEVICE);
+        return true;
     default:
         return false;
     }
@@ -181,6 +179,30 @@ int sirena_lwm2m_find_instance(uint16_t object_id, uint16_t instance_id,
 
     if (instance != NULL) {
         *instance = inst;
+    }
+
+    return 0;
+}
+
+int sirena_lwm2m_find_resource(uint16_t object_id, uint16_t instance_id,
+			       uint16_t resource_id,
+			       struct sirena_lwm2m_resource **resource)
+{
+    struct sirena_lwm2m_instance *inst;
+    struct sirena_lwm2m_resource *res;
+
+    inst = find_instance_storage(object_id, instance_id);
+    if (inst == NULL) {
+        return -ENOENT;
+    }
+
+    res = find_resource(inst, resource_id);
+    if (res == NULL) {
+        return -ENOENT;
+    }
+
+    if (resource != NULL) {
+        *resource = res;
     }
 
     return 0;
