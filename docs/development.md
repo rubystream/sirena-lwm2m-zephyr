@@ -86,6 +86,8 @@ A successful run prints `sirena zephyr smoke ok`.
 | Build and run objects tests with optional resources | `npm run test:objects-optional` |
 | Build and run CoAP transport tests | `npm run test:coap` |
 | Build and run CoAP transport tests with a larger CoAP option length | `npm run test:coap-override` |
+| Build and run DTLS transport tests | `npm run test:dtls` |
+| Build and run DTLS transport tests with the noSec development gate open | `npm run test:dtls-nosec` |
 | Remove build output | `npm run clean` |
 | Full smoke workflow | `npm run smoke` |
 | Flash firmware (opt-in) | `npm run flash` |
@@ -247,14 +249,18 @@ formats or unimplemented decode paths.
 
 ## Transport Error Codes
 
-The transport interface and the CoAP/UDP binding use negative `errno` values:
-`-EINVAL` for an invalid argument or a client state that cannot be
-registered, `-ENOTSUP` for an unsupported scheme, a missing binding or a
-transport that is not running, `-ENOMEM` for a value that does not fit the
-configured capacity, `-ENOENT` for a missing object or an unknown
-registration, and `-EALREADY` for an engine thread that is already running.
-The server response codes are mapped to distinct codes so that the caller can
-tell them apart. See [Transport Bindings](transport.md) for the full table.
+The transport interface and the CoAP/UDP and CoAP/DTLS bindings use negative
+`errno` values: `-EINVAL` for an invalid argument or a client state that
+cannot be registered, `-ENOTSUP` for an unsupported scheme, a missing binding,
+a transport that is not running or a security mode that is not implemented,
+`-ENOMEM` for a value that does not fit the configured capacity, `-ENOENT`
+for a missing object, a missing credential or an unknown registration, and
+`-EALREADY` for an engine thread that is already running, which only
+`sirena_lwm2m_engine_start()` returns. The server response
+codes are mapped to distinct codes so that the caller can tell them apart. The
+bindings add `-EPERM` for the closed noSec development gate and `-EACCES` for
+a failed DTLS handshake. See [Transport Bindings](transport.md) for the full
+tables.
 
 ## Objects Error Codes
 

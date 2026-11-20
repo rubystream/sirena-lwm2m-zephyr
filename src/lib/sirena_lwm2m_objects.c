@@ -614,6 +614,37 @@ int sirena_lwm2m_get_opaque(uint16_t object_id, uint16_t instance_id,
                          buffer, length);
 }
 
+int sirena_lwm2m_get_opaque_ref(uint16_t object_id, uint16_t instance_id,
+                                uint16_t resource_id, const void **data, size_t *length)
+{
+    struct sirena_lwm2m_resource *resource;
+    struct sirena_lwm2m_resource_entry *entry;
+    int rc;
+
+    if (data == NULL || length == NULL) {
+        return -EINVAL;
+    }
+
+    rc = sirena_lwm2m_find_resource(object_id, instance_id, resource_id, &resource);
+    if (rc != 0) {
+        return rc;
+    }
+
+    if (resource->type != SIRENA_LWM2M_VALUE_OPAQUE) {
+        return -EINVAL;
+    }
+
+    entry = resource->user_data;
+    if (entry == NULL || entry->data == NULL) {
+        return -ENOENT;
+    }
+
+    *data = entry->data;
+    *length = entry->length;
+
+    return 0;
+}
+
 int sirena_lwm2m_set_execute_handler(sirena_lwm2m_execute_handler_t handler,
                                      void *user_data)
 {

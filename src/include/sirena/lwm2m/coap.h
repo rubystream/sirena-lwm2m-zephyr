@@ -5,6 +5,7 @@
 
 int sirena_lwm2m_coap_set_endpoint_name(const char *name);
 int sirena_lwm2m_coap_start(void);
+int sirena_lwm2m_coap_stop(void);
 int sirena_lwm2m_coap_get_location_path(char *buffer, size_t *length);
 
 #endif

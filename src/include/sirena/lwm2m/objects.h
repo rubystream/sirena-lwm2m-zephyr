@@ -10,6 +10,7 @@ enum sirena_lwm2m_security_mode {
     SIRENA_LWM2M_SECURITY_MODE_RPK = 1,
     SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE = 2,
     SIRENA_LWM2M_SECURITY_MODE_NOSEC = 3,
+    SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE_EST = 4,
 };
 
 struct sirena_lwm2m_provisioning {
@@ -49,6 +50,8 @@ int sirena_lwm2m_set_opaque(uint16_t object_id, uint16_t instance_id,
                             uint16_t resource_id, const void *data, size_t length);
 int sirena_lwm2m_get_opaque(uint16_t object_id, uint16_t instance_id,
                             uint16_t resource_id, void *buffer, size_t *length);
+int sirena_lwm2m_get_opaque_ref(uint16_t object_id, uint16_t instance_id,
+                                uint16_t resource_id, const void **data, size_t *length);
 
 int sirena_lwm2m_set_execute_handler(sirena_lwm2m_execute_handler_t handler,
                                      void *user_data);

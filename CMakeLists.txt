@@ -14,8 +14,22 @@ if(CONFIG_SIRENA_LWM2M)
     )
 endif()
 
+if(CONFIG_SIRENA_LWM2M_TRANSPORT_COAP OR CONFIG_SIRENA_LWM2M_TRANSPORT_DTLS)
+    zephyr_library_sources(
+        src/lib/sirena_lwm2m_coap_client.c
+        src/lib/sirena_lwm2m_exchange.c
+    )
+endif()
+
 if(CONFIG_SIRENA_LWM2M_TRANSPORT_COAP)
     zephyr_library_sources(
         src/lib/sirena_lwm2m_coap.c
     )
+endif()
+
+if(CONFIG_SIRENA_LWM2M_TRANSPORT_DTLS)
+    zephyr_library_sources(
+        src/lib/sirena_lwm2m_dtls.c
+    )
+    zephyr_library_link_libraries_ifdef(CONFIG_MBEDTLS_BUILTIN mbedtls_iface)
 endif()

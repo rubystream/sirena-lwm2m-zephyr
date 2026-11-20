@@ -194,6 +194,25 @@ static void peer_provision(const char *uri)
 	zassert_equal(rc, 0, "provisioning failed");
 }
 
+static void peer_provision_psk(const char *uri)
+{
+	struct sirena_lwm2m_provisioning provisioning = {
+		.server_uri = uri,
+		.security_mode = SIRENA_LWM2M_SECURITY_MODE_PSK,
+		.identity = "sirena-test-identity",
+		.identity_length = sizeof("sirena-test-identity") - 1U,
+		.secret_key = "0123456789abcdef",
+		.secret_key_length = sizeof("0123456789abcdef") - 1U,
+		.short_server_id = 1U,
+		.lifetime = PEER_LIFETIME,
+		.binding = "U",
+	};
+	int rc;
+
+	rc = sirena_lwm2m_provision(&provisioning);
+	zassert_equal(rc, 0, "provisioning failed");
+}
+
 static int minimal_read_string(uint16_t object_id, uint16_t instance_id, uint16_t resource_id,
 			       void *user_data, void *buffer, size_t *length)
 {
@@ -284,9 +303,6 @@ static void *suite_setup(void)
 		      net_ntohs(address.sin_port));
 	zassert_true(rc > 0 && rc < (int)sizeof(server_uri), "server uri build failed");
 
-	rc = sirena_lwm2m_coap_start();
-	zassert_equal(rc, 0, "transport start failed: %d", rc);
-
 	return NULL;
 }
 
@@ -309,6 +325,9 @@ static void test_before(void *fixture)
 	zassert_equal(rc, 0, "endpoint name reset failed");
 
 	peer_provision(server_uri);
+
+	rc = sirena_lwm2m_coap_start();
+	zassert_equal(rc, 0, "transport start failed: %d", rc);
 }
 
 ZTEST_SUITE(sirena_lwm2m_coap, NULL, suite_setup, test_before, NULL, NULL);
@@ -462,6 +481,23 @@ ZTEST(sirena_lwm2m_coap, test_register_without_endpoint_name)
 
 	rc = sirena_lwm2m_transport_register();
 	zassert_equal(rc, -EINVAL, "register without endpoint name must fail");
+	zassert_false(peer.received, "no request must be sent");
+}
+
+ZTEST(sirena_lwm2m_coap, test_start_refuses_a_pre_shared_key_server)
+{
+	int rc;
+
+	peer_provision_psk(server_uri);
+
+	rc = sirena_lwm2m_coap_set_endpoint_name(PEER_ENDPOINT_NAME);
+	zassert_equal(rc, 0, "endpoint name rejected");
+
+	rc = sirena_lwm2m_coap_start();
+	zassert_equal(rc, -EINVAL, "a pre-shared key server must be refused in the clear");
+
+	rc = sirena_lwm2m_transport_register();
+	zassert_equal(rc, -EINVAL, "a pre-shared key server must not be contacted in the clear");
 	zassert_false(peer.received, "no request must be sent");
 }
 

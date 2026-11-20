@@ -18,6 +18,7 @@ static struct sirena_lwm2m_engine_request requests[CONFIG_SIRENA_LWM2M_ENGINE_QU
 static struct k_mutex engine_lock;
 static struct k_thread engine_thread;
 static sirena_lwm2m_engine_handler_t engine_handler;
+static k_tid_t engine_tid;
 static bool engine_running;
 
 static void engine_entry(void *first, void *second, void *third)
@@ -27,6 +28,10 @@ static void engine_entry(void *first, void *second, void *third)
     (void)first;
     (void)second;
     (void)third;
+
+    k_mutex_lock(&engine_lock, K_FOREVER);
+    engine_tid = k_current_get();
+    k_mutex_unlock(&engine_lock);
 
     while (true) {
         k_msgq_get(&engine_queue, &request, K_FOREVER);
@@ -56,6 +61,19 @@ int sirena_lwm2m_engine_start(sirena_lwm2m_engine_handler_t handler)
                     K_NO_WAIT);
 
     return 0;
+}
+
+k_tid_t sirena_lwm2m_engine_thread_id(void)
+{
+    k_tid_t tid = NULL;
+
+    k_mutex_lock(&engine_lock, K_FOREVER);
+    if (engine_running) {
+        tid = engine_tid;
+    }
+    k_mutex_unlock(&engine_lock);
+
+    return tid;
 }
 
 int sirena_lwm2m_engine_submit(enum sirena_lwm2m_engine_operation operation)
