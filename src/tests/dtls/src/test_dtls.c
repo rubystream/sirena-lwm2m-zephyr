@@ -50,6 +50,7 @@ static char dtls_uri[64];
 static char plain_uri[64];
 static int dtls_peer_socket = -1;
 static uint16_t peer_port;
+static uint16_t dtls_peer_port;
 
 K_THREAD_STACK_DEFINE(dtls_peer_stack, 4096);
 static struct k_thread dtls_peer_thread;
@@ -230,6 +231,8 @@ static void dtls_peer_start(void)
 	static const int ciphersuites[] = { MBEDTLS_TLS_PSK_WITH_AES_128_CCM_8 };
 	sec_tag_t tags[] = { PEER_SEC_TAG };
 	struct net_sockaddr_in address;
+	struct net_sockaddr_in bound;
+	net_socklen_t length = sizeof(bound);
 	int verify = ZSOCK_TLS_PEER_VERIFY_NONE;
 	int role = ZSOCK_TLS_DTLS_ROLE_SERVER;
 	int rc;
@@ -269,6 +272,11 @@ static void dtls_peer_start(void)
 
 	rc = zsock_bind(dtls_peer_socket, (struct net_sockaddr *)&address, sizeof(address));
 	zassert_equal(rc, 0, "peer bind failed: %d", rc);
+
+	length = sizeof(bound);
+	rc = zsock_getsockname(dtls_peer_socket, (struct net_sockaddr *)&bound, &length);
+	zassert_equal(rc, 0, "peer port lookup failed: %d", rc);
+	dtls_peer_port = bound.sin_port;
 
 	k_thread_create(&dtls_peer_thread, dtls_peer_stack, K_THREAD_STACK_SIZEOF(dtls_peer_stack),
 			dtls_peer_entry, NULL, NULL, NULL, K_PRIO_PREEMPT(7), 0, K_NO_WAIT);
@@ -383,6 +391,24 @@ ZTEST(sirena_lwm2m_dtls, test_register_sends_expected_request)
 	zassert_str_equal(dtls_request.payload, "</1/0>,</3/0>", "unexpected registration payload");
 	zassert_true(strstr(dtls_request.payload, "</0/0>") == NULL,
 		      "the security object must not be listed");
+}
+
+ZTEST(sirena_lwm2m_dtls, test_dtls_binding_uses_the_secure_port)
+{
+	int rc;
+
+	provision_psk(dtls_uri, PEER_PSK_IDENTITY, sizeof(PEER_PSK_IDENTITY) - 1U, PEER_PSK_KEY,
+		      sizeof(PEER_PSK_KEY) - 1U);
+
+	rc = sirena_lwm2m_transport_start();
+	zassert_equal(rc, 0, "transport start failed: %d", rc);
+
+	rc = sirena_lwm2m_transport_register();
+	zassert_equal(rc, 0, "register failed: %d", rc);
+
+	zassert_true(dtls_request.received, "the peer received no request");
+	zassert_equal(net_ntohs(dtls_peer_port), PEER_DTLS_PORT,
+		      "the secure binding must use port 5684");
 }
 
 ZTEST(sirena_lwm2m_dtls, test_register_stores_the_location_path)

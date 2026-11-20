@@ -446,6 +446,10 @@ static int dtls_register(void)
     int rc;
     int written;
 
+    if (!transport_started) {
+        return -ENOTSUP;
+    }
+
     if (endpoint_name[0] == '\0') {
         return -EINVAL;
     }
