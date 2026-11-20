@@ -82,6 +82,8 @@ A successful run prints `sirena zephyr smoke ok`.
 | Run smoke target | `npm run test` |
 | Build and run registry tests | `npm run test:registry` |
 | Build and run codec tests | `npm run test:codec` |
+| Build and run objects tests | `npm run test:objects` |
+| Build and run objects tests with optional resources | `npm run test:objects-optional` |
 | Remove build output | `npm run clean` |
 | Full smoke workflow | `npm run smoke` |
 | Flash firmware (opt-in) | `npm run flash` |
@@ -222,6 +224,7 @@ Flashing requires host access to USB programming/debugging hardware.
 ## Reference
 
 - [Container and npm scripts](../package.json)
+- [Built-in LwM2M objects](objects.md)
 - [Compose services](../compose.yml)
 - [Docker build](../Dockerfile)
 - [Project entry point](../README.md)
@@ -235,3 +238,12 @@ Flashing requires host access to USB programming/debugging hardware.
 Codec APIs use negative `errno` values: `-EINVAL` for invalid arguments, `-ENOMEM`
 for insufficient capacity or configured limits, and `-ENOTSUP` for unsupported
 formats or unimplemented decode paths.
+
+## Objects Error Codes
+
+The built-in objects module and the typed application API use the same negative
+`errno` values: `-EINVAL` for a type mismatch or an invalid argument, `-ENOENT`
+for an unknown object, instance or resource, `-ENOMEM` for a value that exceeds
+the configured capacity, and `-ENOTSUP` for an operation the resource does not
+support. See [Built-in LwM2M Objects](objects.md) for the full API reference, the
+resource sets and the Kconfig symbols.
