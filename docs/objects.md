@@ -77,12 +77,20 @@ int sirena_lwm2m_set_opaque(uint16_t object_id, uint16_t instance_id,
                             uint16_t resource_id, const void *data, size_t length);
 int sirena_lwm2m_get_opaque(uint16_t object_id, uint16_t instance_id,
                             uint16_t resource_id, void *buffer, size_t *length);
+int sirena_lwm2m_get_opaque_ref(uint16_t object_id, uint16_t instance_id,
+                                uint16_t resource_id, const void **data, size_t *length);
 ```
 
 `sirena_lwm2m_get_string()` takes the buffer capacity in `*length` on entry and
 returns the character count without the terminating NUL on success. The buffer
 always receives a NUL terminator. `sirena_lwm2m_get_opaque()` takes the buffer
 capacity in `*length` on entry and returns the stored byte count on success.
+
+`sirena_lwm2m_get_opaque_ref()` returns a reference to the storage of an
+opaque resource instead of a copy of it. The pointer stays valid until the
+resource is written again. The DTLS binding uses it to hand the pre-shared key
+credentials of the Security object to the TLS credential subsystem without
+copying the key material into a second buffer.
 
 The built-in integer resources use a byte width of 8 when read through the typed
 API: `sirena_lwm2m_get_integer()` fills an `int64_t` and the server path
@@ -195,7 +203,7 @@ Kconfig:
 | Kconfig symbol | Purpose | Default |
 | --- | --- | --- |
 | `CONFIG_SIRENA_LWM2M_SERVER_URI_MAX` | LwM2M server URI length | 64 |
-| `CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX` | Identity, server public key, secret key size | 32 |
+| `CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX` | Identity, server public key, secret key size. It is 128 when the DTLS binding is enabled. | 32 |
 | `CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX` | Server-side strings such as the binding | 32 |
 | `CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX` | Device metadata strings | 32 |
 
