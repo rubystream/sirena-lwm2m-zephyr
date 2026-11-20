@@ -11,15 +11,83 @@
 
 #define GUARD_BYTE 0xA5
 
-static const uint16_t security_mandatory[] = { 0U, 1U, 2U, 3U, 4U, 5U, 10U };
-static const uint16_t server_mandatory[] = { 0U, 1U, 6U, 7U, 8U };
-static const uint16_t device_mandatory[] = { 0U, 1U, 2U, 3U, 4U, 11U, 16U, 17U, 18U, 19U };
+struct resource_expectation {
+    uint16_t id;
+    enum sirena_lwm2m_value_type type;
+    uint8_t operations;
+};
 
-static const uint16_t security_optional[] = { 6U,  7U,  8U,  9U,  11U, 12U, 13U, 14U,
-                                               15U, 17U, 22U, 23U, 24U, 26U, 28U, 29U, 30U };
-static const uint16_t server_optional[] = { 2U, 3U, 4U, 5U };
-static const uint16_t device_optional[] = { 5U,  9U,  10U, 12U, 13U,
-                                           14U, 15U, 20U, 21U };
+static const struct resource_expectation security_required[] = {
+    { 0U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ },
+    { 1U, SIRENA_LWM2M_VALUE_BOOLEAN, SIRENA_LWM2M_OP_READ },
+    { 2U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
+    { 3U, SIRENA_LWM2M_VALUE_OPAQUE, SIRENA_LWM2M_OP_READ },
+    { 4U, SIRENA_LWM2M_VALUE_OPAQUE, SIRENA_LWM2M_OP_READ },
+    { 5U, SIRENA_LWM2M_VALUE_OPAQUE, SIRENA_LWM2M_OP_READ },
+    { 10U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
+};
+
+static const struct resource_expectation server_required[] = {
+    { 0U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
+    { 1U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE },
+    { 6U, SIRENA_LWM2M_VALUE_BOOLEAN, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE },
+    { 7U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE },
+    { 8U, SIRENA_LWM2M_VALUE_NONE, SIRENA_LWM2M_OP_EXEC },
+};
+
+static const struct resource_expectation device_required[] = {
+    { 0U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ },
+    { 1U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ },
+    { 2U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ },
+    { 3U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ },
+    { 4U, SIRENA_LWM2M_VALUE_NONE, SIRENA_LWM2M_OP_EXEC },
+    { 11U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
+    { 16U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ },
+    { 17U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ },
+    { 18U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ },
+    { 19U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ },
+};
+
+static const struct resource_expectation security_optional[] = {
+    { 6U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
+    { 7U, SIRENA_LWM2M_VALUE_OPAQUE, SIRENA_LWM2M_OP_READ },
+    { 8U, SIRENA_LWM2M_VALUE_OPAQUE, SIRENA_LWM2M_OP_READ },
+    { 9U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ },
+    { 11U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
+    { 12U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
+    { 13U, SIRENA_LWM2M_VALUE_UNSIGNED, SIRENA_LWM2M_OP_READ },
+    { 14U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ },
+    { 15U, SIRENA_LWM2M_VALUE_UNSIGNED, SIRENA_LWM2M_OP_READ },
+    { 22U, SIRENA_LWM2M_VALUE_UNSIGNED, SIRENA_LWM2M_OP_READ },
+    { 23U, SIRENA_LWM2M_VALUE_UNSIGNED, SIRENA_LWM2M_OP_READ },
+    { 24U, SIRENA_LWM2M_VALUE_UNSIGNED, SIRENA_LWM2M_OP_READ },
+    { 28U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
+    { 29U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
+    { 30U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ },
+};
+
+static const struct resource_expectation server_optional[] = {
+    { 2U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE },
+    { 3U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE },
+    { 4U, SIRENA_LWM2M_VALUE_NONE, SIRENA_LWM2M_OP_EXEC },
+    { 5U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE },
+};
+
+static const struct resource_expectation device_optional[] = {
+    { 5U, SIRENA_LWM2M_VALUE_NONE, SIRENA_LWM2M_OP_EXEC },
+    { 9U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
+    { 10U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
+    { 12U, SIRENA_LWM2M_VALUE_NONE, SIRENA_LWM2M_OP_EXEC },
+    { 13U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE },
+    { 14U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE },
+    { 15U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE },
+    { 20U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
+    { 21U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
+};
+
+static const uint16_t security_unimplemented[] = { 16U, 17U, 18U, 19U, 20U, 21U,
+                                                    25U, 26U, 27U };
+static const uint16_t device_unimplemented[] = { 6U, 7U, 8U, 22U };
 
 static int execute_calls;
 static uint16_t execute_object;
@@ -58,14 +126,38 @@ static bool resource_present(uint16_t object_id, uint16_t resource_id)
     return sirena_lwm2m_find_resource(object_id, 0U, resource_id, &resource) == 0;
 }
 
-static void assert_resources_present(uint16_t object_id, const uint16_t *ids, size_t count)
+static void assert_expectation(uint16_t object_id,
+                                const struct resource_expectation *expectation)
+{
+    struct sirena_lwm2m_resource *resource;
+
+    zassert_equal(sirena_lwm2m_find_resource(object_id, 0U, expectation->id, &resource), 0,
+                  "object %u resource %u missing", object_id, expectation->id);
+    zassert_equal(resource->type, expectation->type,
+                  "object %u resource %u type mismatch", object_id, expectation->id);
+    zassert_equal(resource->operations, expectation->operations,
+                  "object %u resource %u access mode mismatch", object_id, expectation->id);
+}
+
+static void assert_expectations(uint16_t object_id,
+                                 const struct resource_expectation *expectations,
+                                 size_t count)
 {
     size_t i;
 
     for (i = 0U; i < count; ++i) {
-        zassert_true(resource_present(object_id, ids[i]),
-                     "object %u resource %u missing", object_id, ids[i]);
+        assert_expectation(object_id, &expectations[i]);
     }
+}
+
+static void assert_resource_count(uint16_t object_id, size_t expected)
+{
+    struct sirena_lwm2m_instance *instance;
+
+    zassert_equal(sirena_lwm2m_find_instance(object_id, 0U, &instance), 0,
+                  "object %u instance missing", object_id);
+    zassert_equal(instance->resource_count, expected,
+                  "object %u resource count mismatch", object_id);
 }
 
 ZTEST(sirena_lwm2m_objects, test_mandatory_resources_registered)
@@ -79,12 +171,32 @@ ZTEST(sirena_lwm2m_objects, test_mandatory_resources_registered)
     zassert_equal(sirena_lwm2m_find_instance(DEVICE_OBJECT_ID, 0U, &instance), 0,
                   "device instance missing");
 
-    assert_resources_present(SECURITY_OBJECT_ID, security_mandatory,
-                             ARRAY_SIZE(security_mandatory));
-    assert_resources_present(SERVER_OBJECT_ID, server_mandatory,
-                             ARRAY_SIZE(server_mandatory));
-    assert_resources_present(DEVICE_OBJECT_ID, device_mandatory,
-                             ARRAY_SIZE(device_mandatory));
+    assert_expectations(SECURITY_OBJECT_ID, security_required, ARRAY_SIZE(security_required));
+    assert_expectations(SERVER_OBJECT_ID, server_required, ARRAY_SIZE(server_required));
+    assert_expectations(DEVICE_OBJECT_ID, device_required, ARRAY_SIZE(device_required));
+}
+
+ZTEST(sirena_lwm2m_objects, test_required_resource_sets_are_complete)
+{
+    size_t expected;
+
+    expected = ARRAY_SIZE(security_required);
+    if (IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL)) {
+        expected += ARRAY_SIZE(security_optional);
+    }
+    assert_resource_count(SECURITY_OBJECT_ID, expected);
+
+    expected = ARRAY_SIZE(server_required);
+    if (IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SERVER_OPTIONAL)) {
+        expected += ARRAY_SIZE(server_optional);
+    }
+    assert_resource_count(SERVER_OBJECT_ID, expected);
+
+    expected = ARRAY_SIZE(device_required);
+    if (IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_DEVICE_OPTIONAL)) {
+        expected += ARRAY_SIZE(device_optional);
+    }
+    assert_resource_count(DEVICE_OBJECT_ID, expected);
 }
 
 ZTEST(sirena_lwm2m_objects, test_optional_resources_follow_configuration)
@@ -92,22 +204,50 @@ ZTEST(sirena_lwm2m_objects, test_optional_resources_follow_configuration)
     size_t i;
 
     for (i = 0U; i < ARRAY_SIZE(security_optional); ++i) {
-        zassert_equal(resource_present(SECURITY_OBJECT_ID, security_optional[i]),
-                      IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL),
+        bool present = resource_present(SECURITY_OBJECT_ID, security_optional[i].id);
+
+        zassert_equal(present, IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL),
                       "security resource %u configuration mismatch",
-                      security_optional[i]);
+                      security_optional[i].id);
+        if (present) {
+            assert_expectation(SECURITY_OBJECT_ID, &security_optional[i]);
+        }
     }
 
     for (i = 0U; i < ARRAY_SIZE(server_optional); ++i) {
-        zassert_equal(resource_present(SERVER_OBJECT_ID, server_optional[i]),
-                      IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SERVER_OPTIONAL),
-                      "server resource %u configuration mismatch", server_optional[i]);
+        bool present = resource_present(SERVER_OBJECT_ID, server_optional[i].id);
+
+        zassert_equal(present, IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SERVER_OPTIONAL),
+                      "server resource %u configuration mismatch", server_optional[i].id);
+        if (present) {
+            assert_expectation(SERVER_OBJECT_ID, &server_optional[i]);
+        }
     }
 
     for (i = 0U; i < ARRAY_SIZE(device_optional); ++i) {
-        zassert_equal(resource_present(DEVICE_OBJECT_ID, device_optional[i]),
-                      IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_DEVICE_OPTIONAL),
-                      "device resource %u configuration mismatch", device_optional[i]);
+        bool present = resource_present(DEVICE_OBJECT_ID, device_optional[i].id);
+
+        zassert_equal(present, IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_DEVICE_OPTIONAL),
+                      "device resource %u configuration mismatch", device_optional[i].id);
+        if (present) {
+            assert_expectation(DEVICE_OBJECT_ID, &device_optional[i]);
+        }
+    }
+}
+
+ZTEST(sirena_lwm2m_objects, test_unimplemented_resources_absent)
+{
+    size_t i;
+
+    for (i = 0U; i < ARRAY_SIZE(security_unimplemented); ++i) {
+        zassert_false(resource_present(SECURITY_OBJECT_ID, security_unimplemented[i]),
+                      "security resource %u must not be registered",
+                      security_unimplemented[i]);
+    }
+
+    for (i = 0U; i < ARRAY_SIZE(device_unimplemented); ++i) {
+        zassert_false(resource_present(DEVICE_OBJECT_ID, device_unimplemented[i]),
+                      "device resource %u must not be registered", device_unimplemented[i]);
     }
 }
 
@@ -203,7 +343,8 @@ ZTEST(sirena_lwm2m_objects, test_capacity_overflow_rejected)
     size_t small = 4U;
     int rc;
 
-    memset(oversized, 'u', sizeof(oversized));
+    memset(oversized, 'u', sizeof(oversized) - 1U);
+    oversized[sizeof(oversized) - 1U] = '\0';
 
     rc = sirena_lwm2m_set_string(SECURITY_OBJECT_ID, 0U, 0U, oversized);
     zassert_equal(rc, -ENOMEM, "oversized string accepted");
