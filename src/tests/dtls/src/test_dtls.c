@@ -5,6 +5,7 @@
 #include <zephyr/net/socket.h>
 #include <zephyr/net/tls_credentials.h>
 #include <zephyr/sys/util.h>
+#include <sirena/lwm2m/coap.h>
 #include <sirena/lwm2m/dtls.h>
 #include <sirena/lwm2m/engine.h>
 #include <sirena/lwm2m/object_registry.h>
@@ -468,6 +469,39 @@ ZTEST(sirena_lwm2m_dtls, test_register_sends_expected_request)
 	zassert_str_equal(dtls_request.payload, "</1/0>,</3/0>", "unexpected registration payload");
 	zassert_true(strstr(dtls_request.payload, "</0/0>") == NULL,
 		      "the security object must not be listed");
+}
+
+ZTEST(sirena_lwm2m_dtls, test_the_plaintext_binding_refuses_a_pre_shared_key_server)
+{
+	int rc;
+
+	provision_psk(plain_uri, PEER_PSK_IDENTITY, sizeof(PEER_PSK_IDENTITY) - 1U, PEER_PSK_KEY,
+		      sizeof(PEER_PSK_KEY) - 1U);
+
+	rc = sirena_lwm2m_coap_start();
+	zassert_equal(rc, -EINVAL, "a pre-shared key server must be refused in the clear");
+	zassert_false(plain_request.received, "no request must reach the server");
+}
+
+ZTEST(sirena_lwm2m_dtls, test_the_plaintext_binding_requires_the_noSec_gate)
+{
+	int rc;
+
+	provision_nosec(plain_uri);
+
+	rc = sirena_lwm2m_coap_start();
+#if IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_NOSEC)
+	zassert_equal(rc, 0, "the noSec gate is open: %d", rc);
+
+	rc = sirena_lwm2m_transport_register();
+	zassert_equal(rc, 0, "register failed: %d", rc);
+
+	zassert_true(plain_request.received, "the plain peer received no request");
+	zassert_false(dtls_request.received, "the dtls peer must not receive the request");
+#else
+	zassert_equal(rc, -EPERM, "the closed noSec gate must refuse a noSec server");
+	zassert_false(plain_request.received, "no request must be sent");
+#endif
 }
 
 ZTEST(sirena_lwm2m_dtls, test_the_security_object_is_read_in_the_engine_thread)

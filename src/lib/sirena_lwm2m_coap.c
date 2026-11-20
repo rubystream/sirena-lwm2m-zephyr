@@ -20,6 +20,8 @@
 #define SIRENA_LWM2M_SERVER_OBJECT_ID 1U
 #define SIRENA_LWM2M_DEVICE_OBJECT_ID 3U
 
+#define SIRENA_LWM2M_SECURITY_MODE_RESOURCE 2U
+
 #define SIRENA_LWM2M_COAP_SCHEME "coap://"
 #define SIRENA_LWM2M_COAPS_SCHEME "coaps://"
 #define SIRENA_LWM2M_COAP_DEFAULT_PORT 5683
@@ -137,6 +139,35 @@ static int response_status(int16_t result_code)
     }
 }
 
+static int security_mode_allowed(int64_t mode)
+{
+    switch (mode) {
+    case SIRENA_LWM2M_SECURITY_MODE_NOSEC:
+        if (!IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_NOSEC)) {
+            return -EPERM;
+        }
+        return 0;
+    case SIRENA_LWM2M_SECURITY_MODE_PSK:
+        return -EINVAL;
+    default:
+        return -EPROTONOSUPPORT;
+    }
+}
+
+static int security_mode_check(void)
+{
+    int64_t mode;
+    int rc;
+
+    rc = sirena_lwm2m_get_integer(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                  SIRENA_LWM2M_SECURITY_MODE_RESOURCE, &mode);
+    if (rc != 0) {
+        return rc;
+    }
+
+    return security_mode_allowed(mode);
+}
+
 static int server_address(struct net_sockaddr_storage *storage)
 {
     struct net_sockaddr_in *address = (struct net_sockaddr_in *)storage;
@@ -219,6 +250,11 @@ static int coap_request(const char *path, enum coap_method method, const uint8_t
 
     if (!transport_started) {
         return -ENOTSUP;
+    }
+
+    rc = security_mode_check();
+    if (rc != 0) {
+        return rc;
     }
 
     rc = server_address(&storage);
@@ -387,6 +423,11 @@ int sirena_lwm2m_coap_start_engine(void)
 {
     struct net_sockaddr_storage storage;
     int rc;
+
+    rc = security_mode_check();
+    if (rc != 0) {
+        return rc;
+    }
 
     if (transport_started) {
         return 0;

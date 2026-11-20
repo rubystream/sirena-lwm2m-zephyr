@@ -71,9 +71,11 @@ plaintext binding explicitly can call `sirena_lwm2m_coap_start()` instead.
 | any | 1, 2, 4 | none | `-EPROTONOSUPPORT`, the security mode is not implemented. |
 
 The selection never falls back: a server that needs DTLS is never contacted in
-the clear, and a noSec server is never contacted over DTLS. Starting the
-transport again with another server URI stops the binding that runs and starts
-the other one.
+the clear, and a noSec server is never contacted over DTLS. The binding that
+is selected enforces the security mode on its own, so a direct call of
+`sirena_lwm2m_coap_start()` cannot reach a server in the clear either.
+Starting the transport again with another server URI stops the binding that
+runs and starts the other one.
 
 ## Engine thread
 
@@ -169,13 +171,13 @@ int sirena_lwm2m_coap_get_location_path(char *buffer, size_t *length);
   longer than `CONFIG_SIRENA_LWM2M_ENDPOINT_NAME_MAX` is rejected with
   `-EINVAL`. Registering without an endpoint name fails with `-EINVAL` and no
   request is sent.
-- `sirena_lwm2m_coap_start()` reads the server URI from the Security object,
-  creates the UDP socket, initializes the CoAP client and binds the binding to
-  the transport interface, which starts the engine thread. The work runs in the
-  engine thread, so the call returns the result of the work to the
-  application. It is idempotent and returns `0` when the transport is already
-  running. A server URI that does not use the `coap://` scheme is rejected
-  with `-EINVAL`, and a `coaps://` URI with `-ENOTSUP`.
+- `sirena_lwm2m_coap_start()` reads the server URI and the security mode from
+  the Security object, creates the UDP socket, initializes the CoAP client and
+  binds the binding to the transport interface, which starts the engine
+  thread. The work runs in the engine thread, so the call returns the result
+  of the work to the application. It is idempotent and returns `0` when the
+  transport is already running. A server URI that does not use the `coap://`
+  scheme is rejected with `-EINVAL`, and a `coaps://` URI with `-ENOTSUP`.
 - `sirena_lwm2m_coap_stop()` closes the UDP socket and drops the registration
   location path. The socket belongs to the engine thread, so the call queues
   the stop on the engine thread and waits for its completion. The engine
@@ -184,6 +186,22 @@ int sirena_lwm2m_coap_get_location_path(char *buffer, size_t *length);
   assigned to the registration, for example `/rd/1`. It returns the character
   count without the terminating NUL, like the other string getters of the
   project.
+
+### The security mode
+
+The binding serves a server that uses the NoSec security mode and nothing
+else. It reads the security mode from the Security object resource 2 when it
+starts and before every request, so a server that needs a secure transport is
+never contacted in the clear:
+
+| Security mode | Result |
+| --- | --- |
+| 3, NoSec | The server is served, but only when the noSec development gate is open. |
+| 0, Pre-Shared Key | `-EINVAL`, the server needs the secure scheme and the DTLS binding. |
+| 1, 2, 4 | `-EPROTONOSUPPORT`, the security mode is not implemented. |
+
+The check belongs to the binding and not only to the selection of the
+transport, so calling `sirena_lwm2m_coap_start()` directly is safe as well.
 
 ### Where the registration parameters come from
 
@@ -239,10 +257,12 @@ Update without a prior registration fails with `-EINVAL`.
 | Code | Meaning |
 | --- | --- |
 | `0` | The server accepted the request. |
-| `-EINVAL` | The endpoint name is missing or invalid, the server URI is malformed, no registration exists for Update or Deregister, the Server (1) or the Device (3) object instance is missing from the registry, or the request path does not fit the CoAP path buffer. |
+| `-EINVAL` | The endpoint name is missing or invalid, the server URI is malformed, the server is provisioned with the Pre-Shared Key security mode and needs the secure scheme, no registration exists for Update or Deregister, the Server (1) or the Device (3) object instance is missing from the registry, or the request path does not fit the CoAP path buffer. |
 | `-EALREADY` | The engine thread is already running. Only `sirena_lwm2m_engine_start()` returns it. |
 | `-EAGAIN` | The engine request queue is full. |
 | `-ENOTSUP` | The server URI uses the `coaps://` scheme, the host is not a numeric IPv4 address, no binding is bound to the transport interface, or the engine thread is not running. |
+| `-EPERM` | The noSec development gate is closed and the server is provisioned with the NoSec security mode. |
+| `-EPROTONOSUPPORT` | The security mode of the server is not implemented: Raw Public Key (1), Certificate (2) or Certificate with EST (4). |
 | `-ENOENT` | The Security object, the Server object or the resource that holds the server URI or the lifetime does not exist, or the server answered `4.04 Not Found`, which means that the registration is unknown to the server. |
 | `-ENOMEM` | The registration payload or the request path does not fit the configured buffer. |
 | `-EBADMSG` | The server answered `4.00 Bad Request`. |
@@ -344,9 +364,12 @@ reachable only when `CONFIG_SIRENA_LWM2M_TRANSPORT_NOSEC` is enabled, and the
 switch is off by default, so a production build cannot silently talk to a
 server in the clear. The gate is meant for development and testing only.
 
-With the gate closed, a server that is provisioned with the NoSec security
-mode is refused with `-EPERM` and no request is sent. The gate has no effect
-on the DTLS binding: NoSec is not a DTLS security mode.
+The gate is enforced in the plaintext binding, which reads the security mode
+of the server when it starts and before every request. With the gate closed, a
+server that is provisioned with the NoSec security mode is refused with
+`-EPERM` and no request is sent. The transport layer refuses the same server
+with `-EPERM` when it selects the binding. The gate has no effect on the DTLS
+binding: NoSec is not a DTLS security mode.
 
 ### Error codes
 

@@ -97,13 +97,14 @@ static int transport_stop_binding(enum sirena_lwm2m_transport_binding binding)
 static int transport_start_binding(enum sirena_lwm2m_transport_binding binding)
 {
     const struct sirena_lwm2m_binding_entry *entry = binding_entry(binding);
+    bool switched = transport_binding != binding;
     int rc;
 
     if (entry == NULL || entry->ops == NULL) {
         return -ENOTSUP;
     }
 
-    if (transport_binding != binding) {
+    if (switched) {
         rc = transport_stop_binding(transport_binding);
         if (rc != 0) {
             return rc;
@@ -113,7 +114,13 @@ static int transport_start_binding(enum sirena_lwm2m_transport_binding binding)
     transport_ops = entry->ops;
     transport_binding = binding;
 
-    return entry->start();
+    rc = entry->start();
+    if (rc != 0 && switched) {
+        transport_ops = NULL;
+        transport_binding = SIRENA_LWM2M_TRANSPORT_BINDING_NONE;
+    }
+
+    return rc;
 }
 
 static bool transport_scheme_is(const char *uri, const char *scheme)
