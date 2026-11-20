@@ -1,0 +1,43 @@
+config SIRENA_LWM2M_MAX_OBJECTS
+	int "Maximum number of registered objects"
+	default 8
+	range 1 256
+
+config SIRENA_LWM2M_MAX_INSTANCES
+	int "Maximum number of object instances"
+	default 16
+	range 1 1024
+
+config SIRENA_LWM2M_MAX_RESOURCES_PER_INSTANCE
+	int "Maximum number of resources per instance"
+	default 16
+	range 1 256
+
+config SIRENA_LWM2M_MAX_OBSERVATIONS
+	int "Maximum number of observations"
+	default 16
+	range 0 1024
+
+menu "Sirena LwM2M"
+
+config SIRENA_LWM2M
+	bool "Enable Sirena LwM2M client core"
+	default y
+
+if SIRENA_LWM2M
+
+config SIRENA_LWM2M_OBJECT_SECURITY
+	bool "Enable Security object (0)"
+	default y
+
+config SIRENA_LWM2M_OBJECT_SERVER
+	bool "Enable Server object (1)"
+	default y
+
+config SIRENA_LWM2M_OBJECT_DEVICE
+	bool "Enable Device object (3)"
+	default y
+
+endif
+
+endmenu
