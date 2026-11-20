@@ -141,7 +141,8 @@ ZTEST(sirena_lwm2m_codec, test_malformed_and_dispatch)
 
     uint16_t accepted[]={SIRENA_LWM2M_CF_OPAQUE,SIRENA_LWM2M_CF_TLV};
     int chosen=sirena_lwm2m_content_format_negotiate(accepted,2,
-                                                         SIRENA_LWM2M_CF_TLV);
+                                                         SIRENA_LWM2M_CF_TLV,
+                                                         SIRENA_LWM2M_VALUE_INTEGER);
     zassert_equal(chosen,SIRENA_LWM2M_CF_TLV,"negotiate failed");
 }
 
@@ -182,12 +183,32 @@ ZTEST(sirena_lwm2m_codec, test_capacity_overflow)
 ZTEST(sirena_lwm2m_codec, test_negotiate_failure)
 {
     uint16_t accepted[] = {999};
-    int chosen = sirena_lwm2m_content_format_negotiate(accepted, 1, 0);
+    int chosen = sirena_lwm2m_content_format_negotiate(accepted, 1, SIRENA_LWM2M_CF_TLV,
+                                                        SIRENA_LWM2M_VALUE_INTEGER);
     zassert_equal(chosen, -ENOTSUP, "negotiate accepted unsupported");
-    chosen = sirena_lwm2m_content_format_negotiate(NULL, 0, 999);
-    zassert_equal(chosen, -EINVAL, "bad preferred accepted");
-    chosen = sirena_lwm2m_content_format_negotiate(NULL, 0, 0);
+    chosen = sirena_lwm2m_content_format_negotiate(NULL, 0, SIRENA_LWM2M_CF_PLAIN_TEXT,
+                                                    SIRENA_LWM2M_VALUE_INTEGER);
+    zassert_equal(chosen, SIRENA_LWM2M_CF_TLV, "negotiate did not fall back");
+    chosen = sirena_lwm2m_content_format_negotiate(NULL, 0, SIRENA_LWM2M_CF_PLAIN_TEXT,
+                                                    SIRENA_LWM2M_VALUE_NONE);
     zassert_equal(chosen, -ENOTSUP, "negotiate none");
+}
+
+ZTEST(sirena_lwm2m_codec, test_negotiate_refuses_a_format_the_codec_cannot_encode)
+{
+    uint16_t accepted[] = {SIRENA_LWM2M_CF_PLAIN_TEXT};
+    int chosen = sirena_lwm2m_content_format_negotiate(accepted, 1, SIRENA_LWM2M_CF_TLV,
+                                                        SIRENA_LWM2M_VALUE_INTEGER);
+    zassert_equal(chosen, -ENOTSUP, "the plain text format cannot encode an integer");
+    chosen = sirena_lwm2m_content_format_negotiate(accepted, 1, SIRENA_LWM2M_CF_TLV,
+                                                    SIRENA_LWM2M_VALUE_STRING);
+    zassert_equal(chosen, SIRENA_LWM2M_CF_PLAIN_TEXT, "the plain text format encodes a string");
+    zassert_true(sirena_lwm2m_codec_can_encode(SIRENA_LWM2M_CF_TLV,
+                                                 SIRENA_LWM2M_VALUE_INTEGER),
+                 "the tlv format encodes an integer");
+    zassert_false(sirena_lwm2m_codec_can_encode(SIRENA_LWM2M_CF_OPAQUE,
+                                                  SIRENA_LWM2M_VALUE_STRING),
+                  "the opaque format does not encode a string");
 }
 
 ZTEST(sirena_lwm2m_codec, test_tlv_16bit_id)

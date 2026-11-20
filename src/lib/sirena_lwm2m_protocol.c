@@ -161,19 +161,15 @@ static int protocol_write_resource(uint16_t object_id, uint16_t instance_id,
 }
 
 static int protocol_negotiate(const struct sirena_lwm2m_protocol_request *request,
+                               const struct sirena_lwm2m_resource *resource,
                                uint16_t *content_format)
 {
-    uint16_t preferred = SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
     int rc;
 
-    if (preferred == 0U && (request->accepted_formats == NULL ||
-                            request->accepted_format_count == 0U)) {
-        *content_format = preferred;
-        return 0;
-    }
-
     rc = sirena_lwm2m_content_format_negotiate(request->accepted_formats,
-                                                 request->accepted_format_count, preferred);
+                                                 request->accepted_format_count,
+                                                 SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT,
+                                                 resource->type);
     if (rc < 0) {
         return rc;
     }
@@ -222,18 +218,18 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         return 0;
     }
 
-    rc = protocol_negotiate(request, &content_format);
-    if (rc != 0) {
-        protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_ACCEPTABLE);
-        return 0;
-    }
-
     switch (request->operation) {
     case SIRENA_LWM2M_OPERATION_READ: {
         size_t length = response->payload_capacity;
 
         if ((resource->operations & SIRENA_LWM2M_OP_READ) == 0U || resource->read == NULL) {
             protocol_set_status(response, SIRENA_LWM2M_STATUS_METHOD_NOT_ALLOWED);
+            return 0;
+        }
+
+        rc = protocol_negotiate(request, resource, &content_format);
+        if (rc != 0) {
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_ACCEPTABLE);
             return 0;
         }
 
@@ -259,7 +255,9 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
             return 0;
         }
 
-        write_format = request->content_format_present ? request->content_format : content_format;
+        write_format = request->content_format_present
+                           ? request->content_format
+                           : (uint16_t)SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
 
         rc = sirena_lwm2m_codec_decode(write_format, request->payload, request->payload_length,
                                        protocol_values, &value_count);

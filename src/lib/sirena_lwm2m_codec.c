@@ -1,5 +1,6 @@
 #include <sirena/lwm2m/codec.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/util.h>
 #include <string.h>
 #include <errno.h>
 #include <stdio.h>
@@ -21,22 +22,61 @@ static int append_byte(void *buffer, size_t capacity, size_t *used, uint8_t b)
     return append(buffer, capacity, used, &b, 1U);
 }
 
+static const uint16_t codec_formats[] = {
+    SIRENA_LWM2M_CF_TLV,
+    SIRENA_LWM2M_CF_JSON,
+    SIRENA_LWM2M_CF_CBOR,
+    SIRENA_LWM2M_CF_SENML_JSON,
+    SIRENA_LWM2M_CF_SENML_CBOR,
+    SIRENA_LWM2M_CF_SENML_ETCH_JSON,
+    SIRENA_LWM2M_CF_SENML_ETCH_CBOR,
+    SIRENA_LWM2M_CF_PLAIN_TEXT,
+    SIRENA_LWM2M_CF_OPAQUE,
+};
+
 static bool supported(uint16_t format)
 {
-    switch (format) {
-    case SIRENA_LWM2M_CF_PLAIN_TEXT:
-    case SIRENA_LWM2M_CF_TLV:
-    case SIRENA_LWM2M_CF_JSON:
-    case SIRENA_LWM2M_CF_CBOR:
-    case SIRENA_LWM2M_CF_SENML_JSON:
-    case SIRENA_LWM2M_CF_SENML_CBOR:
-    case SIRENA_LWM2M_CF_SENML_ETCH_JSON:
-    case SIRENA_LWM2M_CF_SENML_ETCH_CBOR:
-    case SIRENA_LWM2M_CF_OPAQUE:
+    size_t i;
+
+    for (i = 0U; i < ARRAY_SIZE(codec_formats); ++i) {
+        if (codec_formats[i] == format) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool encodable_type(enum sirena_lwm2m_value_type type)
+{
+    switch (type) {
+    case SIRENA_LWM2M_VALUE_BOOLEAN:
+    case SIRENA_LWM2M_VALUE_INTEGER:
+    case SIRENA_LWM2M_VALUE_UNSIGNED:
+    case SIRENA_LWM2M_VALUE_FLOAT:
+    case SIRENA_LWM2M_VALUE_STRING:
+    case SIRENA_LWM2M_VALUE_OPAQUE:
         return true;
     default:
         return false;
     }
+}
+
+bool sirena_lwm2m_codec_can_encode(uint16_t content_format, enum sirena_lwm2m_value_type type)
+{
+    if (!supported(content_format)) {
+        return false;
+    }
+
+    if (content_format == SIRENA_LWM2M_CF_PLAIN_TEXT) {
+        return type == SIRENA_LWM2M_VALUE_STRING;
+    }
+
+    if (content_format == SIRENA_LWM2M_CF_OPAQUE) {
+        return type == SIRENA_LWM2M_VALUE_OPAQUE;
+    }
+
+    return encodable_type(type);
 }
 
 bool sirena_lwm2m_content_format_supported(uint16_t format)
@@ -127,30 +167,31 @@ const char *sirena_lwm2m_content_format_to_mime(uint16_t format)
 
 int sirena_lwm2m_content_format_negotiate(const uint16_t *accepted,
                                             size_t count,
-                                            uint16_t preferred)
+                                            uint16_t preferred,
+                                            enum sirena_lwm2m_value_type type)
 {
     size_t i;
 
-    if (preferred != 0U) {
-        if (!supported(preferred)) {
-            return -EINVAL;
-        }
-        if (accepted == NULL || count == 0U) {
-            return (int)preferred;
-        }
+    if (accepted != NULL && count > 0U) {
         for (i = 0U; i < count; ++i) {
-            if (accepted[i] == preferred) {
-                return (int)preferred;
-            }
-        }
-    }
-    if (accepted != NULL) {
-        for (i = 0U; i < count; ++i) {
-            if (supported(accepted[i])) {
+            if (sirena_lwm2m_codec_can_encode(accepted[i], type)) {
                 return (int)accepted[i];
             }
         }
+
+        return -ENOTSUP;
     }
+
+    if (sirena_lwm2m_codec_can_encode(preferred, type)) {
+        return (int)preferred;
+    }
+
+    for (i = 0U; i < ARRAY_SIZE(codec_formats); ++i) {
+        if (sirena_lwm2m_codec_can_encode(codec_formats[i], type)) {
+            return (int)codec_formats[i];
+        }
+    }
+
     return -ENOTSUP;
 }
 
