@@ -155,3 +155,16 @@ vite.config.ts.timestamp-*
 .nx/cache
 .nx/workspace-data
 .nx/migrate-runs
+
+# Zephyr development
+# Note: keep `zephyr/module.yml` committable (Zephyr west module metadata).
+build/
+.west/
+modules/
+twister-out/
+output/
+outputs/
+
+# Docker caches and volumes
+.docker/
+docker-compose.override.yml

@@ -44,6 +44,16 @@ firmware.
 No JVM. No unnecessary layers. Just native embedded engineering, designed to make
 even the smallest devices first-class citizens of the connected world.
 
+## Repository Layout
+
+- `src/` - implementation code for the Sirena LwM2M Zephyr client.
+- `docs/` - developer-facing documentation.
+- Repository root - project entry point (`README.md`), agent instructions
+  (`AGENTS.md`), and Zephyr module build metadata expected by `west`
+  (`CMakeLists.txt`, `zephyr/module.yml` when introduced by later epics).
+  Root metadata is intentionally retained at the root and not moved.
+- Generated build, cache, and output paths are ignored by Git (see `.gitignore`).
+
 ## Reference
 
 * [The Zephyr Project. Zephyr](https://github.com/zephyrproject-rtos/zephyr) - a
