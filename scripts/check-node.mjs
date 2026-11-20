@@ -1,7 +1,7 @@
-const major = Number(process.version.slice(1).split(".")[0]);
+const expected = "24.22.0";
 
-if (major !== 24) {
-  console.error(`Unsupported Node.js ${process.version}; expected major version 24 (>=24.0.0 <25.0.0).`);
+if (process.version !== `v${expected}`) {
+  console.error(`Unsupported Node.js ${process.version}; expected v${expected}.`);
   process.exit(1);
 }
 
