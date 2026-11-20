@@ -18,6 +18,16 @@ config SIRENA_LWM2M_MAX_OBSERVATIONS
 	default 16
 	range 0 1024
 
+config SIRENA_LWM2M_CODEC_MAX_VALUE_SIZE
+	int "Maximum codec value size"
+	default 64
+	range 1 4096
+
+config SIRENA_LWM2M_CODEC_MAX_VALUES
+	int "Maximum codec values per call"
+	default 8
+	range 1 64
+
 menu "Sirena LwM2M"
 
 config SIRENA_LWM2M
