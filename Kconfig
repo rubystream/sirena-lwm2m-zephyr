@@ -125,6 +125,16 @@ config COAP_EXTENDED_OPTIONS_LEN_VALUE
 	  option. The value has to hold that option, so it is sized for the
 	  endpoint client name limit and the "ep=" prefix.
 
+config SIRENA_LWM2M_COAP_LOCATION_SEGMENTS
+	int "Maximum number of Location-Path segments in a registration response"
+	default 4
+	range 1 16
+
+config SIRENA_LWM2M_COAP_PATH_MAX
+	int "Maximum length of a CoAP request path"
+	default 128
+	range 32 256
+
 endif
 
 endif
