@@ -84,13 +84,17 @@ A successful run prints `sirena zephyr smoke ok`.
 | Build and run codec tests | `npm run test:codec` |
 | Build and run objects tests | `npm run test:objects` |
 | Build and run objects tests with optional resources | `npm run test:objects-optional` |
+| Build and run CoAP transport tests | `npm run test:coap` |
+| Build and run CoAP transport tests with a larger CoAP option length | `npm run test:coap-override` |
 | Remove build output | `npm run clean` |
 | Full smoke workflow | `npm run smoke` |
 | Flash firmware (opt-in) | `npm run flash` |
 | Deploy firmware (opt-in) | `npm run deploy` |
 
 Registry APIs and the built-in objects API are not thread-safe and must be
-called from the engine thread.
+called from the engine thread. The transport API is called from the
+application, the transport work itself runs in the engine thread. See
+[Transport Bindings](transport.md).
 
 Rebuild from scratch without removing dependencies:
 
@@ -226,6 +230,7 @@ Flashing requires host access to USB programming/debugging hardware.
 
 - [Container and npm scripts](../package.json)
 - [Built-in LwM2M objects](objects.md)
+- [Transport bindings](transport.md)
 - [Compose services](../compose.yml)
 - [Docker build](../Dockerfile)
 - [Project entry point](../README.md)
@@ -239,6 +244,17 @@ Flashing requires host access to USB programming/debugging hardware.
 Codec APIs use negative `errno` values: `-EINVAL` for invalid arguments, `-ENOMEM`
 for insufficient capacity or configured limits, and `-ENOTSUP` for unsupported
 formats or unimplemented decode paths.
+
+## Transport Error Codes
+
+The transport interface and the CoAP/UDP binding use negative `errno` values:
+`-EINVAL` for an invalid argument or a client state that cannot be
+registered, `-ENOTSUP` for an unsupported scheme, a missing binding or a
+transport that is not running, `-ENOMEM` for a value that does not fit the
+configured capacity, `-ENOENT` for a missing object or an unknown
+registration, and `-EALREADY` for an engine thread that is already running.
+The server response codes are mapped to distinct codes so that the caller can
+tell them apart. See [Transport Bindings](transport.md) for the full table.
 
 ## Objects Error Codes
 

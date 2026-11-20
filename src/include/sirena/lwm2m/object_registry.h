@@ -33,6 +33,9 @@ typedef int (*sirena_lwm2m_execute_fn)(uint16_t object_id, uint16_t instance_id,
 				       uint16_t resource_id, void *user_data,
 				       const void *args, size_t args_length);
 
+typedef int (*sirena_lwm2m_instance_visitor_t)(uint16_t object_id, uint16_t instance_id,
+					       void *user_data);
+
 struct sirena_lwm2m_resource {
     uint16_t id;
     enum sirena_lwm2m_value_type type;
@@ -81,6 +84,8 @@ int sirena_lwm2m_find_instance(uint16_t object_id, uint16_t instance_id,
 int sirena_lwm2m_find_resource(uint16_t object_id, uint16_t instance_id,
 			       uint16_t resource_id,
 			       struct sirena_lwm2m_resource **resource);
+int sirena_lwm2m_foreach_instance(sirena_lwm2m_instance_visitor_t visitor,
+				  void *user_data);
 bool sirena_lwm2m_object_enabled(uint16_t object_id);
 
 #endif

@@ -208,6 +208,31 @@ int sirena_lwm2m_find_resource(uint16_t object_id, uint16_t instance_id,
     return 0;
 }
 
+int sirena_lwm2m_foreach_instance(sirena_lwm2m_instance_visitor_t visitor,
+				  void *user_data)
+{
+    size_t i;
+
+    if (visitor == NULL) {
+        return -EINVAL;
+    }
+
+    for (i = 0U; i < CONFIG_SIRENA_LWM2M_MAX_INSTANCES; ++i) {
+        int rc;
+
+        if (!instances[i].created) {
+            continue;
+        }
+
+        rc = visitor(instances[i].object_id, instances[i].instance_id, user_data);
+        if (rc != 0) {
+            return rc;
+        }
+    }
+
+    return 0;
+}
+
 int sirena_lwm2m_get(uint16_t object_id, uint16_t instance_id,
 		     uint16_t resource_id, void *buffer, size_t *length)
 {
