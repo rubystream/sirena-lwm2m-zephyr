@@ -35,21 +35,26 @@ Always registered:
 | Server (1) | 0 Short Server ID (Integer, R), 1 Lifetime (Integer, RW), 6 Notification Storing (Boolean, RW), 7 Binding (String, RW), 8 Registration Update Trigger (execute) |
 | Device (3) | 0 Manufacturer (String, R), 1 Model Number (String, R), 2 Serial Number (String, R), 3 Firmware Version (String, R), 4 Reboot (execute), 11 Error Code (Integer, R), 16 Supported Binding and Modes (String, R), 17 Device Type (String, R), 18 Hardware Version (String, R), 19 Software Version (String, R) |
 
-Security resource 10 is registered although it is optional in OMNA: it pairs the
-Security instance with the Server instance. Security resource 1 always reads
-`false` because v1 has no bootstrap server mode.
+Security resource 10 is optional in the OMNA registry but registered as always
+present here: it pairs the Security instance with the Server instance. Security
+resource 1 always reads `false` because v1 has no bootstrap server mode.
 
 Resources registered only when the matching Kconfig symbol is enabled:
 
 | Kconfig symbol | Object | Resources |
 | --- | --- | --- |
-| `CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL` | Security (0) | 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 22, 23, 24, 26, 28, 29, 30 |
+| `CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL` | Security (0) | 6, 7, 8, 9, 11, 12, 13, 14, 15, 22, 23, 24, 28, 29, 30 |
 | `CONFIG_SIRENA_LWM2M_OBJECT_SERVER_OPTIONAL` | Server (1) | 2, 3, 4, 5 |
 | `CONFIG_SIRENA_LWM2M_OBJECT_DEVICE_OPTIONAL` | Device (3) | 5, 9, 10, 12, 13, 14, 15, 20, 21 |
 
 Device 13 Current Time is stored as `SIRENA_LWM2M_VALUE_INTEGER` holding seconds
-since the Unix epoch, and the ObjLnk resources Security 17 and 26 are stored the
-same way. Multi-instance resources and Device 22 ExtDevInfo are not implemented.
+since the Unix epoch.
+
+ObjLnk-typed resources are not implemented in this version: Security 17 OSCORE
+Security Mode and Security 26 MQTT Server are not registered, because the value
+type enum and the codec have no object link representation and both resources
+point at object types that do not exist in v1. Multi-instance resources and
+Device 22 ExtDevInfo are not implemented either.
 
 ## Application API
 
@@ -79,6 +84,12 @@ returns the character count without the terminating NUL on success. The buffer
 always receives a NUL terminator. `sirena_lwm2m_get_opaque()` takes the buffer
 capacity in `*length` on entry and returns the stored byte count on success.
 
+The built-in integer resources use a byte width of 8 when read through the typed
+API: `sirena_lwm2m_get_integer()` fills an `int64_t` and the server path
+returns the same 8 bytes for an integer resource. The LwM2M codec encodes
+integers as 4 bytes, so the transport binding narrows the value when it encodes
+it.
+
 ### Two write paths
 
 The application path and the server path reach the same stored value but enforce
@@ -95,6 +106,14 @@ The **server path** is `sirena_lwm2m_set()` and `sirena_lwm2m_execute()` from
 `src/include/sirena/lwm2m/object_registry.h`. It stays access-mode enforcing: a
 server write to a read-only resource fails with `-ENOTSUP` and an execute-only
 resource is not writable. The transport binding uses this path.
+
+### Resource lookup
+
+`sirena_lwm2m_find_resource()` from
+`src/include/sirena/lwm2m/object_registry.h` returns the registered resource of
+an object instance together with its value type, its server-facing access mode
+and its callbacks. It is the lookup the typed accessors use to reach the
+resource that stores a value.
 
 ### Execute handler
 
@@ -146,6 +165,11 @@ modes 0 to 3 are supported; any other value is rejected with `-EINVAL`. There is
 no bootstrap field because bootstrap is excluded from this version, and Security
 resource 1 stays `false`.
 
+## Thread safety
+
+The objects API shares the thread-safety contract of the object registry: it is
+not thread-safe and must be called from the engine thread.
+
 ## Storage
 
 All built-in values live in static storage; the module performs no heap
@@ -162,7 +186,9 @@ Kconfig:
 `CONFIG_SIRENA_LWM2M_MAX_RESOURCES_PER_INSTANCE` defaults to 16 and rises to 25
 when `CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL` or
 `CONFIG_SIRENA_LWM2M_OBJECT_DEVICE_OPTIONAL` is enabled, because those
-configurations need more resources per instance.
+configurations need more resources per instance: the Security instance holds 22
+resources and the Device instance 19 with their optional sets enabled, the
+Server instance 9.
 
 ## Error codes
 
@@ -183,3 +209,8 @@ npm run test:objects-optional
 `npm run test:objects` builds the default configuration, where the optional
 resources are absent. `npm run test:objects-optional` builds the same test
 sources with the optional-resource symbols enabled, where they are present.
+
+The suite asserts the registered value type and the server-facing access mode
+of every resource against the OMNA registry tables, the exact resource count of
+each object, and that the resources excluded from this version stay
+unregistered.

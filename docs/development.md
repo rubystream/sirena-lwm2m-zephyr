@@ -89,7 +89,8 @@ A successful run prints `sirena zephyr smoke ok`.
 | Flash firmware (opt-in) | `npm run flash` |
 | Deploy firmware (opt-in) | `npm run deploy` |
 
-Registry APIs are not thread-safe and must be called from the engine thread.
+Registry APIs and the built-in objects API are not thread-safe and must be
+called from the engine thread.
 
 Rebuild from scratch without removing dependencies:
 
