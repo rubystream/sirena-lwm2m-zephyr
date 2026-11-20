@@ -5,6 +5,7 @@
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/util.h>
+#include "sirena_lwm2m_coap_endpoint.h"
 #include <sirena/lwm2m/codec.h>
 #include <sirena/lwm2m/coap.h>
 #include <sirena/lwm2m/object_registry.h>
@@ -43,6 +44,11 @@ struct peer_capture {
     uint8_t token_length;
     uint8_t payload[PEER_PAYLOAD_MAX];
     size_t payload_length;
+};
+
+struct guarded_path {
+    uint16_t path[3];
+    uint16_t guard[3];
 };
 
 static struct peer_capture peer_capture;
@@ -353,6 +359,53 @@ ZTEST(sirena_lwm2m_protocol, test_read_of_an_unknown_resource_is_not_found)
 
     zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_NOT_FOUND, "unexpected response code");
     zassert_equal(peer_capture.payload_length, 0U, "a failure must not carry a payload");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_path_with_too_many_segments_is_refused)
+{
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_GET, "/1/0/1/0", 0U, NULL, 0U, NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "read request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_NOT_FOUND, "unexpected response code");
+    zassert_equal(peer_capture.payload_length, 0U, "a failure must not carry a payload");
+
+    rc = peer_request(COAP_METHOD_GET, "/1/0/1", 0U, NULL, 0U, NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "the client did not survive the refused path: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CONTENT, "unexpected response code");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_path_parser_stays_inside_the_destination)
+{
+    struct guarded_path guarded = {
+        .path = { 0xAAAAU, 0xBBBBU, 0xCCCCU },
+        .guard = { 0xDDDDU, 0xEEEEU, 0xFFFFU },
+    };
+    struct coap_packet request;
+    uint8_t buffer[128];
+    uint8_t token[COAP_TOKEN_MAX_LEN];
+    size_t count = 0U;
+    int rc;
+
+    rc = coap_packet_init(&request, buffer, sizeof(buffer), COAP_VERSION_1, COAP_TYPE_CON,
+                           sizeof(token), token, COAP_METHOD_GET, 1U);
+    zassert_equal(rc, 0, "the request could not be built: %d", rc);
+
+    rc = coap_packet_set_path(&request, "/1/0/1/0");
+    zassert_equal(rc, 0, "the path could not be set: %d", rc);
+
+    rc = sirena_lwm2m_coap_endpoint_parse_path(&request, guarded.path,
+                                                ARRAY_SIZE(guarded.path), &count);
+    zassert_true(rc != 0, "a path with too many segments must be refused");
+    zassert_equal(count, 0U, "a refused path must not report a segment count");
+    zassert_equal(guarded.guard[0], 0xDDDDU, "the parser wrote past the destination");
+    zassert_equal(guarded.guard[1], 0xEEEEU, "the parser wrote past the destination");
+    zassert_equal(guarded.guard[2], 0xFFFFU, "the parser wrote past the destination");
 }
 
 ZTEST(sirena_lwm2m_protocol, test_read_of_a_resource_that_cannot_be_read)

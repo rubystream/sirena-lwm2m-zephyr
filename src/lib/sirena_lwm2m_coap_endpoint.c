@@ -8,7 +8,7 @@
 #include <string.h>
 
 #define SIRENA_LWM2M_COAP_PATH_SEGMENTS 3
-#define SIRENA_LWM2M_COAP_PATH_OPTIONS 4
+#define SIRENA_LWM2M_COAP_PATH_OPTIONS (SIRENA_LWM2M_COAP_PATH_SEGMENTS + 1)
 #define SIRENA_LWM2M_COAP_OPTIONS 16
 #define SIRENA_LWM2M_COAP_TOKEN_LENGTH 4
 
@@ -184,20 +184,6 @@ static struct sirena_lwm2m_coap_observer *endpoint_observer_alloc(void)
     return NULL;
 }
 
-size_t sirena_lwm2m_coap_endpoint_observation_count(void)
-{
-    size_t count = 0U;
-    size_t i;
-
-    for (i = 0U; i < ARRAY_SIZE(observers); ++i) {
-        if (observers[i].used) {
-            count++;
-        }
-    }
-
-    return count;
-}
-
 static bool endpoint_token_matches(const struct coap_packet *packet)
 {
     uint8_t token[COAP_TOKEN_MAX_LEN];
@@ -263,16 +249,25 @@ static void endpoint_handle_response(struct coap_packet *packet, const struct ne
     endpoint_complete_response(packet);
 }
 
-static size_t endpoint_parse_path(const struct coap_packet *packet, uint16_t *path)
+int sirena_lwm2m_coap_endpoint_parse_path(const struct coap_packet *packet, uint16_t *path,
+                                           size_t capacity, size_t *count)
 {
     struct coap_option options[SIRENA_LWM2M_COAP_PATH_OPTIONS];
-    size_t count = 0U;
+    size_t parsed = 0U;
     int found;
     int i;
 
+    if (packet == NULL || path == NULL || count == NULL || capacity == 0U) {
+        return -EINVAL;
+    }
+
     found = coap_find_options(packet, COAP_OPTION_URI_PATH, options, ARRAY_SIZE(options));
-    if (found <= 0) {
-        return 0U;
+    if (found < 0) {
+        return -EINVAL;
+    }
+
+    if ((size_t)found > capacity) {
+        return -ENOMEM;
     }
 
     for (i = 0; i < found; ++i) {
@@ -280,21 +275,27 @@ static size_t endpoint_parse_path(const struct coap_packet *packet, uint16_t *pa
         uint16_t j;
 
         if (options[i].len == 0U || options[i].len > 5U) {
-            return 0U;
+            return -EINVAL;
         }
 
         for (j = 0U; j < options[i].len; ++j) {
             if (options[i].value[j] < '0' || options[i].value[j] > '9') {
-                return 0U;
+                return -EINVAL;
             }
 
             value = value * 10U + (uint32_t)(options[i].value[j] - '0');
         }
 
-        path[count++] = (uint16_t)value;
+        if (parsed >= capacity) {
+            return -ENOMEM;
+        }
+
+        path[parsed++] = (uint16_t)value;
     }
 
-    return count;
+    *count = parsed;
+
+    return 0;
 }
 
 static size_t endpoint_parse_accept(const struct coap_packet *packet, uint16_t *accepted,
@@ -336,12 +337,14 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     uint8_t response_type;
     int content_format;
     int observe;
+    int rc;
     uint8_t code;
 
     response_type = request_type == COAP_TYPE_CON ? COAP_TYPE_ACK : COAP_TYPE_NON_CON;
 
-    path_count = endpoint_parse_path(packet, path);
-    if (path_count != SIRENA_LWM2M_COAP_PATH_SEGMENTS) {
+    path_count = 0U;
+    rc = sirena_lwm2m_coap_endpoint_parse_path(packet, path, ARRAY_SIZE(path), &path_count);
+    if (rc != 0 || path_count != SIRENA_LWM2M_COAP_PATH_SEGMENTS) {
         (void)endpoint_send_message(response_type, message_id, token_length, token,
                                     COAP_RESPONSE_CODE_NOT_FOUND, 0U, -1, NULL, 0U, peer,
                                     peer_length);
@@ -487,11 +490,6 @@ void sirena_lwm2m_coap_endpoint_stop(void)
     endpoint_socket = -1;
     memset(observers, 0, sizeof(observers));
     memset(&exchange, 0, sizeof(exchange));
-}
-
-bool sirena_lwm2m_coap_endpoint_is_started(void)
-{
-    return endpoint_socket >= 0;
 }
 
 int sirena_lwm2m_coap_endpoint_poll(int timeout_ms)

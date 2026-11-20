@@ -6,6 +6,8 @@ project(sirena_lwm2m_protocol_tests)
 
 target_sources(app PRIVATE src/test_protocol.c)
 
+target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../lib)
+
 target_link_libraries(app PRIVATE sirena_lwm2m)
 
 zephyr_linker_sources(DATA_SECTIONS sections-ram.ld)
