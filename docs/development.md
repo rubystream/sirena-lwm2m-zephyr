@@ -88,6 +88,7 @@ A successful run prints `sirena zephyr smoke ok`.
 | Build and run CoAP transport tests with a larger CoAP option length | `npm run test:coap-override` |
 | Build and run DTLS transport tests | `npm run test:dtls` |
 | Build and run DTLS transport tests with the noSec development gate open | `npm run test:dtls-nosec` |
+| Build and run protocol tests | `npm run test:protocol` |
 | Remove build output | `npm run clean` |
 | Full smoke workflow | `npm run smoke` |
 | Flash firmware (opt-in) | `npm run flash` |
@@ -233,6 +234,7 @@ Flashing requires host access to USB programming/debugging hardware.
 - [Container and npm scripts](../package.json)
 - [Built-in LwM2M objects](objects.md)
 - [Transport bindings](transport.md)
+- [Protocol core](protocol.md)
 - [Compose services](../compose.yml)
 - [Docker build](../Dockerfile)
 - [Project entry point](../README.md)

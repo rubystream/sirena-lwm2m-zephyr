@@ -466,21 +466,13 @@ static int endpoint_receive(void)
     return endpoint_dispatch(receive_buffer, (size_t)received, net_sad(&peer), peer_length);
 }
 
-int sirena_lwm2m_coap_endpoint_start(int socket, const struct net_sockaddr *server,
-                                     net_socklen_t server_length)
+int sirena_lwm2m_coap_endpoint_start(int socket)
 {
-    if (socket < 0 || server == NULL || server_length == 0U) {
-        return -EINVAL;
-    }
-
-    if (server_length > sizeof(endpoint_server)) {
+    if (socket < 0) {
         return -EINVAL;
     }
 
     endpoint_socket = socket;
-    memset(&endpoint_server, 0, sizeof(endpoint_server));
-    memcpy(&endpoint_server, server, server_length);
-    endpoint_server_length = server_length;
 
     memset(observers, 0, sizeof(observers));
     memset(&exchange, 0, sizeof(exchange));
@@ -555,9 +547,10 @@ static void endpoint_extract_location(char *location, size_t capacity)
     }
 }
 
-int sirena_lwm2m_coap_endpoint_request(const char *path, enum coap_method method,
-                                       uint16_t content_format, const void *payload,
-                                       size_t payload_length,
+int sirena_lwm2m_coap_endpoint_request(const struct net_sockaddr *server,
+                                       net_socklen_t server_length, const char *path,
+                                       enum coap_method method, uint16_t content_format,
+                                       const void *payload, size_t payload_length,
                                        struct sirena_lwm2m_coap_response *response,
                                        char *location, size_t location_capacity)
 {
@@ -569,9 +562,17 @@ int sirena_lwm2m_coap_endpoint_request(const char *path, enum coap_method method
         return -ENOTSUP;
     }
 
-    if (path == NULL || response == NULL) {
+    if (path == NULL || response == NULL || server == NULL || server_length == 0U) {
         return -EINVAL;
     }
+
+    if (server_length > sizeof(endpoint_server)) {
+        return -EINVAL;
+    }
+
+    memset(&endpoint_server, 0, sizeof(endpoint_server));
+    memcpy(&endpoint_server, server, server_length);
+    endpoint_server_length = server_length;
 
     memset(&exchange, 0, sizeof(exchange));
 

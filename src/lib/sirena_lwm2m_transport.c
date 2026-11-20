@@ -124,6 +124,7 @@ static int transport_start_binding(enum sirena_lwm2m_transport_binding binding)
     if (rc != 0 && switched) {
         transport_ops = NULL;
         transport_binding = SIRENA_LWM2M_TRANSPORT_BINDING_NONE;
+        (void)sirena_lwm2m_engine_set_poll_fn(NULL);
     }
 
     return rc;

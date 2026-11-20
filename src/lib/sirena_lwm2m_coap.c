@@ -4,6 +4,7 @@
 #include <sirena/lwm2m/coap.h>
 #include <sirena/lwm2m/engine.h>
 #include <sirena/lwm2m/objects.h>
+#include <sirena/lwm2m/protocol.h>
 #include <sirena/lwm2m/transport.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net/coap.h>
@@ -55,7 +56,9 @@ static int coap_request(const char *path, enum coap_method method, uint16_t cont
                          const uint8_t *payload, size_t payload_length, char *location,
                          size_t location_capacity)
 {
+    struct net_sockaddr_storage storage;
     struct sirena_lwm2m_coap_response response;
+    char response_location[CONFIG_SIRENA_LWM2M_LOCATION_PATH_MAX + 1U];
     int rc;
 
     if (!transport_started) {
@@ -67,14 +70,35 @@ static int coap_request(const char *path, enum coap_method method, uint16_t cont
         return rc;
     }
 
-    rc = sirena_lwm2m_coap_endpoint_request(path, method, content_format, payload,
-                                             payload_length, &response, location,
-                                             location_capacity);
+    rc = sirena_lwm2m_exchange_server_address(&storage, SIRENA_LWM2M_EXCHANGE_SCHEME_COAP);
     if (rc != 0) {
         return rc;
     }
 
-    return sirena_lwm2m_exchange_status(response.code);
+    rc = sirena_lwm2m_coap_endpoint_request(net_sad(&storage), sizeof(struct net_sockaddr_in),
+                                             path, method, content_format, payload,
+                                             payload_length, &response, response_location,
+                                             sizeof(response_location));
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = sirena_lwm2m_exchange_status(response.code);
+    if (rc != 0) {
+        return rc;
+    }
+
+    if (location != NULL) {
+        size_t length = strlen(response_location);
+
+        if (length >= location_capacity) {
+            return -ENOMEM;
+        }
+
+        memcpy(location, response_location, length + 1U);
+    }
+
+    return 0;
 }
 
 static int coap_register(void)
@@ -179,6 +203,11 @@ int sirena_lwm2m_coap_start_engine(void)
         return 0;
     }
 
+    rc = sirena_lwm2m_protocol_init();
+    if (rc != 0) {
+        return rc;
+    }
+
     rc = sirena_lwm2m_exchange_server_address(&storage, SIRENA_LWM2M_EXCHANGE_SCHEME_COAP);
     if (rc != 0) {
         return rc;
@@ -189,8 +218,7 @@ int sirena_lwm2m_coap_start_engine(void)
         return -errno;
     }
 
-    rc = sirena_lwm2m_coap_endpoint_start(client_socket, net_sad(&storage),
-                                           sizeof(struct net_sockaddr_in));
+    rc = sirena_lwm2m_coap_endpoint_start(client_socket);
     if (rc != 0) {
         (void)zsock_close(client_socket);
         client_socket = -1;

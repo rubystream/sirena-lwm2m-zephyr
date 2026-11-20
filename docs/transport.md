@@ -10,6 +10,7 @@ five parts:
 | CoAP/UDP binding | `src/include/sirena/lwm2m/coap.h` | `src/lib/sirena_lwm2m_coap.c` |
 | CoAP/DTLS binding | `src/include/sirena/lwm2m/dtls.h` | `src/lib/sirena_lwm2m_dtls.c` |
 | Shared exchange | `src/lib/sirena_lwm2m_exchange.h` | `src/lib/sirena_lwm2m_exchange.c` |
+| CoAP endpoint | `src/lib/sirena_lwm2m_coap_endpoint.h` | `src/lib/sirena_lwm2m_coap_endpoint.c` |
 
 The transport interface is what the reusable core talks to. It carries the
 registration lifecycle only and never exposes a CoAP type to the core, so the
@@ -20,13 +21,20 @@ LwM2M server URI once, in the Security object, and the transport layer picks
 the plaintext or the secure binding from its scheme.
 
 The shared exchange holds the parts of the registration that both bindings use:
-the request and the response, the mapping of the response code, the server
-address, the registration payload and the request paths. A change to the
-response mapping or to the path handling is therefore made once.
+the registration payload, the request paths and the server address. A change to
+the response mapping or to the path handling is therefore made once.
 
-Both bindings share one Zephyr CoAP client. Zephyr dispatches the CoAP
-responses by socket descriptor, so a second client would route the responses
-of a reused descriptor to the wrong binding.
+Both bindings share one CoAP endpoint, which owns the socket of the transport.
+Zephyr's CoAP client cannot be used for that: it is response only. It
+dispatches an incoming datagram by the token of a request the client itself
+sent and answers a request with no matching token with a reset, so a server
+initiated request never reaches the application. It also owns the thread that
+polls the socket. The endpoint therefore owns the receive path of the socket
+itself, sends the requests of the registration lifecycle and dispatches the
+requests the server sends into the protocol core. The server reaches the device
+management interface on the same socket the client registered on, as OMA LwM2M
+1.2 requires. The protocol core is documented in
+[Protocol Core](protocol.md).
 
 ## Transport interface
 
@@ -35,6 +43,8 @@ struct sirena_lwm2m_transport_ops {
     int (*register_client)(void);
     int (*update)(void);
     int (*deregister)(void);
+    int (*poll)(int timeout_ms);
+    int (*notify)(uint16_t object_id, uint16_t instance_id, uint16_t resource_id);
 };
 
 int sirena_lwm2m_transport_bind(const struct sirena_lwm2m_transport_ops *ops);
@@ -46,6 +56,11 @@ int sirena_lwm2m_transport_set_endpoint_name(const char *name);
 const char *sirena_lwm2m_transport_endpoint_name(void);
 int sirena_lwm2m_transport_start(void);
 ```
+
+The `poll` entry point lets the engine thread watch the socket of the binding.
+The engine calls it while it waits for work, so a request the server sends is
+dispatched even when no lifecycle call is running. The `notify` entry point
+publishes a resource value to the observations of the binding.
 
 `sirena_lwm2m_transport_bind()` attaches a binding to the transport interface
 and starts the engine thread. The attachment happens in engine context, so
@@ -99,7 +114,8 @@ static request queue:
 
 ```c
 int sirena_lwm2m_engine_start(sirena_lwm2m_engine_handler_t handler);
-int sirena_lwm2m_engine_submit(enum sirena_lwm2m_engine_operation operation);
+int sirena_lwm2m_engine_submit(enum sirena_lwm2m_engine_operation operation, void *payload);
+int sirena_lwm2m_engine_set_poll_fn(sirena_lwm2m_engine_poll_fn poll_fn);
 k_tid_t sirena_lwm2m_engine_thread_id(void);
 ```
 
@@ -116,6 +132,7 @@ The operations of the engine are the transport operations:
 | `SIRENA_LWM2M_ENGINE_OPERATION_UPDATE` | Update the registration. |
 | `SIRENA_LWM2M_ENGINE_OPERATION_DEREGISTER` | Deregister from the server. |
 | `SIRENA_LWM2M_ENGINE_OPERATION_BIND` | Attach a binding to the transport interface. |
+| `SIRENA_LWM2M_ENGINE_OPERATION_NOTIFY` | Publish a resource value to the observations of the binding. |
 
 `sirena_lwm2m_engine_thread_id()` returns the thread identifier of the engine
 thread, or `NULL` when the engine thread does not run. It lets a caller prove
@@ -139,6 +156,13 @@ from `sirena_lwm2m_transport_bind()`; an application does not call it.
 The stack size and the priority of the engine thread are configurable with
 `CONFIG_SIRENA_LWM2M_ENGINE_STACK_SIZE` and `CONFIG_SIRENA_LWM2M_ENGINE_PRIORITY`.
 
+The engine thread watches the socket of the transport while it waits for work.
+The poll function of the binding is called with the interval of
+`CONFIG_SIRENA_LWM2M_ENGINE_POLL_INTERVAL_MS`, so a request the server sends is
+dispatched even when no lifecycle call is running. The interval bounds the
+latency of a server request and the resolution of the retransmission timers of a
+pending request.
+
 ### Threading contract
 
 The application calls the transport API; the engine thread performs the work.
@@ -158,15 +182,14 @@ well.
 The transport handler of the engine thread, the binding entry points and every
 transport decision run in engine context.
 
-The response callback of the Zephyr CoAP client is the only callback that does
-not: it runs in the CoAP client thread and only copies the response into the
-static exchange buffer before it signals the engine thread. Every transport
-decision, including the interpretation of the response code and the storage of
-the location path, is taken in the engine thread.
+The engine thread owns the socket of the transport. It polls the socket, it
+sends the requests of the registration lifecycle and it dispatches the requests
+the server sends. Every protocol operation therefore runs in engine context,
+including the answer to a server request and the sending of a notification.
 
-No application callback is invoked in this slice. The transport API returns the
-result of the transport work to the caller and the binding registers no
-callback with the application.
+No application callback is invoked in this slice, apart from the execute
+handler of the application, which the protocol core calls in engine context.
+The transport API returns the result of the transport work to the caller.
 
 ## CoAP/UDP binding
 
@@ -430,6 +453,8 @@ A failed handshake sends no request: the server never sees the registration.
 | `CONFIG_SIRENA_LWM2M_COAP_LOCATION_SEGMENTS` | Number of Location-Path segments the binding reads from a registration response. | 4 |
 | `CONFIG_SIRENA_LWM2M_COAP_PATH_MAX` | Length of the CoAP request path the binding builds. | 128 |
 | `CONFIG_SIRENA_LWM2M_COAP_RESPONSE_TIMEOUT_MS` | Time the binding waits for a server response. | 10000 |
+| `CONFIG_SIRENA_LWM2M_ENGINE_POLL_INTERVAL_MS` | Interval the engine thread polls the transport socket with. | 20 |
+| `CONFIG_SIRENA_LWM2M_COAP_MESSAGE_MAX` | Size of the buffer that holds a CoAP message. | 512 |
 
 The DTLS binding needs mbed TLS with the PSK key exchange, so the application
 enables `CONFIG_MBEDTLS` and `CONFIG_NET_SOCKETS_SOCKOPT_TLS`. The binding
@@ -455,7 +480,6 @@ which is 64 bytes by default. A request that does not fit is rejected with
 
 ## Not in this binding
 
-- Observation, notification and the read, write and execute operations.
 - Content format negotiation on the registration payload.
 - The periodic re-registration timer that drives the Update. The Update is
   implemented and reachable through the API, the scheduling policy belongs to
@@ -466,6 +490,9 @@ which is 64 bytes by default. A request that does not fit is rejected with
 - The SNI resource of the Security object. It belongs to the certificate
   modes.
 
+The observation, the notification and the read, write and execute operations
+are documented in [Protocol Core](protocol.md).
+
 ## Tests
 
 ```sh
@@ -473,6 +500,7 @@ npm run test:coap
 npm run test:coap-override
 npm run test:dtls
 npm run test:dtls-nosec
+npm run test:protocol
 ```
 
 The CoAP suite runs a real Zephyr CoAP service on 127.0.0.1 in the same

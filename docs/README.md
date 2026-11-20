@@ -13,6 +13,8 @@ intent; detailed documentation lives here to avoid bloating the root.
 - `transport.md` - the transport interface, the engine thread and the
   CoAP/UDP and CoAP/DTLS bindings, with the registration lifecycle, the
   credentials and the error codes.
+- `protocol.md` - the server initiated read, write and execute operations, the
+  content format negotiation, the observations and the notifications.
 
 Generated documentation output and build artifacts are ignored and never
 committed.

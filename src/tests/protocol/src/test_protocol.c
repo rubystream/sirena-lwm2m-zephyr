@@ -420,6 +420,28 @@ ZTEST(sirena_lwm2m_protocol, test_write_to_a_read_only_resource_is_refused)
     zassert_str_equal(uri, server_uri, "the stored value was changed");
 }
 
+ZTEST(sirena_lwm2m_protocol, test_write_with_an_undecodable_content_format_is_refused)
+{
+    static const uint8_t payload[] = { '{"bn":"/1/0/"}' };
+    int64_t lifetime = 0;
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_PUT, "/1/0/1", SIRENA_LWM2M_CF_SENML_JSON, payload,
+                      sizeof(payload), NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_UNSUPPORTED_CONTENT_FORMAT,
+                  "unexpected response code");
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME, "the stored value was changed");
+}
+
 ZTEST(sirena_lwm2m_protocol, test_execute_invokes_the_handler)
 {
     int rc;
