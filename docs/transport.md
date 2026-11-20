@@ -1,7 +1,7 @@
 # Transport Bindings
 
 The transport layer connects the LwM2M client core to a server. It is split in
-four parts:
+five parts:
 
 | Part | Header | Implementation |
 | --- | --- | --- |
@@ -9,6 +9,7 @@ four parts:
 | Engine thread | `src/include/sirena/lwm2m/engine.h` | `src/lib/sirena_lwm2m_engine.c` |
 | CoAP/UDP binding | `src/include/sirena/lwm2m/coap.h` | `src/lib/sirena_lwm2m_coap.c` |
 | CoAP/DTLS binding | `src/include/sirena/lwm2m/dtls.h` | `src/lib/sirena_lwm2m_dtls.c` |
+| Shared exchange | `src/lib/sirena_lwm2m_exchange.h` | `src/lib/sirena_lwm2m_exchange.c` |
 
 The transport interface is what the reusable core talks to. It carries the
 registration lifecycle only and never exposes a CoAP type to the core, so the
@@ -17,6 +18,11 @@ binding can be replaced without touching the core.
 The transport layer also selects the binding. The application configures the
 LwM2M server URI once, in the Security object, and the transport layer picks
 the plaintext or the secure binding from its scheme.
+
+The shared exchange holds the parts of the registration that both bindings use:
+the request and the response, the mapping of the response code, the server
+address, the registration payload and the request paths. A change to the
+response mapping or to the path handling is therefore made once.
 
 ## Transport interface
 
