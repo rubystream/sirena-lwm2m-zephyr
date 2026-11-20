@@ -55,6 +55,19 @@ even the smallest devices first-class citizens of the connected world.
 - Generated build, cache, and output paths are ignored by Git (see `.gitignore`).
 
 
+## First-time Setup
+
+1. Verify the host toolchain: `npm run check`.
+2. Build and run the smoke target: `npm run smoke`.
+
+See `docs/development.md` for the full first-time setup, caching, and
+troubleshooting.
+
+## Daily Commands
+
+Day-to-day work uses the npm scripts documented in `docs/development.md`
+(`build`, `test`, `clean`, `smoke`, and the opt-in `flash` / `deploy`).
+
 ## Host Toolchain
 
 This repository uses Node.js LTS `24.22.0` as its host toolchain. The version is
