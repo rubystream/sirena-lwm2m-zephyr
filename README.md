@@ -92,6 +92,10 @@ Source is mounted from the repository root into `/workspace`; a named
 `privileged`, devices, or added capabilities; hardware flashing is out of scope
 for the default container.
 
+Flashing/deployment is opt-in via the `flash` Compose profile, which runs a
+privileged container with `/dev/bus/usb` access. See `docs/development.md` for
+host permissions, device access, and safety notes.
+
 ## Build and Smoke Workflow
 
 Container commands are exposed through npm scripts:
@@ -102,6 +106,8 @@ npm run update   # west update
 npm run build    # west build -b native_sim /workspace/src/smoke
 npm run test     # west build -t run
 npm run clean    # rm -rf /workspace/build
+npm run flash    # west flash (opt-in profile; requires host USB device permissions)
+npm run deploy   # same as npm run flash (opt-in profile)
 npm run smoke    # init, update, and build the smoke target
 ```
 

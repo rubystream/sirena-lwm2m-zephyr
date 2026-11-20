@@ -13,6 +13,25 @@ services:
     stdin_open: true
     command: bash
 
+  flash:
+    image: sirena-lwm2m-zephyr-dev:v0.30.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - flash
+    privileged: true
+    devices:
+      - /dev/bus/usb
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - zephyr-workspace:/opt/zephyr-workspace
+      - ccache:/root/.ccache
+    tty: true
+    stdin_open: true
+    command: bash
+
 volumes:
   ccache:
   zephyr-workspace:

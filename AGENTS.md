@@ -56,6 +56,8 @@ Example: `feat/post-tag-filter`, `fix/sqlite-content-sync`.
   capabilities; hardware access is not granted by default.
 - Use `docker compose run --rm zephyr <command>` to run Zephyr toolchain commands.
 
+Flashing/deployment requires the opt-in `flash` Compose profile (privileged, USB device access). Default container stays device-free.
+
 ## Container Build Commands
 
 npm scripts wrap the containerized Zephyr workflow:
@@ -66,6 +68,8 @@ npm scripts wrap the containerized Zephyr workflow:
 - `npm run test` - `docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -d /workspace/build`
 - `npm run clean` - `docker compose run --rm -T zephyr rm -rf /workspace/build`
 - `npm run smoke` - init, update, then build
+- `npm run flash` - `docker compose --profile flash run --rm flash west flash -d /workspace/build` (opt-in profile; requires host USB device permissions)
+- `npm run deploy` - same as `npm run flash` (opt-in profile; requires host USB device permissions)
 
 The minimal smoke target lives under `src/smoke/` and prints
 `sirena zephyr smoke ok`.
