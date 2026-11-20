@@ -549,8 +549,9 @@ static void endpoint_extract_location(char *location, size_t capacity)
 
 int sirena_lwm2m_coap_endpoint_request(const struct net_sockaddr *server,
                                        net_socklen_t server_length, const char *path,
-                                       enum coap_method method, uint16_t content_format,
-                                       const void *payload, size_t payload_length,
+                                       enum coap_method method, bool content_format_present,
+                                       uint16_t content_format, const void *payload,
+                                       size_t payload_length,
                                        struct sirena_lwm2m_coap_response *response,
                                        char *location, size_t location_capacity)
 {
@@ -591,15 +592,15 @@ int sirena_lwm2m_coap_endpoint_request(const struct net_sockaddr *server,
         return rc;
     }
 
-    if (payload != NULL && payload_length > 0U) {
-        if (content_format != 0U) {
-            rc = coap_append_option_int(&exchange.request, COAP_OPTION_CONTENT_FORMAT,
-                                        content_format);
-            if (rc < 0) {
-                return rc;
-            }
+    if (content_format_present) {
+        rc = coap_append_option_int(&exchange.request, COAP_OPTION_CONTENT_FORMAT,
+                                    content_format);
+        if (rc < 0) {
+            return rc;
         }
+    }
 
+    if (payload != NULL && payload_length > 0U) {
         rc = coap_packet_append_payload_marker(&exchange.request);
         if (rc < 0) {
             return rc;

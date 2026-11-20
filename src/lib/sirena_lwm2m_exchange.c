@@ -1,4 +1,5 @@
 #include "sirena_lwm2m_exchange.h"
+#include "sirena_lwm2m_coap_endpoint.h"
 #include <sirena/lwm2m/object_registry.h>
 #include <sirena/lwm2m/objects.h>
 #include <sirena/lwm2m/transport.h>
@@ -62,6 +63,47 @@ int sirena_lwm2m_exchange_status(int16_t code)
     default:
         return -EIO;
     }
+}
+
+int sirena_lwm2m_exchange_request(enum sirena_lwm2m_exchange_scheme scheme, const char *path,
+                                  enum coap_method method, bool content_format_present,
+                                  uint16_t content_format, const void *payload,
+                                  size_t payload_length, char *location, size_t location_capacity)
+{
+    struct net_sockaddr_storage storage;
+    struct sirena_lwm2m_coap_response response;
+    char response_location[CONFIG_SIRENA_LWM2M_LOCATION_PATH_MAX + 1U];
+    int rc;
+
+    rc = sirena_lwm2m_exchange_server_address(&storage, scheme);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = sirena_lwm2m_coap_endpoint_request(net_sad(&storage), sizeof(struct net_sockaddr_in),
+                                             path, method, content_format_present, content_format,
+                                             payload, payload_length, &response, response_location,
+                                             sizeof(response_location));
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = sirena_lwm2m_exchange_status(response.code);
+    if (rc != 0) {
+        return rc;
+    }
+
+    if (location != NULL) {
+        size_t length = strlen(response_location);
+
+        if (length >= location_capacity) {
+            return -ENOMEM;
+        }
+
+        memcpy(location, response_location, length + 1U);
+    }
+
+    return 0;
 }
 
 static int payload_append(uint16_t object_id, uint16_t instance_id, void *user_data)

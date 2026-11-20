@@ -20,8 +20,9 @@ int sirena_lwm2m_coap_endpoint_parse_path(const struct coap_packet *packet, uint
 int sirena_lwm2m_coap_endpoint_poll(int timeout_ms);
 int sirena_lwm2m_coap_endpoint_request(const struct net_sockaddr *server,
                                        net_socklen_t server_length, const char *path,
-                                       enum coap_method method, uint16_t content_format,
-                                       const void *payload, size_t payload_length,
+                                       enum coap_method method, bool content_format_present,
+                                       uint16_t content_format, const void *payload,
+                                       size_t payload_length,
                                        struct sirena_lwm2m_coap_response *response,
                                        char *location, size_t location_capacity);
 int sirena_lwm2m_coap_endpoint_notify(uint16_t object_id, uint16_t instance_id,
