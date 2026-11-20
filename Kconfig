@@ -83,6 +83,10 @@ config SIRENA_LWM2M_ENDPOINT_NAME_MAX
 	int "Maximum length of the LwM2M endpoint client name"
 	default 32
 	range 8 128
+	help
+	  The endpoint client name is carried in a CoAP URI-Query option, so
+	  CONFIG_COAP_EXTENDED_OPTIONS_LEN_VALUE has to hold the name and
+	  the "ep=" prefix.
 
 config SIRENA_LWM2M_LOCATION_PATH_MAX
 	int "Maximum length of the stored registration location path"
@@ -109,6 +113,19 @@ config SIRENA_LWM2M_TRANSPORT_COAP
 	  registers with the LwM2M server, updates the registration and
 	  deregisters. DTLS, observation and read, write and execute are not
 	  part of this binding.
+
+if SIRENA_LWM2M_TRANSPORT_COAP
+
+config COAP_EXTENDED_OPTIONS_LEN_VALUE
+	int "CoAP extended options length value"
+	default 64
+	depends on COAP_EXTENDED_OPTIONS_LEN
+	help
+	  The registration carries the endpoint client name in a URI-Query
+	  option. The value has to hold that option, so it is sized for the
+	  endpoint client name limit and the "ep=" prefix.
+
+endif
 
 endif
 
