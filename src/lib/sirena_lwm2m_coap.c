@@ -15,6 +15,7 @@
 
 #define SIRENA_LWM2M_SECURITY_OBJECT_ID 0U
 #define SIRENA_LWM2M_SERVER_OBJECT_ID 1U
+#define SIRENA_LWM2M_DEVICE_OBJECT_ID 3U
 
 #define SIRENA_LWM2M_COAP_SCHEME "coap://"
 #define SIRENA_LWM2M_COAPS_SCHEME "coaps://"
@@ -37,6 +38,8 @@ struct sirena_lwm2m_coap_payload {
     char *buffer;
     size_t capacity;
     size_t length;
+    bool server_present;
+    bool device_present;
 };
 
 static K_SEM_DEFINE(response_semaphore, 0, 1);
@@ -194,6 +197,12 @@ static int payload_append(uint16_t object_id, uint16_t instance_id, void *user_d
 
     payload->length += (size_t)written;
 
+    if (object_id == SIRENA_LWM2M_SERVER_OBJECT_ID) {
+        payload->server_present = true;
+    } else if (object_id == SIRENA_LWM2M_DEVICE_OBJECT_ID) {
+        payload->device_present = true;
+    }
+
     return 0;
 }
 
@@ -254,6 +263,12 @@ static int coap_request(const char *path, enum coap_method method, const uint8_t
         return -ETIMEDOUT;
     }
 
+    rc = response_status(pending_exchange->result_code);
+    if (rc != 0) {
+        pending_exchange = NULL;
+        return rc;
+    }
+
     if (location != NULL) {
         size_t length = strlen(pending_exchange->location);
 
@@ -265,7 +280,7 @@ static int coap_request(const char *path, enum coap_method method, const uint8_t
         memcpy(location, pending_exchange->location, length + 1U);
     }
 
-    return response_status(pending_exchange->result_code);
+    return 0;
 }
 
 static int coap_register(void)
@@ -293,6 +308,10 @@ static int coap_register(void)
     rc = sirena_lwm2m_foreach_instance(payload_append, &context);
     if (rc != 0) {
         return rc;
+    }
+
+    if (!context.server_present || !context.device_present) {
+        return -EINVAL;
     }
 
     written = snprintf(path, sizeof(path), "%s?ep=%s&lt=%lld&lwm2m=%s&b=%s",
