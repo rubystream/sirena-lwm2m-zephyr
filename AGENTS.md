@@ -48,3 +48,12 @@ Use a lowercase, slash-separated prefix:
 | `issue/`    | Issue branch                               |
 
 Example: `feat/post-tag-filter`, `fix/sqlite-content-sync`.
+
+## Host Toolchain
+
+- Node.js LTS `24.22.0` is the pinned host toolchain, declared via `.nvmrc`,
+  `.node-version`, `mise.toml`, and `package.json` `engines.node`.
+- Verify the active Node.js version with `npm run check` before running host
+  workflows.
+- Host scripts orchestrate only; they must not compile Zephyr, flash devices,
+  or install the SDK.
