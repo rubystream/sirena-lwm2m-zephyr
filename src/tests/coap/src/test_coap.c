@@ -142,7 +142,7 @@ static int peer_register_post(struct coap_resource *resource, struct coap_packet
 
 	if (peer_reject_register) {
 		return peer_reply(resource, request, addr, addr_len,
-				  COAP_RESPONSE_CODE_PRECONDITION_FAILED, NULL);
+				  COAP_RESPONSE_CODE_PRECONDITION_FAILED, location);
 	}
 
 	return peer_reply(resource, request, addr, addr_len, COAP_RESPONSE_CODE_CREATED, location);
@@ -491,4 +491,29 @@ ZTEST(sirena_lwm2m_coap, test_register_reports_precondition_failed)
 	rc = sirena_lwm2m_transport_register();
 	zassert_equal(rc, -EPROTO, "precondition failed must have its own error code");
 	zassert_true(peer.received, "peer received no request");
+}
+
+ZTEST(sirena_lwm2m_coap, test_failed_register_stores_no_location_path)
+{
+	char location[64];
+	size_t length = sizeof(location);
+	int rc;
+
+	rc = sirena_lwm2m_coap_set_endpoint_name(PEER_ENDPOINT_NAME);
+	zassert_equal(rc, 0, "endpoint name rejected");
+
+	rc = sirena_lwm2m_transport_register();
+	zassert_equal(rc, 0, "register failed");
+
+	rc = sirena_lwm2m_transport_deregister();
+	zassert_equal(rc, 0, "deregister failed");
+
+	peer_reject_register = true;
+
+	rc = sirena_lwm2m_transport_register();
+	zassert_equal(rc, -EPROTO, "precondition failed must have its own error code");
+
+	rc = sirena_lwm2m_coap_get_location_path(location, &length);
+	zassert_equal(rc, 0, "location path unavailable");
+	zassert_str_equal(location, "", "a failed registration must not store a location path");
 }
