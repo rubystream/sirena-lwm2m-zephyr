@@ -60,11 +60,11 @@ Example: `feat/post-tag-filter`, `fix/sqlite-content-sync`.
 
 npm scripts wrap the containerized Zephyr workflow:
 
-- `npm run init` - `docker compose run --rm zephyr west init -l .`
-- `npm run update` - `docker compose run --rm zephyr west update`
-- `npm run build` - `docker compose run --rm zephyr west build -b native_sim src/smoke`
-- `npm run test` - `docker compose run --rm zephyr west build -t run`
-- `npm run clean` - `docker compose run --rm zephyr rm -rf build`
+- `npm run init` - `docker compose run --rm -T zephyr sh -c 'test -d /opt/zephyr-workspace/.west || west init -l /workspace /opt/zephyr-workspace'`
+- `npm run update` - `docker compose run --rm -T -w /opt/zephyr-workspace zephyr west update`
+- `npm run build` - `docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -b native_sim /workspace/src/smoke -d /workspace/build`
+- `npm run test` - `docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -d /workspace/build`
+- `npm run clean` - `docker compose run --rm -T zephyr rm -rf /workspace/build`
 - `npm run smoke` - init, update, then build
 
 The minimal smoke target lives under `src/smoke/` and prints

@@ -86,8 +86,9 @@ Bring up the dev container:
 docker compose run --rm zephyr west --version
 ```
 
-Source is mounted from the repository root into `/workspace`; a named `ccache`
-volume persists the compiler cache across runs. The default service runs without
+Source is mounted from the repository root into `/workspace`; a named
+`zephyr-workspace` volume holds the external Zephyr workspace, and a named
+`ccache` volume persists the compiler cache across runs. The default service runs without
 `privileged`, devices, or added capabilities; hardware flashing is out of scope
 for the default container.
 
@@ -96,11 +97,11 @@ for the default container.
 Container commands are exposed through npm scripts:
 
 ```sh
-npm run init     # west init -l .
+npm run init     # west init -l /workspace /opt/zephyr-workspace
 npm run update   # west update
-npm run build    # west build -b native_sim src/smoke
+npm run build    # west build -b native_sim /workspace/src/smoke
 npm run test     # west build -t run
-npm run clean    # rm -rf build
+npm run clean    # rm -rf /workspace/build
 npm run smoke    # init, update, and build the smoke target
 ```
 
