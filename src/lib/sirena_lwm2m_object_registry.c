@@ -68,7 +68,7 @@ bool sirena_lwm2m_object_enabled(uint16_t object_id)
     case 3:
         return IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_DEVICE);
     default:
-        return true;
+        return false;
     }
 }
 
@@ -80,7 +80,7 @@ int sirena_lwm2m_register_object(uint16_t object_id, bool optional)
         return 0;
     }
 
-    if (optional && !sirena_lwm2m_object_enabled(object_id)) {
+    if (!sirena_lwm2m_object_enabled(object_id)) {
         return -ENOTSUP;
     }
 

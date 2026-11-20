@@ -13,11 +13,6 @@ config SIRENA_LWM2M_MAX_RESOURCES_PER_INSTANCE
 	default 16
 	range 1 256
 
-config SIRENA_LWM2M_BUFFER_SIZE
-	int "Resource buffer size (bytes)"
-	default 128
-	range 8 4096
-
 config SIRENA_LWM2M_MAX_OBSERVATIONS
 	int "Maximum number of observations"
 	default 16
@@ -33,15 +28,15 @@ if SIRENA_LWM2M
 
 config SIRENA_LWM2M_OBJECT_SECURITY
 	bool "Enable Security object (0)"
-	default n
+	default y
 
 config SIRENA_LWM2M_OBJECT_SERVER
 	bool "Enable Server object (1)"
-	default n
+	default y
 
 config SIRENA_LWM2M_OBJECT_DEVICE
 	bool "Enable Device object (3)"
-	default n
+	default y
 
 endif
 

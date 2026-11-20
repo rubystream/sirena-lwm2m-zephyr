@@ -63,11 +63,11 @@ ZTEST(sirena_lwm2m_registry, test_paths)
 
     rc = sirena_lwm2m_registry_init();
     zassert_equal(rc, 0, "init failed");
-    rc = sirena_lwm2m_register_object(10, false);
+    rc = sirena_lwm2m_register_object(0, false);
     zassert_equal(rc, 0, "register failed");
-    rc = sirena_lwm2m_create_instance(10, 0, NULL);
+    rc = sirena_lwm2m_create_instance(0, 0, NULL);
     zassert_equal(rc, 0, "instance failed");
-    rc = sirena_lwm2m_add_resource(10, 0, 5, SIRENA_LWM2M_VALUE_INTEGER,
+    rc = sirena_lwm2m_add_resource(0, 0, 5, SIRENA_LWM2M_VALUE_INTEGER,
                                    SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE |
                                        SIRENA_LWM2M_OP_EXEC,
                                    false, read_value, write_value, run_execute,
@@ -75,17 +75,17 @@ ZTEST(sirena_lwm2m_registry, test_paths)
     zassert_equal(rc, 0, "resource failed");
 
     value = 42;
-    rc = sirena_lwm2m_set(10, 0, 5, &value, sizeof(value));
+    rc = sirena_lwm2m_set(0, 0, 5, &value, sizeof(value));
     zassert_equal(rc, 0, "set failed");
     zassert_equal(stored_value, 42, "stored mismatch");
 
     length = sizeof(value);
-    rc = sirena_lwm2m_get(10, 0, 5, &value, &length);
+    rc = sirena_lwm2m_get(0, 0, 5, &value, &length);
     zassert_equal(rc, 0, "get failed");
     zassert_equal(value, 42, "value mismatch");
     zassert_equal(length, sizeof(int), "length mismatch");
 
-    rc = sirena_lwm2m_execute(10, 0, 5, NULL, 0);
+    rc = sirena_lwm2m_execute(0, 0, 5, NULL, 0);
     zassert_equal(rc, 0, "execute failed");
     zassert_true(executed, "execute not called");
 

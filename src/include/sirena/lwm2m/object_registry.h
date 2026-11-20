@@ -42,8 +42,6 @@ struct sirena_lwm2m_resource {
     sirena_lwm2m_read_fn read;
     sirena_lwm2m_write_fn write;
     sirena_lwm2m_execute_fn execute;
-    size_t length;
-    uint8_t buffer[CONFIG_SIRENA_LWM2M_BUFFER_SIZE];
 };
 
 struct sirena_lwm2m_instance {

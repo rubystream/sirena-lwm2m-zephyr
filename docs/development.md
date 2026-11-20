@@ -80,10 +80,13 @@ A successful run prints `sirena zephyr smoke ok`.
 | Update Zephyr checkout | `npm run update` |
 | Build smoke target | `npm run build` |
 | Run smoke target | `npm run test` |
+| Build and run registry tests | `npm run test:registry` |
 | Remove build output | `npm run clean` |
 | Full smoke workflow | `npm run smoke` |
 | Flash firmware (opt-in) | `npm run flash` |
 | Deploy firmware (opt-in) | `npm run deploy` |
+
+Registry APIs are not thread-safe and must be called from the engine thread.
 
 Rebuild from scratch without removing dependencies:
 
