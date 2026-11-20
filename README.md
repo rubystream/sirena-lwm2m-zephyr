@@ -74,6 +74,23 @@ npm run check
 Host scripts only orchestrate repository workflows. They never compile, flash, or
 install the Zephyr SDK.
 
+## Containerized Zephyr Dev Environment
+
+The Zephyr build environment is provided as a container based on the pinned
+base image `zephyrprojectrtos/zephyr-build:v0.30.0`. The image requires no host
+devices by default.
+
+Bring up the dev container:
+
+```sh
+docker compose run --rm zephyr west --version
+```
+
+Source is mounted from the repository root into `/workspace`; a named `ccache`
+volume persists the compiler cache across runs. The default service runs without
+`privileged`, devices, or added capabilities; hardware flashing is out of scope
+for the default container.
+
 ## Reference
 
 * [The Zephyr Project. Zephyr](https://github.com/zephyrproject-rtos/zephyr) - a

@@ -1,0 +1,17 @@
+node_modules
+build
+.west
+modules
+zephyr
+dist
+out
+outputs
+twister-out
+coverage
+.cache
+.docker
+.git
+*.log
+.env
+.env.*
+npm-debug.log*
