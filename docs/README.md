@@ -10,6 +10,8 @@ intent; detailed documentation lives here to avoid bloating the root.
   troubleshooting.
 - `objects.md` - built-in Security, Server and Device objects, the typed
   application API, provisioning, and the Kconfig symbols.
+- `transport.md` - the transport interface, the engine thread and the
+  CoAP/UDP binding, with the registration lifecycle and the error codes.
 
 Generated documentation output and build artifacts are ignored and never
 committed.

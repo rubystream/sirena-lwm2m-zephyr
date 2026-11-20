@@ -115,6 +115,22 @@ an object instance together with its value type, its server-facing access mode
 and its callbacks. It is the lookup the typed accessors use to reach the
 resource that stores a value.
 
+### Instance iteration
+
+```c
+typedef int (*sirena_lwm2m_instance_visitor_t)(uint16_t object_id, uint16_t instance_id,
+                                               void *user_data);
+
+int sirena_lwm2m_foreach_instance(sirena_lwm2m_instance_visitor_t visitor,
+                                  void *user_data);
+```
+
+`sirena_lwm2m_foreach_instance()` calls the visitor for every object instance
+the registry holds, in the order the instances were created. It stops at the
+first error the visitor returns and reports it. It returns `-EINVAL` for a
+`NULL` visitor. The transport binding uses it to build the object list of the
+registration payload.
+
 ### Execute handler
 
 ```c
