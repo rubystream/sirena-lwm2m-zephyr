@@ -5,3 +5,5 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(sirena_lwm2m_registry_tests)
 
 target_sources(app PRIVATE src/test_registry.c)
+
+target_link_libraries(app PRIVATE sirena_lwm2m)

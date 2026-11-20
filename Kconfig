@@ -1,11 +1,3 @@
-menu "Sirena LwM2M"
-
-config SIRENA_LWM2M
-	bool "Enable Sirena LwM2M client core"
-	default y
-
-if SIRENA_LWM2M
-
 config SIRENA_LWM2M_MAX_OBJECTS
 	int "Maximum number of registered objects"
 	default 8
@@ -31,6 +23,14 @@ config SIRENA_LWM2M_MAX_OBSERVATIONS
 	default 16
 	range 0 1024
 
+menu "Sirena LwM2M"
+
+config SIRENA_LWM2M
+	bool "Enable Sirena LwM2M client core"
+	default y
+
+if SIRENA_LWM2M
+
 config SIRENA_LWM2M_OBJECT_SECURITY
 	bool "Enable Security object (0)"
 	default n
@@ -43,6 +43,6 @@ config SIRENA_LWM2M_OBJECT_DEVICE
 	bool "Enable Device object (3)"
 	default n
 
-endif # SIRENA_LWM2M
+endif
 
 endmenu

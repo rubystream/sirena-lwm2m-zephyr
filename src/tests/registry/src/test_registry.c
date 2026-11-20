@@ -13,6 +13,9 @@ static int read_value(uint16_t object_id, uint16_t instance_id,
     (void)instance_id;
     (void)resource_id;
     (void)user_data;
+    if (length != NULL && *length < sizeof(stored_value)) {
+        return -ENOMEM;
+    }
     memcpy(buffer, &stored_value, sizeof(stored_value));
     if (length != NULL) {
         *length = sizeof(stored_value);

@@ -191,7 +191,6 @@ int sirena_lwm2m_get(uint16_t object_id, uint16_t instance_id,
 {
     struct sirena_lwm2m_instance *inst;
     struct sirena_lwm2m_resource *res;
-    size_t len;
 
     inst = find_instance_storage(object_id, instance_id);
     if (inst == NULL) {
@@ -203,13 +202,23 @@ int sirena_lwm2m_get(uint16_t object_id, uint16_t instance_id,
         return -ENOENT;
     }
 
+    size_t len = (length != NULL) ? *length : 0U;
+    int rc = 0;
+
     if (!(res->operations & SIRENA_LWM2M_OP_READ) || res->read == NULL) {
         return -ENOTSUP;
     }
 
-    len = (length != NULL) ? *length : 0U;
-    return res->read(object_id, instance_id, resource_id, res->user_data,
+    rc = res->read(object_id, instance_id, resource_id, res->user_data,
 		     buffer, &len);
+    if (rc == 0 && length != NULL) {
+        if (len > *length) {
+            return -EOVERFLOW;
+        }
+        *length = len;
+    }
+
+    return rc;
 }
 
 int sirena_lwm2m_set(uint16_t object_id, uint16_t instance_id,

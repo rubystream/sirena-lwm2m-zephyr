@@ -82,4 +82,4 @@ int sirena_lwm2m_find_instance(uint16_t object_id, uint16_t instance_id,
 			       struct sirena_lwm2m_instance **instance);
 bool sirena_lwm2m_object_enabled(uint16_t object_id);
 
-#endif /* SIRENA_LWM2M_OBJECT_REGISTRY_H */
+#endif
