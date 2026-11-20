@@ -1,3 +1,4 @@
+#include "sirena_lwm2m_coap_client.h"
 #include <sirena/lwm2m/coap.h>
 #include <sirena/lwm2m/transport.h>
 #include <sirena/lwm2m/object_registry.h>
@@ -43,13 +44,10 @@ static K_SEM_DEFINE(response_semaphore, 0, 1);
 static struct sirena_lwm2m_coap_exchange exchange;
 static struct coap_option location_options[CONFIG_SIRENA_LWM2M_COAP_LOCATION_SEGMENTS];
 static bool exchange_pending;
-static struct coap_client client;
+static struct coap_client *client;
 static struct coap_client_request client_request;
-static bool client_ready;
 static bool transport_started;
 static int client_socket = -1;
-static char endpoint_name[CONFIG_SIRENA_LWM2M_ENDPOINT_NAME_MAX + 1U];
-static bool endpoint_name_set;
 static char location_path[CONFIG_SIRENA_LWM2M_LOCATION_PATH_MAX + 1U];
 static char request_path[CONFIG_SIRENA_LWM2M_COAP_PATH_MAX + 1U];
 static char registration_payload[CONFIG_SIRENA_LWM2M_REGISTRATION_PAYLOAD_MAX + 1U];
@@ -247,7 +245,7 @@ static int coap_request(const char *path, enum coap_method method, const uint8_t
 
     k_sem_reset(&response_semaphore);
 
-    rc = coap_client_req(&client, client_socket, net_sad(&storage), &client_request, NULL);
+    rc = coap_client_req(client, client_socket, net_sad(&storage), &client_request, NULL);
     if (rc != 0) {
         exchange_pending = false;
         return rc;
@@ -256,7 +254,7 @@ static int coap_request(const char *path, enum coap_method method, const uint8_t
     rc = k_sem_take(&response_semaphore,
                     K_MSEC(CONFIG_SIRENA_LWM2M_COAP_RESPONSE_TIMEOUT_MS));
     if (rc != 0) {
-        (void)coap_client_cancel_requests(&client);
+        (void)coap_client_cancel_requests(client);
         exchange_pending = false;
         return -ETIMEDOUT;
     }
@@ -288,11 +286,12 @@ static int coap_register(void)
         .capacity = sizeof(registration_payload),
         .length = 0U,
     };
+    const char *endpoint_name = sirena_lwm2m_transport_endpoint_name();
     int64_t lifetime;
     int rc;
     int written;
 
-    if (!endpoint_name_set) {
+    if (endpoint_name[0] == '\0') {
         return -EINVAL;
     }
 
@@ -379,21 +378,7 @@ static const struct sirena_lwm2m_transport_ops coap_transport_ops = {
 
 int sirena_lwm2m_coap_set_endpoint_name(const char *name)
 {
-    size_t length;
-
-    if (name == NULL) {
-        return -EINVAL;
-    }
-
-    length = strlen(name);
-    if (length > CONFIG_SIRENA_LWM2M_ENDPOINT_NAME_MAX) {
-        return -EINVAL;
-    }
-
-    memcpy(endpoint_name, name, length + 1U);
-    endpoint_name_set = length > 0U;
-
-    return 0;
+    return sirena_lwm2m_transport_set_endpoint_name(name);
 }
 
 int sirena_lwm2m_coap_start(void)
@@ -409,15 +394,11 @@ int sirena_lwm2m_coap_start(void)
         return -errno;
     }
 
-    if (!client_ready) {
-        rc = coap_client_init(&client, "sirena_lwm2m_coap");
-        if (rc != 0) {
-            (void)zsock_close(client_socket);
-            client_socket = -1;
-            return rc;
-        }
-
-        client_ready = true;
+    rc = sirena_lwm2m_coap_client_get(&client);
+    if (rc != 0) {
+        (void)zsock_close(client_socket);
+        client_socket = -1;
+        return rc;
     }
 
     rc = sirena_lwm2m_transport_bind(&coap_transport_ops);
@@ -428,6 +409,19 @@ int sirena_lwm2m_coap_start(void)
     }
 
     transport_started = true;
+
+    return 0;
+}
+
+int sirena_lwm2m_coap_stop(void)
+{
+    if (client_socket >= 0) {
+        (void)zsock_close(client_socket);
+        client_socket = -1;
+    }
+
+    location_path[0] = '\0';
+    transport_started = false;
 
     return 0;
 }

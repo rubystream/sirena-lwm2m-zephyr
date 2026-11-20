@@ -51,8 +51,14 @@ config SIRENA_LWM2M_SERVER_URI_MAX
 
 config SIRENA_LWM2M_CREDENTIAL_MAX
 	int "Maximum size of a credential (identity, public key, secret key)"
+	default 128 if SIRENA_LWM2M_TRANSPORT_DTLS
 	default 32
 	range 8 1024
+	help
+	  The Security object stores the identity, the public key and the
+	  secret key in buffers of this size. The DTLS binding needs room
+	  for the PSK identity and the PSK key, so the size is raised when
+	  the DTLS binding is enabled.
 
 config SIRENA_LWM2M_SERVER_STRING_MAX
 	int "Maximum length of a server side string (binding, optional strings)"
@@ -114,7 +120,69 @@ config SIRENA_LWM2M_TRANSPORT_COAP
 	  deregisters. DTLS, observation and read, write and execute are not
 	  part of this binding.
 
-if SIRENA_LWM2M_TRANSPORT_COAP
+config SIRENA_LWM2M_TRANSPORT_DTLS
+	bool "Enable the CoAP/DTLS transport binding"
+	default y
+	depends on COAP && COAP_CLIENT && NET_SOCKETS && MBEDTLS && NET_SOCKETS_SOCKOPT_TLS
+	select COAP_EXTENDED_OPTIONS_LEN
+	select NET_SOCKETS_ENABLE_DTLS
+	select PSA_WANT_ALG_HMAC
+	select PSA_WANT_ALG_SHA_384
+	select MBEDTLS_SSL_PROTO_TLS1_2
+	select MBEDTLS_SSL_PROTO_DTLS
+	select MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
+	select PSA_WANT_ALG_CCM
+	select PSA_WANT_ALG_SHA_256
+	select PSA_WANT_ALG_TLS12_PRF
+	select PSA_WANT_ALG_TLS12_PSK_TO_MS
+	select PSA_WANT_KEY_TYPE_AES
+	select PSA_WANT_KEY_TYPE_DERIVE
+	help
+	  Enables the secure CoAP over DTLS transport binding. The binding
+	  reads the pre-shared key credentials from the Security object and
+	  registers with the LwM2M server over DTLS 1.2 with the
+	  TLS_PSK_WITH_AES_128_CCM_8 ciphersuite. It needs mbed TLS with the
+	  PSK key exchange enabled, so the application has to enable
+	  CONFIG_MBEDTLS and CONFIG_NET_SOCKETS_SOCKOPT_TLS.
+
+	  The binding selects the HMAC and the SHA-384 algorithms of mbed
+	  TLS. The TLS 1.2 master secret is 48 bytes long and the static
+	  PSA key slots are sized by the largest hash of the build, so the
+	  master secret only fits into a key slot when HMAC and SHA-384 are
+	  enabled. An application that enables the mbed TLS heap instead
+	  does not need them for the key slot size.
+
+config SIRENA_LWM2M_TRANSPORT_NOSEC
+	bool "Allow the NoSec security mode"
+	default n
+	help
+	  Allows the client to talk to a server that uses the NoSec security
+	  mode, which means that the traffic is not protected at all. The
+	  switch is off by default, so a production build cannot silently
+	  talk to a server in the clear. It is meant for development and
+	  testing only and it has no effect on the DTLS binding.
+
+config SIRENA_LWM2M_PSK_IDENTITY_MAX
+	int "Maximum size of the DTLS PSK identity"
+	default 128
+	range 1 128
+	depends on SIRENA_LWM2M_TRANSPORT_DTLS
+	help
+	  The OMA LwM2M 1.2 Transport Bindings specification requires support
+	  for PSK identities of up to 128 bytes.
+
+config SIRENA_LWM2M_PSK_KEY_MAX
+	int "Maximum size of the DTLS PSK key"
+	default 64
+	range 1 64
+	depends on SIRENA_LWM2M_TRANSPORT_DTLS
+	help
+	  The OMA LwM2M 1.2 Transport Bindings specification requires support
+	  for PSK keys of up to 64 bytes. mbed TLS limits the key size with
+	  CONFIG_MBEDTLS_PSK_MAX_LEN, which has to be raised to the same
+	  size to use a key of more than 32 bytes.
+
+if SIRENA_LWM2M_TRANSPORT_COAP || SIRENA_LWM2M_TRANSPORT_DTLS
 
 config COAP_EXTENDED_OPTIONS_LEN_VALUE
 	int "CoAP extended options length value"

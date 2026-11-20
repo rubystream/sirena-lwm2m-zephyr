@@ -12,4 +12,8 @@ int sirena_lwm2m_transport_register(void);
 int sirena_lwm2m_transport_update(void);
 int sirena_lwm2m_transport_deregister(void);
 
+int sirena_lwm2m_transport_set_endpoint_name(const char *name);
+const char *sirena_lwm2m_transport_endpoint_name(void);
+int sirena_lwm2m_transport_start(void);
+
 #endif

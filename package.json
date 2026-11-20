@@ -22,6 +22,8 @@
     "test:objects": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/objects -d /workspace/build/objects",
     "test:objects-optional": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/objects -d /workspace/build/objects-optional --extra-conf /workspace/src/tests/objects/prj-optional.conf",
     "test:coap": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/coap -d /workspace/build/coap",
-    "test:coap-override": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/coap -d /workspace/build/coap-override --extra-conf /workspace/src/tests/coap/prj-override.conf"
+    "test:coap-override": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/coap -d /workspace/build/coap-override --extra-conf /workspace/src/tests/coap/prj-override.conf",
+    "test:dtls": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/dtls -d /workspace/build/dtls",
+    "test:dtls-nosec": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/dtls -d /workspace/build/dtls-nosec --extra-conf /workspace/src/tests/dtls/prj-nosec.conf"
   }
 }
