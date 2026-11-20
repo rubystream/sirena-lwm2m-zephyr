@@ -157,7 +157,6 @@ vite.config.ts.timestamp-*
 .nx/migrate-runs
 
 # Zephyr development
-# Note: keep `zephyr/module.yml` committable (Zephyr west module metadata).
 build/
 .west/
 modules/
