@@ -64,6 +64,52 @@ config SIRENA_LWM2M_DEVICE_STRING_MAX
 	default 32
 	range 8 512
 
+config SIRENA_LWM2M_ENGINE_QUEUE_SIZE
+	int "Maximum number of queued engine requests"
+	default 8
+	range 1 64
+
+config SIRENA_LWM2M_ENGINE_STACK_SIZE
+	int "Engine thread stack size in bytes"
+	default 2048
+	range 512 16384
+
+config SIRENA_LWM2M_ENGINE_PRIORITY
+	int "Engine thread priority"
+	default 5
+	range -32 32
+
+config SIRENA_LWM2M_ENDPOINT_NAME_MAX
+	int "Maximum length of the LwM2M endpoint client name"
+	default 32
+	range 8 128
+
+config SIRENA_LWM2M_LOCATION_PATH_MAX
+	int "Maximum length of the stored registration location path"
+	default 64
+	range 16 256
+
+config SIRENA_LWM2M_REGISTRATION_PAYLOAD_MAX
+	int "Maximum length of the registration link-format payload"
+	default 256
+	range 32 1024
+
+config SIRENA_LWM2M_COAP_RESPONSE_TIMEOUT_MS
+	int "CoAP response timeout in milliseconds"
+	default 10000
+	range 100 60000
+
+config SIRENA_LWM2M_TRANSPORT_COAP
+	bool "Enable the CoAP/UDP transport binding"
+	default y
+	depends on COAP && COAP_CLIENT
+	select COAP_EXTENDED_OPTIONS_LEN
+	help
+	  Enables the plain CoAP over UDP transport binding. The binding
+	  registers with the LwM2M server, updates the registration and
+	  deregisters. DTLS, observation and read, write and execute are not
+	  part of this binding.
+
 endif
 
 endmenu
