@@ -67,7 +67,7 @@ int sirena_lwm2m_engine_submit(enum sirena_lwm2m_engine_operation operation)
     k_mutex_lock(&engine_lock, K_FOREVER);
     if (!engine_running) {
         k_mutex_unlock(&engine_lock);
-        return -EALREADY;
+        return -ENOTSUP;
     }
 
     for (i = 0U; i < ARRAY_SIZE(requests); ++i) {

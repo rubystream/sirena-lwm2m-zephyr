@@ -210,7 +210,7 @@ static int coap_request(const char *path, enum coap_method method, const uint8_t
     int rc;
 
     if (!transport_started) {
-        return -EALREADY;
+        return -ENOTSUP;
     }
 
     rc = server_address(&storage);
