@@ -17,6 +17,9 @@
 #define SIRENA_LWM2M_CF_OPAQUE 42
 
 struct sirena_lwm2m_codec_value {
+    uint16_t object_id;
+    uint16_t instance_id;
+    uint16_t resource_id;
     uint16_t id;
     enum sirena_lwm2m_value_type type;
     union {

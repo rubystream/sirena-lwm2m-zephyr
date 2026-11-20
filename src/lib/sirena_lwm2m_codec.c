@@ -2,6 +2,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdio.h>
+#include <inttypes.h>
 
 static int append(void *buffer, size_t capacity, size_t *used,
                   const void *data, size_t data_len)
@@ -108,7 +109,7 @@ const char *sirena_lwm2m_content_format_to_mime(uint16_t format)
     case SIRENA_LWM2M_CF_OPAQUE:
         return "application/octet-stream";
     default:
-        return "application/octet-stream";
+        return NULL;
     }
 }
 
@@ -135,13 +136,13 @@ uint16_t sirena_lwm2m_content_format_negotiate(const uint16_t *accepted,
             }
         }
     }
-    return SIRENA_LWM2M_CF_OPAQUE;
+    return 0;
 }
 
 static int encode_tlv_value(void *buffer, size_t capacity, size_t *used,
                            const struct sirena_lwm2m_codec_value *v)
 {
-    uint8_t type_byte = 0xC0;
+    uint8_t type_byte = 0x80;
     uint16_t id = v->id;
     size_t value_len = 0U;
     uint8_t tmp[8];
@@ -170,7 +171,13 @@ static int encode_tlv_value(void *buffer, size_t capacity, size_t *used,
         break;
     case SIRENA_LWM2M_VALUE_FLOAT:
         value_len = 8U;
-        memcpy(tmp, &v->data.floating_point, 8U);
+        {
+            uint64_t bits;
+            memcpy(&bits, &v->data.floating_point, 8U);
+            for (size_t i = 0U; i < 8U; ++i) {
+                tmp[i] = (uint8_t)((bits >> ((7U - i) * 8U)) & 0xFF);
+            }
+        }
         break;
     case SIRENA_LWM2M_VALUE_STRING:
         value_len = v->data.string.length;
@@ -256,7 +263,26 @@ static int cbor_length(void *buffer, size_t capacity, size_t *used,
         uint8_t x[2] = { (uint8_t)(len >> 8), (uint8_t)(len & 0xFF) };
         return append(buffer, capacity, used, x, 2U);
     }
-    return -ENOMEM;
+    if (len <= 0xFFFFFFFFU) {
+        uint8_t b = (uint8_t)((major << 5) | 26);
+        int rc = append_byte(buffer, capacity, used, b);
+        if (rc != 0) return rc;
+        uint8_t x[4];
+        for (size_t i = 0U; i < 4U; ++i) {
+            x[3U - i] = (uint8_t)((len >> (i * 8U)) & 0xFF);
+        }
+        return append(buffer, capacity, used, x, 4U);
+    }
+    {
+        uint8_t b = (uint8_t)((major << 5) | 27);
+        int rc = append_byte(buffer, capacity, used, b);
+        if (rc != 0) return rc;
+        uint8_t x[8];
+        for (size_t i = 0U; i < 8U; ++i) {
+            x[7U - i] = (uint8_t)((len >> (i * 8U)) & 0xFF);
+        }
+        return append(buffer, capacity, used, x, 8U);
+    }
 }
 
 static int encode_cbor_value(void *buffer, size_t capacity, size_t *used,
@@ -281,10 +307,14 @@ static int encode_cbor_value(void *buffer, size_t capacity, size_t *used,
                           (size_t)v->data.unsigned_integer);
     case SIRENA_LWM2M_VALUE_FLOAT: {
         uint8_t head = 0xFB;
+        uint64_t bits;
+        uint8_t bytes[8];
         rc = append_byte(buffer, capacity, used, head);
         if (rc != 0) return rc;
-        uint8_t bytes[8];
-        memcpy(bytes, &v->data.floating_point, 8U);
+        memcpy(&bits, &v->data.floating_point, 8U);
+        for (size_t i = 0U; i < 8U; ++i) {
+            bytes[i] = (uint8_t)((bits >> ((7U - i) * 8U)) & 0xFF);
+        }
         return append(buffer, capacity, used, bytes, 8U);
     }
     case SIRENA_LWM2M_VALUE_STRING:
@@ -351,6 +381,35 @@ static int encode_json_value(char *buffer, size_t capacity, size_t *used,
     return append(buffer, capacity, used, tmp, (size_t)n);
 }
 
+
+static int append_escaped(void *buffer, size_t capacity, size_t *used,
+                          const char *value, size_t length)
+{
+    size_t i;
+    if (append_byte(buffer, capacity, used, '"') != 0) return -ENOMEM;
+    for (i = 0U; i < length; ++i) {
+        char c = value[i];
+        if (c == '"' || c == '\\') {
+            if (append_byte(buffer, capacity, used, '\\') != 0) return -ENOMEM;
+            if (append_byte(buffer, capacity, used, (uint8_t)c) != 0) return -ENOMEM;
+        } else if (c == '\n') {
+            if (append(buffer, capacity, used, "\\n", 2U) != 0) return -ENOMEM;
+        } else if (c == '\r') {
+            if (append(buffer, capacity, used, "\\r", 2U) != 0) return -ENOMEM;
+        } else if (c == '\t') {
+            if (append(buffer, capacity, used, "\\t", 2U) != 0) return -ENOMEM;
+        } else {
+            if (append_byte(buffer, capacity, used, (uint8_t)c) != 0) return -ENOMEM;
+        }
+    }
+    return append_byte(buffer, capacity, used, '"');
+}
+
+static uint16_t effective_resource_id(const struct sirena_lwm2m_codec_value *v)
+{
+    return v->resource_id ? v->resource_id : v->id;
+}
+
 int sirena_lwm2m_codec_encode(uint16_t content_format,
                               const struct sirena_lwm2m_codec_value *values,
                               size_t value_count, void *buffer,
@@ -408,9 +467,7 @@ int sirena_lwm2m_codec_encode(uint16_t content_format,
         return 0;
     }
 
-    if (content_format == SIRENA_LWM2M_CF_CBOR ||
-        content_format == SIRENA_LWM2M_CF_SENML_CBOR ||
-        content_format == SIRENA_LWM2M_CF_SENML_ETCH_CBOR) {
+    if (content_format == SIRENA_LWM2M_CF_CBOR) {
         if (value_count == 1U) {
             rc = encode_cbor_value(buffer, cap, &used, &values[0]);
         } else {
@@ -427,16 +484,192 @@ int sirena_lwm2m_codec_encode(uint16_t content_format,
         return 0;
     }
 
-    if (content_format == SIRENA_LWM2M_CF_JSON ||
-        content_format == SIRENA_LWM2M_CF_SENML_JSON ||
-        content_format == SIRENA_LWM2M_CF_SENML_ETCH_JSON) {
-        if (append_byte(buffer, cap, &used, '{') != 0) return -ENOMEM;
+    if (content_format == SIRENA_LWM2M_CF_SENML_CBOR) {
+        char base[64];
+        snprintf(base, sizeof(base), "/%u/%u/", values[0].object_id, values[0].instance_id);
+        uint8_t map = 0xA0 | 2U;
+        rc = append_byte(buffer, cap, &used, map);
+        if (rc != 0) return rc;
+        rc = cbor_length(buffer, cap, &used, 3, 2);
+        if (rc != 0) return rc;
+        rc = append(buffer, cap, &used, "bn", 2U);
+        if (rc != 0) return rc;
+        rc = cbor_length(buffer, cap, &used, 3, strlen(base));
+        if (rc != 0) return rc;
+        rc = append(buffer, cap, &used, base, strlen(base));
+        if (rc != 0) return rc;
+        rc = cbor_length(buffer, cap, &used, 3, 1);
+        if (rc != 0) return rc;
+        rc = append(buffer, cap, &used, "e", 1U);
+        if (rc != 0) return rc;
+        uint8_t arr = 0x80 | (uint8_t)(value_count <= 23U ? value_count : 23U);
+        if (value_count > 23U) return -ENOTSUP;
+        rc = append_byte(buffer, cap, &used, arr);
+        if (rc != 0) return rc;
         for (i = 0U; i < value_count; ++i) {
-            rc = encode_json_value((char *)buffer, cap, &used, &values[i],
-                                  i != 0U);
+            uint8_t rec = 0xA0 | 2U;
+            char rid[16];
+            snprintf(rid, sizeof(rid), "%u", effective_resource_id(&values[i]));
+            rc = append_byte(buffer, cap, &used, rec);
+            if (rc != 0) return rc;
+            rc = cbor_length(buffer, cap, &used, 3, 1);
+            if (rc != 0) return rc;
+            rc = append(buffer, cap, &used, "n", 1U);
+            if (rc != 0) return rc;
+            rc = cbor_length(buffer, cap, &used, 3, strlen(rid));
+            if (rc != 0) return rc;
+            rc = append(buffer, cap, &used, rid, strlen(rid));
+            if (rc != 0) return rc;
+            rc = cbor_length(buffer, cap, &used, 3, 1);
+            if (rc != 0) return rc;
+            rc = append(buffer, cap, &used, "v", 1U);
+            if (rc != 0) return rc;
+            rc = encode_cbor_value(buffer, cap, &used, &values[i]);
             if (rc != 0) return rc;
         }
+        *length = used;
+        return 0;
+    }
+
+    if (content_format == SIRENA_LWM2M_CF_SENML_ETCH_CBOR) {
+        uint8_t arr = 0x80 | (uint8_t)(value_count <= 23U ? value_count : 23U);
+        if (value_count > 23U) return -ENOTSUP;
+        rc = append_byte(buffer, cap, &used, arr);
+        if (rc != 0) return rc;
+        for (i = 0U; i < value_count; ++i) {
+            uint8_t rec = 0xA0 | 2U;
+            char rid[16];
+            snprintf(rid, sizeof(rid), "%u", effective_resource_id(&values[i]));
+            char path[64];
+            snprintf(path, sizeof(path), "/%u/%u/%u", values[i].object_id, values[i].instance_id, effective_resource_id(&values[i]));
+            rc = append_byte(buffer, cap, &used, rec);
+            if (rc != 0) return rc;
+            rc = cbor_length(buffer, cap, &used, 3, 1);
+            if (rc != 0) return rc;
+            rc = append(buffer, cap, &used, "v", 1U);
+            if (rc != 0) return rc;
+            rc = encode_cbor_value(buffer, cap, &used, &values[i]);
+            if (rc != 0) return rc;
+            rc = cbor_length(buffer, cap, &used, 3, 2);
+            if (rc != 0) return rc;
+            rc = append(buffer, cap, &used, "vb", 2U);
+            if (rc != 0) return rc;
+            (void)rid; (void)path;
+            rc = append_byte(buffer, cap, &used, 0xF5);
+            if (rc != 0) return rc;
+        }
+        *length = used;
+        return 0;
+    }
+
+    if (content_format == SIRENA_LWM2M_CF_JSON) {
+        if (append_byte(buffer, cap, &used, '{') != 0) return -ENOMEM;
+        for (i = 0U; i < value_count; ++i) {
+            char tmp[128];
+            int n;
+            if (i != 0U) {
+                if (append_byte(buffer, cap, &used, ',') != 0) return -ENOMEM;
+            }
+            n = snprintf(tmp, sizeof(tmp), "\"%u\":", effective_resource_id(&values[i]));
+            if (n < 0 || append(buffer, cap, &used, tmp, (size_t)n) != 0) return -ENOMEM;
+            switch (values[i].type) {
+            case SIRENA_LWM2M_VALUE_BOOLEAN: {
+                const char *str = values[i].data.boolean ? "true" : "false";
+                if (append(buffer, cap, &used, str, strlen(str)) != 0) return -ENOMEM;
+                break;
+            }
+            case SIRENA_LWM2M_VALUE_INTEGER:
+                n = snprintf(tmp, sizeof(tmp), "%" PRId64, values[i].data.integer);
+                if (n < 0 || append(buffer, cap, &used, tmp, (size_t)n) != 0) return -ENOMEM;
+                break;
+            case SIRENA_LWM2M_VALUE_UNSIGNED:
+                n = snprintf(tmp, sizeof(tmp), "%" PRIu64, values[i].data.unsigned_integer);
+                if (n < 0 || append(buffer, cap, &used, tmp, (size_t)n) != 0) return -ENOMEM;
+                break;
+            case SIRENA_LWM2M_VALUE_FLOAT:
+                n = snprintf(tmp, sizeof(tmp), "%g", values[i].data.floating_point);
+                if (n < 0 || append(buffer, cap, &used, tmp, (size_t)n) != 0) return -ENOMEM;
+                break;
+            case SIRENA_LWM2M_VALUE_STRING:
+                if (append_escaped(buffer, cap, &used, values[i].data.string.value, values[i].data.string.length) != 0) return -ENOMEM;
+                break;
+            case SIRENA_LWM2M_VALUE_OPAQUE:
+                if (append_escaped(buffer, cap, &used, (const char *)values[i].data.opaque.value, values[i].data.opaque.length) != 0) return -ENOMEM;
+                break;
+            default:
+                return -EINVAL;
+            }
+        }
         if (append_byte(buffer, cap, &used, '}') != 0) return -ENOMEM;
+        *length = used;
+        return 0;
+    }
+
+    if (content_format == SIRENA_LWM2M_CF_SENML_JSON) {
+        if (append(buffer, cap, &used, "{\"e\":[", 6U) != 0) return -ENOMEM;
+        for (i = 0U; i < value_count; ++i) {
+            char tmp[128];
+            int n;
+            if (i != 0U) {
+                if (append_byte(buffer, cap, &used, ',') != 0) return -ENOMEM;
+            }
+            n = snprintf(tmp, sizeof(tmp), "{\"n\":\"%u\",\"v\":", effective_resource_id(&values[i]));
+            if (n < 0 || append(buffer, cap, &used, tmp, (size_t)n) != 0) return -ENOMEM;
+            switch (values[i].type) {
+            case SIRENA_LWM2M_VALUE_BOOLEAN: {
+                const char *str = values[i].data.boolean ? "true" : "false";
+                if (append(buffer, cap, &used, str, strlen(str)) != 0) return -ENOMEM;
+                break;
+            }
+            case SIRENA_LWM2M_VALUE_INTEGER:
+                n = snprintf(tmp, sizeof(tmp), "%" PRId64, values[i].data.integer);
+                if (n < 0 || append(buffer, cap, &used, tmp, (size_t)n) != 0) return -ENOMEM;
+                break;
+            case SIRENA_LWM2M_VALUE_UNSIGNED:
+                n = snprintf(tmp, sizeof(tmp), "%" PRIu64, values[i].data.unsigned_integer);
+                if (n < 0 || append(buffer, cap, &used, tmp, (size_t)n) != 0) return -ENOMEM;
+                break;
+            case SIRENA_LWM2M_VALUE_FLOAT:
+                n = snprintf(tmp, sizeof(tmp), "%g", values[i].data.floating_point);
+                if (n < 0 || append(buffer, cap, &used, tmp, (size_t)n) != 0) return -ENOMEM;
+                break;
+            case SIRENA_LWM2M_VALUE_STRING:
+                if (append_escaped(buffer, cap, &used, values[i].data.string.value, values[i].data.string.length) != 0) return -ENOMEM;
+                break;
+            case SIRENA_LWM2M_VALUE_OPAQUE:
+                if (append_escaped(buffer, cap, &used, (const char *)values[i].data.opaque.value, values[i].data.opaque.length) != 0) return -ENOMEM;
+                break;
+            default:
+                return -EINVAL;
+            }
+            if (append_byte(buffer, cap, &used, '}') != 0) return -ENOMEM;
+        }
+        if (append(buffer, cap, &used, "]}", 2U) != 0) return -ENOMEM;
+        *length = used;
+        return 0;
+    }
+
+    if (content_format == SIRENA_LWM2M_CF_SENML_ETCH_JSON) {
+        if (append(buffer, cap, &used, "{\"e\":[", 6U) != 0) return -ENOMEM;
+        for (i = 0U; i < value_count; ++i) {
+            char path[64];
+            char tmp[128];
+            int n;
+            if (i != 0U) {
+                if (append_byte(buffer, cap, &used, ',') != 0) return -ENOMEM;
+            }
+            snprintf(path, sizeof(path), "/%u/%u/%u", values[i].object_id, values[i].instance_id, effective_resource_id(&values[i]));
+            n = snprintf(tmp, sizeof(tmp), "{\"n\":\"%s\",\"v\":", path);
+            if (n < 0 || append(buffer, cap, &used, tmp, (size_t)n) != 0) return -ENOMEM;
+            if (values[i].type == SIRENA_LWM2M_VALUE_INTEGER) {
+                n = snprintf(tmp, sizeof(tmp), "%" PRId64, values[i].data.integer);
+                if (n < 0 || append(buffer, cap, &used, tmp, (size_t)n) != 0) return -ENOMEM;
+            } else {
+                if (append(buffer, cap, &used, "null", 4U) != 0) return -ENOMEM;
+            }
+            if (append(buffer, cap, &used, ",\"vb\":true}", 11U) != 0) return -ENOMEM;
+        }
+        if (append(buffer, cap, &used, "]}", 2U) != 0) return -ENOMEM;
         *length = used;
         return 0;
     }
@@ -458,7 +691,7 @@ static int decode_tlv_value(const uint8_t *buf, size_t len,
     if (len == 0U) return -EINVAL;
     type_byte = buf[0];
     cursor = 1U;
-    id_bytes = (type_byte & 0x20) ? 2U : 1U;
+    id_bytes = (type_byte & 0x60) ? 2U : 1U;
     if (cursor + id_bytes > len) return -EINVAL;
     if (id_bytes == 2U) {
         id = ((uint16_t)buf[cursor] << 8) | buf[cursor + 1];
@@ -499,6 +732,15 @@ static int decode_tlv_value(const uint8_t *buf, size_t len,
                           ((int32_t)buf[value_start + 2] << 8) |
                           (int32_t)buf[value_start + 3];
         break;
+    case 8U: {
+        uint64_t bits = 0U;
+        v->type = SIRENA_LWM2M_VALUE_FLOAT;
+        for (size_t i = 0U; i < 8U; ++i) {
+            bits = (bits << 8) | buf[value_start + i];
+        }
+        memcpy(&v->data.floating_point, &bits, 8U);
+        break;
+    }
     default:
         v->type = SIRENA_LWM2M_VALUE_OPAQUE;
         v->data.opaque.value = &buf[value_start];

@@ -1,6 +1,7 @@
 #include <zephyr/ztest.h>
 #include <sirena/lwm2m/codec.h>
 #include <string.h>
+#include <errno.h>
 
 ZTEST(sirena_lwm2m_codec, test_supported_and_mime)
 {

@@ -81,6 +81,7 @@ A successful run prints `sirena zephyr smoke ok`.
 | Build smoke target | `npm run build` |
 | Run smoke target | `npm run test` |
 | Build and run registry tests | `npm run test:registry` |
+| Build and run codec tests | `npm run test:codec` |
 | Remove build output | `npm run clean` |
 | Full smoke workflow | `npm run smoke` |
 | Flash firmware (opt-in) | `npm run flash` |
