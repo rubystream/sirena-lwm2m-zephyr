@@ -9,6 +9,7 @@
 #define SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT
 
 static uint8_t protocol_raw[CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX];
+static struct sirena_lwm2m_codec_value protocol_values[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
 
 static int protocol_value_from_resource(const struct sirena_lwm2m_resource *resource,
                                         const void *raw, size_t raw_length,
@@ -250,9 +251,8 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         return 0;
     }
     case SIRENA_LWM2M_OPERATION_WRITE: {
-        struct sirena_lwm2m_codec_value values[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
         uint16_t write_format;
-        size_t value_count = ARRAY_SIZE(values);
+        size_t value_count = ARRAY_SIZE(protocol_values);
 
         if ((resource->operations & SIRENA_LWM2M_OP_WRITE) == 0U || resource->write == NULL) {
             protocol_set_status(response, SIRENA_LWM2M_STATUS_METHOD_NOT_ALLOWED);
@@ -262,7 +262,7 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         write_format = request->content_format_present ? request->content_format : content_format;
 
         rc = sirena_lwm2m_codec_decode(write_format, request->payload, request->payload_length,
-                                       values, &value_count);
+                                       protocol_values, &value_count);
         if (rc != 0) {
             protocol_set_status(response,
                                 rc == -ENOTSUP ? SIRENA_LWM2M_STATUS_UNSUPPORTED_CONTENT_FORMAT
@@ -276,7 +276,7 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         }
 
         rc = protocol_write_resource(request->object_id, request->instance_id,
-                                     request->resource_id, resource, &values[0]);
+                                     request->resource_id, resource, &protocol_values[0]);
         if (rc == -ENOTSUP) {
             protocol_set_status(response, SIRENA_LWM2M_STATUS_METHOD_NOT_ALLOWED);
             return 0;

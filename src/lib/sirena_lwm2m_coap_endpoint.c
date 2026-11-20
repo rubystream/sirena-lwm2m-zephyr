@@ -47,8 +47,10 @@ static net_socklen_t endpoint_server_length;
 static struct sirena_lwm2m_coap_exchange exchange;
 static struct sirena_lwm2m_coap_observer observers[CONFIG_SIRENA_LWM2M_MAX_OBSERVATIONS];
 static uint8_t receive_buffer[CONFIG_SIRENA_LWM2M_COAP_MESSAGE_MAX];
+static uint8_t send_buffer[CONFIG_SIRENA_LWM2M_COAP_MESSAGE_MAX];
 static uint8_t response_payload[CONFIG_SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX];
 static uint8_t notify_payload[CONFIG_SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX];
+static struct coap_option dispatch_options[SIRENA_LWM2M_COAP_OPTIONS];
 
 static uint8_t endpoint_status_code(enum sirena_lwm2m_status status)
 {
@@ -79,15 +81,14 @@ static int endpoint_send_message(uint8_t type, uint16_t message_id, uint8_t toke
                                   net_socklen_t peer_length)
 {
     struct coap_packet response;
-    uint8_t buffer[CONFIG_SIRENA_LWM2M_COAP_MESSAGE_MAX];
     int rc;
 
     if (type == COAP_TYPE_NON_CON) {
         message_id = coap_next_id();
     }
 
-    rc = coap_packet_init(&response, buffer, sizeof(buffer), COAP_VERSION_1, type, token_length,
-                           token, code, message_id);
+    rc = coap_packet_init(&response, send_buffer, sizeof(send_buffer), COAP_VERSION_1, type,
+                           token_length, token, code, message_id);
     if (rc < 0) {
         return rc;
     }
@@ -412,7 +413,8 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         observer->resource_id = path[2];
         observer->content_format = protocol_response.content_format;
         observer->sequence = 0U;
-        memcpy(&observer->peer, peer, sizeof(observer->peer));
+        memset(&observer->peer, 0, sizeof(observer->peer));
+        memcpy(&observer->peer, peer, net_family2size(peer->sa_family));
         observer->peer_length = peer_length;
     }
 
@@ -435,10 +437,10 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
 static int endpoint_dispatch(uint8_t *data, size_t length, const struct net_sockaddr *peer,
                              net_socklen_t peer_length)
 {
-    struct coap_option options[SIRENA_LWM2M_COAP_OPTIONS];
     struct coap_packet packet;
 
-    if (coap_packet_parse(&packet, data, (uint16_t)length, options, ARRAY_SIZE(options)) < 0) {
+    if (coap_packet_parse(&packet, data, (uint16_t)length, dispatch_options,
+                          ARRAY_SIZE(dispatch_options)) < 0) {
         return -EINVAL;
     }
 
