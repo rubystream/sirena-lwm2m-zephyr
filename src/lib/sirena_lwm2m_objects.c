@@ -17,7 +17,7 @@ enum sirena_lwm2m_resource_kind {
 struct sirena_lwm2m_resource_entry {
     uint16_t id;
     uint8_t operations;
-    bool optional;
+    bool kconfig_gated;
     enum sirena_lwm2m_value_type type;
     enum sirena_lwm2m_resource_kind kind;
     uint8_t *data;
@@ -26,6 +26,12 @@ struct sirena_lwm2m_resource_entry {
     int64_t integer;
     uint64_t unsigned_integer;
     bool boolean;
+};
+
+struct sirena_lwm2m_object_definition {
+    uint16_t object_id;
+    struct sirena_lwm2m_resource_entry *resources;
+    size_t resource_count;
 };
 
 struct sirena_lwm2m_security_instance {
@@ -66,142 +72,166 @@ static struct sirena_lwm2m_server_instance server_instance;
 static struct sirena_lwm2m_device_instance device_instance;
 
 static struct sirena_lwm2m_resource_entry security_resources[] = {
-    { 0U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_STRING,
-      SIRENA_LWM2M_RESOURCE_VALUE, security_instance.server_uri,
-      CONFIG_SIRENA_LWM2M_SERVER_URI_MAX, 0U, 0, 0U, false },
-    { 1U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_BOOLEAN,
-      SIRENA_LWM2M_RESOURCE_CONSTANT, NULL, 0U, 0U, 0, 0U, false },
-    { 2U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 3U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_OPAQUE,
-      SIRENA_LWM2M_RESOURCE_VALUE, security_instance.identity,
-      CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX, 0U, 0, 0U, false },
-    { 4U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_OPAQUE,
-      SIRENA_LWM2M_RESOURCE_VALUE, security_instance.server_public_key,
-      CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX, 0U, 0, 0U, false },
-    { 5U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_OPAQUE,
-      SIRENA_LWM2M_RESOURCE_VALUE, security_instance.secret_key,
-      CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX, 0U, 0, 0U, false },
-    { 10U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
+    { .id = 0U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_STRING,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = security_instance.server_uri,
+      .capacity = CONFIG_SIRENA_LWM2M_SERVER_URI_MAX },
+    { .id = 1U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_BOOLEAN,
+      .kind = SIRENA_LWM2M_RESOURCE_CONSTANT },
+    { .id = 2U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_INTEGER,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 3U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_OPAQUE,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = security_instance.identity,
+      .capacity = CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX },
+    { .id = 4U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_OPAQUE,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = security_instance.server_public_key,
+      .capacity = CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX },
+    { .id = 5U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_OPAQUE,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = security_instance.secret_key,
+      .capacity = CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX },
+    { .id = 10U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_INTEGER,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE },
 #if IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL)
-    { 6U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 7U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_OPAQUE,
-      SIRENA_LWM2M_RESOURCE_VALUE, security_instance.sms_binding_key_parameters,
-      CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX, 0U, 0, 0U, false },
-    { 8U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_OPAQUE,
-      SIRENA_LWM2M_RESOURCE_VALUE, security_instance.sms_binding_secret_key,
-      CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX, 0U, 0, 0U, false },
-    { 9U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_STRING,
-      SIRENA_LWM2M_RESOURCE_VALUE, security_instance.server_sms_number,
-      CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX, 0U, 0, 0U, false },
-    { 11U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 12U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 13U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_UNSIGNED,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 14U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_STRING,
-      SIRENA_LWM2M_RESOURCE_VALUE, security_instance.sni,
-      CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX, 0U, 0, 0U, false },
-    { 15U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_UNSIGNED,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 17U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 22U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_UNSIGNED,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 23U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_UNSIGNED,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 24U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_UNSIGNED,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 26U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 28U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 29U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 30U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_STRING,
-      SIRENA_LWM2M_RESOURCE_VALUE, security_instance.rds_application_id,
-      CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX, 0U, 0, 0U, false },
+    { .id = 6U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_INTEGER, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 7U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_OPAQUE, .kind = SIRENA_LWM2M_RESOURCE_VALUE,
+      .data = security_instance.sms_binding_key_parameters,
+      .capacity = CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX },
+    { .id = 8U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_OPAQUE, .kind = SIRENA_LWM2M_RESOURCE_VALUE,
+      .data = security_instance.sms_binding_secret_key,
+      .capacity = CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX },
+    { .id = 9U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_STRING, .kind = SIRENA_LWM2M_RESOURCE_VALUE,
+      .data = security_instance.server_sms_number,
+      .capacity = CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX },
+    { .id = 11U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_INTEGER, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 12U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_INTEGER, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 13U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_UNSIGNED, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 14U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_STRING, .kind = SIRENA_LWM2M_RESOURCE_VALUE,
+      .data = security_instance.sni, .capacity = CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX },
+    { .id = 15U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_UNSIGNED, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 22U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_UNSIGNED, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 23U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_UNSIGNED, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 24U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_UNSIGNED, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 28U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_INTEGER, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 29U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_INTEGER, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 30U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_STRING, .kind = SIRENA_LWM2M_RESOURCE_VALUE,
+      .data = security_instance.rds_application_id,
+      .capacity = CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX },
 #endif
 };
 
 static struct sirena_lwm2m_resource_entry server_resources[] = {
-    { 0U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 1U, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE, false,
-      SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 6U, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE, false,
-      SIRENA_LWM2M_VALUE_BOOLEAN, SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 7U, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE, false,
-      SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_RESOURCE_VALUE, server_instance.binding,
-      CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX, 0U, 0, 0U, false },
-    { 8U, SIRENA_LWM2M_OP_EXEC, false, SIRENA_LWM2M_VALUE_NONE,
-      SIRENA_LWM2M_RESOURCE_EXECUTE, NULL, 0U, 0U, 0, 0U, false },
+    { .id = 0U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_INTEGER,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 1U, .operations = SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE,
+      .type = SIRENA_LWM2M_VALUE_INTEGER, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 6U, .operations = SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE,
+      .type = SIRENA_LWM2M_VALUE_BOOLEAN, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 7U, .operations = SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE,
+      .type = SIRENA_LWM2M_VALUE_STRING, .kind = SIRENA_LWM2M_RESOURCE_VALUE,
+      .data = server_instance.binding, .capacity = CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX },
+    { .id = 8U, .operations = SIRENA_LWM2M_OP_EXEC, .type = SIRENA_LWM2M_VALUE_NONE,
+      .kind = SIRENA_LWM2M_RESOURCE_EXECUTE },
 #if IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SERVER_OPTIONAL)
-    { 2U, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE, true,
-      SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 3U, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE, true,
-      SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 4U, SIRENA_LWM2M_OP_EXEC, true, SIRENA_LWM2M_VALUE_NONE,
-      SIRENA_LWM2M_RESOURCE_EXECUTE, NULL, 0U, 0U, 0, 0U, false },
-    { 5U, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE, true,
-      SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
+    { .id = 2U, .operations = SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE,
+      .kconfig_gated = true, .type = SIRENA_LWM2M_VALUE_INTEGER,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 3U, .operations = SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE,
+      .kconfig_gated = true, .type = SIRENA_LWM2M_VALUE_INTEGER,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 4U, .operations = SIRENA_LWM2M_OP_EXEC, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_NONE, .kind = SIRENA_LWM2M_RESOURCE_EXECUTE },
+    { .id = 5U, .operations = SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE,
+      .kconfig_gated = true, .type = SIRENA_LWM2M_VALUE_INTEGER,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE },
 #endif
 };
 
 static struct sirena_lwm2m_resource_entry device_resources[] = {
-    { 0U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_STRING,
-      SIRENA_LWM2M_RESOURCE_VALUE, device_instance.manufacturer,
-      CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX, 0U, 0, 0U, false },
-    { 1U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_STRING,
-      SIRENA_LWM2M_RESOURCE_VALUE, device_instance.model_number,
-      CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX, 0U, 0, 0U, false },
-    { 2U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_STRING,
-      SIRENA_LWM2M_RESOURCE_VALUE, device_instance.serial_number,
-      CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX, 0U, 0, 0U, false },
-    { 3U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_STRING,
-      SIRENA_LWM2M_RESOURCE_VALUE, device_instance.firmware_version,
-      CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX, 0U, 0, 0U, false },
-    { 4U, SIRENA_LWM2M_OP_EXEC, false, SIRENA_LWM2M_VALUE_NONE,
-      SIRENA_LWM2M_RESOURCE_EXECUTE, NULL, 0U, 0U, 0, 0U, false },
-    { 11U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 16U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_STRING,
-      SIRENA_LWM2M_RESOURCE_VALUE, device_instance.supported_binding,
-      CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX, 0U, 0, 0U, false },
-    { 17U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_STRING,
-      SIRENA_LWM2M_RESOURCE_VALUE, device_instance.device_type,
-      CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX, 0U, 0, 0U, false },
-    { 18U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_STRING,
-      SIRENA_LWM2M_RESOURCE_VALUE, device_instance.hardware_version,
-      CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX, 0U, 0, 0U, false },
-    { 19U, SIRENA_LWM2M_OP_READ, false, SIRENA_LWM2M_VALUE_STRING,
-      SIRENA_LWM2M_RESOURCE_VALUE, device_instance.software_version,
-      CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX, 0U, 0, 0U, false },
+    { .id = 0U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_STRING,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = device_instance.manufacturer,
+      .capacity = CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX },
+    { .id = 1U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_STRING,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = device_instance.model_number,
+      .capacity = CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX },
+    { .id = 2U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_STRING,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = device_instance.serial_number,
+      .capacity = CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX },
+    { .id = 3U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_STRING,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = device_instance.firmware_version,
+      .capacity = CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX },
+    { .id = 4U, .operations = SIRENA_LWM2M_OP_EXEC, .type = SIRENA_LWM2M_VALUE_NONE,
+      .kind = SIRENA_LWM2M_RESOURCE_EXECUTE },
+    { .id = 11U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_INTEGER,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 16U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_STRING,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = device_instance.supported_binding,
+      .capacity = CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX },
+    { .id = 17U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_STRING,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = device_instance.device_type,
+      .capacity = CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX },
+    { .id = 18U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_STRING,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = device_instance.hardware_version,
+      .capacity = CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX },
+    { .id = 19U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_STRING,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = device_instance.software_version,
+      .capacity = CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX },
 #if IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_DEVICE_OPTIONAL)
-    { 5U, SIRENA_LWM2M_OP_EXEC, true, SIRENA_LWM2M_VALUE_NONE,
-      SIRENA_LWM2M_RESOURCE_EXECUTE, NULL, 0U, 0U, 0, 0U, false },
-    { 9U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 10U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 12U, SIRENA_LWM2M_OP_EXEC, true, SIRENA_LWM2M_VALUE_NONE,
-      SIRENA_LWM2M_RESOURCE_EXECUTE, NULL, 0U, 0U, 0, 0U, false },
-    { 13U, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE, true,
-      SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 14U, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE, true,
-      SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_RESOURCE_VALUE, device_instance.utc_offset,
-      CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX, 0U, 0, 0U, false },
-    { 15U, SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE, true,
-      SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_RESOURCE_VALUE, device_instance.timezone,
-      CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX, 0U, 0, 0U, false },
-    { 20U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
-    { 21U, SIRENA_LWM2M_OP_READ, true, SIRENA_LWM2M_VALUE_INTEGER,
-      SIRENA_LWM2M_RESOURCE_VALUE, NULL, 0U, 0U, 0, 0U, false },
+    { .id = 5U, .operations = SIRENA_LWM2M_OP_EXEC, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_NONE, .kind = SIRENA_LWM2M_RESOURCE_EXECUTE },
+    { .id = 9U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_INTEGER, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 10U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_INTEGER, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 12U, .operations = SIRENA_LWM2M_OP_EXEC, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_NONE, .kind = SIRENA_LWM2M_RESOURCE_EXECUTE },
+    { .id = 13U, .operations = SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE,
+      .kconfig_gated = true, .type = SIRENA_LWM2M_VALUE_INTEGER,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 14U, .operations = SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE,
+      .kconfig_gated = true, .type = SIRENA_LWM2M_VALUE_STRING,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = device_instance.utc_offset,
+      .capacity = CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX },
+    { .id = 15U, .operations = SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE,
+      .kconfig_gated = true, .type = SIRENA_LWM2M_VALUE_STRING,
+      .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = device_instance.timezone,
+      .capacity = CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX },
+    { .id = 20U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_INTEGER, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 21U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_INTEGER, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
 #endif
+};
+
+static const struct sirena_lwm2m_object_definition object_definitions[] = {
+    {
+        .object_id = SIRENA_LWM2M_SECURITY_OBJECT_ID,
+        .resources = security_resources,
+        .resource_count = ARRAY_SIZE(security_resources),
+    },
+    {
+        .object_id = SIRENA_LWM2M_SERVER_OBJECT_ID,
+        .resources = server_resources,
+        .resource_count = ARRAY_SIZE(server_resources),
+    },
+    {
+        .object_id = SIRENA_LWM2M_DEVICE_OBJECT_ID,
+        .resources = device_resources,
+        .resource_count = ARRAY_SIZE(device_resources),
+    },
 };
 
 static sirena_lwm2m_execute_handler_t execute_handler;
@@ -367,17 +397,17 @@ static int resources_add(uint16_t object_id, uint16_t instance_id,
         if (entry->kind == SIRENA_LWM2M_RESOURCE_EXECUTE) {
             rc = sirena_lwm2m_add_resource(object_id, instance_id, entry->id,
                                            entry->type, entry->operations,
-                                           entry->optional, NULL, NULL,
+                                           entry->kconfig_gated, NULL, NULL,
                                            builtin_execute, entry);
         } else if (entry->kind == SIRENA_LWM2M_RESOURCE_CONSTANT) {
             rc = sirena_lwm2m_add_resource(object_id, instance_id, entry->id,
                                            entry->type, entry->operations,
-                                           entry->optional, value_read,
+                                           entry->kconfig_gated, value_read,
                                            NULL, NULL, entry);
         } else {
             rc = sirena_lwm2m_add_resource(object_id, instance_id, entry->id,
                                            entry->type, entry->operations,
-                                           entry->optional, value_read,
+                                           entry->kconfig_gated, value_read,
                                            value_write, NULL, entry);
         }
 
@@ -396,52 +426,30 @@ static int resources_add(uint16_t object_id, uint16_t instance_id,
 
 int sirena_lwm2m_objects_init(void)
 {
-    int rc;
+    size_t i;
 
-    rc = sirena_lwm2m_register_object(SIRENA_LWM2M_SECURITY_OBJECT_ID, false);
-    if (rc != 0) {
-        return rc;
+    for (i = 0U; i < ARRAY_SIZE(object_definitions); ++i) {
+        const struct sirena_lwm2m_object_definition *definition = &object_definitions[i];
+        int rc;
+
+        rc = sirena_lwm2m_register_object(definition->object_id, false);
+        if (rc != 0) {
+            return rc;
+        }
+
+        rc = sirena_lwm2m_create_instance(definition->object_id, 0U, NULL);
+        if (rc != 0 && rc != -EEXIST) {
+            return rc;
+        }
+
+        rc = resources_add(definition->object_id, 0U, definition->resources,
+                           definition->resource_count);
+        if (rc != 0) {
+            return rc;
+        }
     }
 
-    rc = sirena_lwm2m_create_instance(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U, NULL);
-    if (rc != 0 && rc != -EEXIST) {
-        return rc;
-    }
-
-    rc = resources_add(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U, security_resources,
-                       sizeof(security_resources) / sizeof(security_resources[0]));
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = sirena_lwm2m_register_object(SIRENA_LWM2M_SERVER_OBJECT_ID, false);
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = sirena_lwm2m_create_instance(SIRENA_LWM2M_SERVER_OBJECT_ID, 0U, NULL);
-    if (rc != 0 && rc != -EEXIST) {
-        return rc;
-    }
-
-    rc = resources_add(SIRENA_LWM2M_SERVER_OBJECT_ID, 0U, server_resources,
-                       sizeof(server_resources) / sizeof(server_resources[0]));
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = sirena_lwm2m_register_object(SIRENA_LWM2M_DEVICE_OBJECT_ID, false);
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = sirena_lwm2m_create_instance(SIRENA_LWM2M_DEVICE_OBJECT_ID, 0U, NULL);
-    if (rc != 0 && rc != -EEXIST) {
-        return rc;
-    }
-
-    return resources_add(SIRENA_LWM2M_DEVICE_OBJECT_ID, 0U, device_resources,
-                         sizeof(device_resources) / sizeof(device_resources[0]));
+    return 0;
 }
 
 static int resource_write(uint16_t object_id, uint16_t instance_id, uint16_t resource_id,
