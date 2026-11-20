@@ -40,6 +40,7 @@ struct peer_capture {
     int code;
     int content_format;
     int observe;
+    int type;
     uint8_t token[COAP_TOKEN_MAX_LEN];
     uint8_t token_length;
     uint8_t payload[PEER_PAYLOAD_MAX];
@@ -135,6 +136,7 @@ static void peer_response_handler(const struct coap_client_response_data *data, 
     peer_capture.code = data->result_code;
     peer_capture.content_format = -1;
     peer_capture.observe = -1;
+    peer_capture.type = -1;
     peer_capture.token_length = 0U;
     peer_capture.payload_length = 0U;
 
@@ -142,6 +144,7 @@ static void peer_response_handler(const struct coap_client_response_data *data, 
         peer_capture.content_format = coap_get_option_int(data->packet, COAP_OPTION_CONTENT_FORMAT);
         peer_capture.observe = coap_get_option_int(data->packet, COAP_OPTION_OBSERVE);
         peer_capture.token_length = coap_header_get_token(data->packet, peer_capture.token);
+        peer_capture.type = coap_header_get_type(data->packet);
     }
 
     if (data->payload != NULL && data->payload_len < sizeof(peer_capture.payload)) {
@@ -562,6 +565,91 @@ ZTEST(sirena_lwm2m_protocol, test_negotiation_refuses_an_unsupported_format)
     zassert_equal(peer_capture.payload_length, 0U, "a failure must not carry a payload");
 }
 
+ZTEST(sirena_lwm2m_protocol, test_negotiation_refuses_a_format_the_codec_cannot_encode)
+{
+    static const uint16_t accepted[] = { SIRENA_LWM2M_CF_PLAIN_TEXT };
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_GET, "/1/0/1", 0U, NULL, 0U, accepted, ARRAY_SIZE(accepted),
+                      -1, NULL);
+    zassert_equal(rc, 0, "read request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_NOT_ACCEPTABLE,
+                  "a format the codec cannot encode for the resource must be refused");
+    zassert_equal(peer_capture.payload_length, 0U, "a failure must not carry a payload");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_negotiation_uses_the_plain_text_format_for_a_string)
+{
+    static const uint16_t accepted[] = { SIRENA_LWM2M_CF_PLAIN_TEXT };
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_GET, "/1/0/7", 0U, NULL, 0U, accepted, ARRAY_SIZE(accepted),
+                      -1, NULL);
+    zassert_equal(rc, 0, "read request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CONTENT, "unexpected response code");
+    zassert_equal(peer_capture.content_format, SIRENA_LWM2M_CF_PLAIN_TEXT,
+                  "the response must carry the content format of the representation");
+    zassert_true(peer_capture.payload_length > 0U, "the response must carry a payload");
+    zassert_equal(memcmp(peer_capture.payload, "U", 1U), 0,
+                  "the payload must carry the resource value");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_negotiation_refuses_an_accept_list_it_cannot_hold)
+{
+    static const uint16_t accepted[] = {
+        SIRENA_LWM2M_CF_TLV, SIRENA_LWM2M_CF_JSON, SIRENA_LWM2M_CF_CBOR,
+        SIRENA_LWM2M_CF_SENML_JSON, SIRENA_LWM2M_CF_SENML_CBOR,
+    };
+    int rc;
+
+    zassert_true(ARRAY_SIZE(accepted) > CONFIG_SIRENA_LWM2M_ACCEPTED_FORMATS_MAX,
+                 "the test must exceed the accepted format capacity");
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_GET, "/1/0/1", 0U, NULL, 0U, accepted, ARRAY_SIZE(accepted),
+                      -1, NULL);
+    zassert_equal(rc, 0, "read request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_NOT_ACCEPTABLE,
+                  "an accept list the client cannot hold must be refused");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_does_not_negotiate_on_the_acceptable_formats)
+{
+    static const uint16_t accepted[] = { 12345U };
+    uint8_t payload[PEER_PAYLOAD_MAX];
+    int64_t lifetime = 0;
+    size_t payload_length;
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    payload_length = peer_encode_integer(PEER_SERVER_OBJECT_ID, PEER_SERVER_LIFETIME_RESOURCE,
+                                         PEER_LIFETIME_UPDATED, payload, sizeof(payload));
+
+    rc = peer_request(COAP_METHOD_PUT, "/1/0/1", SIRENA_LWM2M_CF_TLV, payload, payload_length,
+                      accepted, ARRAY_SIZE(accepted), -1, NULL);
+    zassert_equal(rc, 0, "write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED, "unexpected response code");
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME_UPDATED, "the stored value was not updated");
+}
+
 ZTEST(sirena_lwm2m_protocol, test_negotiation_without_accept_uses_the_preferred_format)
 {
     int rc;
@@ -606,12 +694,14 @@ ZTEST(sirena_lwm2m_protocol, test_observe_registers_and_notifies)
 
     rc = sirena_lwm2m_notify_resource(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
                                       PEER_SERVER_LIFETIME_RESOURCE);
-    zassert_equal(rc, 0, "the notification failed: %d", rc);
+    zassert_equal(rc, 1, "the notification must reach the observation: %d", rc);
 
     rc = k_sem_take(&peer_semaphore, K_SECONDS(10));
     zassert_equal(rc, 0, "no notification was received");
 
     zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CONTENT, "unexpected notification code");
+    zassert_equal(peer_capture.type, COAP_TYPE_CON,
+                  "the notification must be a confirmable message");
     zassert_equal(peer_capture.token_length, token_length, "the notification token length differs");
     zassert_equal(memcmp(peer_capture.token, token, token_length), 0,
                   "the notification must reuse the observation token");
@@ -664,7 +754,7 @@ ZTEST(sirena_lwm2m_protocol, test_cancelled_observation_stops_the_notifications)
 
     rc = sirena_lwm2m_notify_resource(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
                                       PEER_SERVER_LIFETIME_RESOURCE);
-    zassert_equal(rc, 0, "the notification failed: %d", rc);
+    zassert_equal(rc, 0, "a cancelled observation must not be notified: %d", rc);
 
     rc = k_sem_take(&peer_semaphore, K_MSEC(500));
     zassert_not_equal(rc, 0, "a cancelled observation must not be notified");

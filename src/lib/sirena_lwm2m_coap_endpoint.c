@@ -75,7 +75,8 @@ static uint8_t endpoint_status_code(enum sirena_lwm2m_status status)
 }
 
 static int endpoint_send_message(uint8_t type, uint16_t message_id, uint8_t token_length,
-                                  const uint8_t *token, uint8_t code, uint16_t content_format,
+                                  const uint8_t *token, uint8_t code,
+                                  bool content_format_present, uint16_t content_format,
                                   int observe_sequence, const void *payload,
                                   size_t payload_length, const struct net_sockaddr *peer,
                                   net_socklen_t peer_length)
@@ -83,17 +84,13 @@ static int endpoint_send_message(uint8_t type, uint16_t message_id, uint8_t toke
     struct coap_packet response;
     int rc;
 
-    if (type == COAP_TYPE_NON_CON) {
-        message_id = coap_next_id();
-    }
-
     rc = coap_packet_init(&response, send_buffer, sizeof(send_buffer), COAP_VERSION_1, type,
                            token_length, token, code, message_id);
     if (rc < 0) {
         return rc;
     }
 
-    if (content_format != 0U) {
+    if (content_format_present) {
         rc = coap_append_option_int(&response, COAP_OPTION_CONTENT_FORMAT, content_format);
         if (rc < 0) {
             return rc;
@@ -161,7 +158,7 @@ static struct sirena_lwm2m_coap_observer *endpoint_observer_find(const uint8_t *
             continue;
         }
 
-        if (peer != NULL && net_sockaddr_cmp(net_sad(&observer->peer), peer) != 0) {
+        if (peer != NULL && !net_sockaddr_cmp(net_sad(&observer->peer), peer)) {
             continue;
         }
 
@@ -213,6 +210,10 @@ static void endpoint_handle_response(struct coap_packet *packet, const struct ne
     uint16_t message_id = coap_header_get_id(packet);
 
     if (!exchange.active) {
+        return;
+    }
+
+    if (!net_sockaddr_cmp(net_sad(&endpoint_server), peer)) {
         return;
     }
 
@@ -298,24 +299,32 @@ int sirena_lwm2m_coap_endpoint_parse_path(const struct coap_packet *packet, uint
     return 0;
 }
 
-static size_t endpoint_parse_accept(const struct coap_packet *packet, uint16_t *accepted,
-                                    size_t capacity)
+static int endpoint_parse_accept(const struct coap_packet *packet, uint16_t *accepted,
+                                 size_t capacity, size_t *count)
 {
-    struct coap_option options[CONFIG_SIRENA_LWM2M_ACCEPTED_FORMATS_MAX];
-    size_t count = 0U;
+    struct coap_option options[CONFIG_SIRENA_LWM2M_ACCEPTED_FORMATS_MAX + 1];
+    size_t parsed = 0U;
     int found;
     int i;
 
+    *count = 0U;
+
     found = coap_find_options(packet, COAP_OPTION_ACCEPT, options, ARRAY_SIZE(options));
-    if (found <= 0) {
-        return 0U;
+    if (found < 0) {
+        return -EINVAL;
     }
 
-    for (i = 0; i < found && count < capacity; ++i) {
-        accepted[count++] = (uint16_t)coap_option_value_to_int(&options[i]);
+    if ((size_t)found > capacity) {
+        return -ENOMEM;
     }
 
-    return count;
+    for (i = 0; i < found; ++i) {
+        accepted[parsed++] = (uint16_t)coap_option_value_to_int(&options[i]);
+    }
+
+    *count = parsed;
+
+    return 0;
 }
 
 static void endpoint_handle_request(struct coap_packet *packet, const struct net_sockaddr *peer,
@@ -328,11 +337,12 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     uint16_t path[SIRENA_LWM2M_COAP_PATH_SEGMENTS];
     uint8_t token[COAP_TOKEN_MAX_LEN];
     uint16_t message_id = coap_header_get_id(packet);
+    uint16_t response_message_id;
     const uint8_t *payload;
     uint16_t payload_length = 0U;
     uint8_t token_length = coap_header_get_token(packet, token);
-    size_t accepted_count;
-    size_t path_count;
+    size_t accepted_count = 0U;
+    size_t path_count = 0U;
     uint8_t request_type = coap_header_get_type(packet);
     uint8_t response_type;
     int content_format;
@@ -341,19 +351,18 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     uint8_t code;
 
     response_type = request_type == COAP_TYPE_CON ? COAP_TYPE_ACK : COAP_TYPE_NON_CON;
+    response_message_id = request_type == COAP_TYPE_CON ? message_id : coap_next_id();
 
-    path_count = 0U;
     rc = sirena_lwm2m_coap_endpoint_parse_path(packet, path, ARRAY_SIZE(path), &path_count);
     if (rc != 0 || path_count != SIRENA_LWM2M_COAP_PATH_SEGMENTS) {
-        (void)endpoint_send_message(response_type, message_id, token_length, token,
-                                    COAP_RESPONSE_CODE_NOT_FOUND, 0U, -1, NULL, 0U, peer,
+        (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                    COAP_RESPONSE_CODE_NOT_FOUND, false, 0U, -1, NULL, 0U, peer,
                                     peer_length);
         return;
     }
 
     observe = coap_get_option_int(packet, COAP_OPTION_OBSERVE);
     content_format = coap_get_option_int(packet, COAP_OPTION_CONTENT_FORMAT);
-    accepted_count = endpoint_parse_accept(packet, accepted, ARRAY_SIZE(accepted));
     payload = coap_packet_get_payload(packet, &payload_length);
 
     switch (coap_header_get_code(packet)) {
@@ -367,10 +376,20 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         protocol_request.operation = SIRENA_LWM2M_OPERATION_EXECUTE;
         break;
     default:
-        (void)endpoint_send_message(response_type, message_id, token_length, token,
-                                    COAP_RESPONSE_CODE_NOT_ALLOWED, 0U, -1, NULL, 0U, peer,
-                                    peer_length);
+        (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                    COAP_RESPONSE_CODE_NOT_ALLOWED, false, 0U, -1, NULL, 0U,
+                                    peer, peer_length);
         return;
+    }
+
+    if (protocol_request.operation == SIRENA_LWM2M_OPERATION_READ) {
+        rc = endpoint_parse_accept(packet, accepted, ARRAY_SIZE(accepted), &accepted_count);
+        if (rc != 0) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_NOT_ACCEPTABLE, false, 0U, -1, NULL,
+                                        0U, peer, peer_length);
+            return;
+        }
     }
 
     if (protocol_request.operation == SIRENA_LWM2M_OPERATION_READ && observe == 0) {
@@ -380,9 +399,9 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         }
 
         if (observer == NULL) {
-            (void)endpoint_send_message(response_type, message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE, false, 0U, -1,
+                                        NULL, 0U, peer, peer_length);
             return;
         }
     }
@@ -430,7 +449,8 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         }
     }
 
-    (void)endpoint_send_message(response_type, message_id, token_length, token, code,
+    (void)endpoint_send_message(response_type, response_message_id, token_length, token, code,
+                                protocol_response.status == SIRENA_LWM2M_STATUS_CONTENT,
                                 protocol_response.content_format,
                                 observer != NULL ? (int)observer->sequence : -1,
                                 protocol_response.payload, protocol_response.payload_length, peer,
@@ -728,8 +748,9 @@ int sirena_lwm2m_coap_endpoint_notify(uint16_t object_id, uint16_t instance_id,
 
         observer->sequence++;
 
-        if (endpoint_send_message(COAP_TYPE_NON_CON, 0U, observer->token_length, observer->token,
-                                  COAP_RESPONSE_CODE_CONTENT, observer->content_format,
+        if (endpoint_send_message(COAP_TYPE_CON, coap_next_id(), observer->token_length,
+                                  observer->token, COAP_RESPONSE_CODE_CONTENT, true,
+                                  observer->content_format,
                                   (int)observer->sequence, notify_payload, length,
                                   net_sad(&observer->peer), observer->peer_length) == 0) {
             sent++;
