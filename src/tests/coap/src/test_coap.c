@@ -15,12 +15,18 @@
 #define PEER_LIFETIME 300U
 #define PEER_LOCATION "rd"
 #define PEER_LOCATION_ID "1"
+#define PEER_OPTION_MAX 8
+#define PEER_QUERY_MAX 8
+#define PEER_QUERY_LEN 72
+#define PEER_ENDPOINT_NAME "sirena-test"
+#define PEER_ENDPOINT_NAME_MAX "sirena-endpoint-name-max-32chars"
 
 struct peer_request {
 	bool received;
 	uint8_t method;
 	char path[64];
-	char query[192];
+	uint8_t query_count;
+	char query[PEER_QUERY_MAX][PEER_QUERY_LEN];
 	int content_format;
 	char payload[320];
 };
@@ -29,13 +35,27 @@ static struct peer_request peer;
 static bool peer_reject_register;
 static uint16_t peer_port;
 static char server_uri[64];
+static char minimal_server_uri[64];
+static int64_t minimal_lifetime = PEER_LIFETIME;
+
+static void peer_append_path(const uint8_t *value, uint16_t length)
+{
+	size_t used = strlen(peer.path);
+
+	if (used + length + 2U > sizeof(peer.path)) {
+		return;
+	}
+
+	peer.path[used] = '/';
+	memcpy(&peer.path[used + 1U], value, length);
+	peer.path[used + 1U + length] = '\0';
+}
 
 static void peer_record(struct coap_packet *request, uint8_t method)
 {
-	struct coap_option options[8];
+	struct coap_option options[PEER_OPTION_MAX];
 	const uint8_t *payload;
 	uint16_t payload_length;
-	size_t length;
 	int count;
 	int i;
 
@@ -46,30 +66,20 @@ static void peer_record(struct coap_packet *request, uint8_t method)
 
 	count = coap_find_options(request, COAP_OPTION_URI_PATH, options, ARRAY_SIZE(options));
 	for (i = 0; i < count; ++i) {
-		length = strlen(peer.path);
-		if (length + options[i].len + 2U > sizeof(peer.path)) {
-			break;
-		}
-
-		peer.path[length] = '/';
-		memcpy(&peer.path[length + 1U], options[i].value, options[i].len);
-		peer.path[length + 1U + options[i].len] = '\0';
+		peer_append_path(options[i].value, options[i].len);
 	}
 
 	count = coap_find_options(request, COAP_OPTION_URI_QUERY, options, ARRAY_SIZE(options));
-	for (i = 0; i < count; ++i) {
-		length = strlen(peer.query);
-		if (length + options[i].len + 2U > sizeof(peer.query)) {
-			break;
+	for (i = 0; i < count && peer.query_count < PEER_QUERY_MAX; ++i) {
+		size_t length = options[i].len;
+
+		if (length >= PEER_QUERY_LEN) {
+			continue;
 		}
 
-		if (length > 0U) {
-			peer.query[length++] = '&';
-		}
-
-		memcpy(&peer.query[length], options[i].value, options[i].len);
-		length += options[i].len;
-		peer.query[length] = '\0';
+		memcpy(peer.query[peer.query_count], options[i].value, length);
+		peer.query[peer.query_count][length] = '\0';
+		peer.query_count++;
 	}
 
 	payload = coap_packet_get_payload(request, &payload_length);
@@ -77,6 +87,19 @@ static void peer_record(struct coap_packet *request, uint8_t method)
 		memcpy(peer.payload, payload, payload_length);
 		peer.payload[payload_length] = '\0';
 	}
+}
+
+static bool peer_has_query(const char *value)
+{
+	uint8_t i;
+
+	for (i = 0; i < peer.query_count; ++i) {
+		if (strcmp(peer.query[i], value) == 0) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 static int peer_reply(struct coap_resource *resource, struct coap_packet *request,
@@ -171,6 +194,77 @@ static void peer_provision(const char *uri)
 	zassert_equal(rc, 0, "provisioning failed");
 }
 
+static int minimal_read_string(uint16_t object_id, uint16_t instance_id, uint16_t resource_id,
+			       void *user_data, void *buffer, size_t *length)
+{
+	size_t used = strlen(minimal_server_uri);
+
+	(void)object_id;
+	(void)instance_id;
+	(void)resource_id;
+	(void)user_data;
+
+	if (buffer == NULL || (length != NULL && *length < used)) {
+		return -ENOMEM;
+	}
+
+	memcpy(buffer, minimal_server_uri, used);
+	if (length != NULL) {
+		*length = used;
+	}
+
+	return 0;
+}
+
+static int minimal_read_integer(uint16_t object_id, uint16_t instance_id, uint16_t resource_id,
+				void *user_data, void *buffer, size_t *length)
+{
+	(void)object_id;
+	(void)instance_id;
+	(void)resource_id;
+	(void)user_data;
+
+	if (buffer == NULL || length == NULL || *length < sizeof(minimal_lifetime)) {
+		return -ENOMEM;
+	}
+
+	memcpy(buffer, &minimal_lifetime, sizeof(minimal_lifetime));
+	*length = sizeof(minimal_lifetime);
+
+	return 0;
+}
+
+static void peer_provision_without_device_object(void)
+{
+	int rc;
+
+	rc = snprintf(minimal_server_uri, sizeof(minimal_server_uri), "%s", server_uri);
+	zassert_true(rc > 0 && rc < (int)sizeof(minimal_server_uri), "server uri copy failed");
+
+	rc = sirena_lwm2m_registry_init();
+	zassert_equal(rc, 0, "registry init failed");
+
+	rc = sirena_lwm2m_register_object(0U, false);
+	zassert_equal(rc, 0, "security object registration failed");
+
+	rc = sirena_lwm2m_create_instance(0U, 0U, NULL);
+	zassert_equal(rc, 0, "security instance creation failed");
+
+	rc = sirena_lwm2m_add_resource(0U, 0U, 0U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ,
+				       false, minimal_read_string, NULL, NULL, NULL);
+	zassert_equal(rc, 0, "security resource registration failed");
+
+	rc = sirena_lwm2m_register_object(1U, false);
+	zassert_equal(rc, 0, "server object registration failed");
+
+	rc = sirena_lwm2m_create_instance(1U, 0U, NULL);
+	zassert_equal(rc, 0, "server instance creation failed");
+
+	rc = sirena_lwm2m_add_resource(1U, 0U, 1U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ,
+				       false, minimal_read_integer, NULL, NULL, NULL);
+	zassert_equal(rc, 0, "server resource registration failed");
+}
+
 static void *suite_setup(void)
 {
 	struct net_sockaddr_in address;
@@ -223,7 +317,7 @@ ZTEST(sirena_lwm2m_coap, test_register_sends_expected_request)
 {
 	int rc;
 
-	rc = sirena_lwm2m_coap_set_endpoint_name("sirena-test");
+	rc = sirena_lwm2m_coap_set_endpoint_name(PEER_ENDPOINT_NAME);
 	zassert_equal(rc, 0, "endpoint name rejected");
 
 	rc = sirena_lwm2m_transport_register();
@@ -232,22 +326,37 @@ ZTEST(sirena_lwm2m_coap, test_register_sends_expected_request)
 	zassert_true(peer.received, "peer received no request");
 	zassert_equal(peer.method, COAP_METHOD_POST, "unexpected method");
 	zassert_str_equal(peer.path, "/rd", "unexpected path");
-	zassert_not_null(strstr(peer.query, "ep=sirena-test"), "missing endpoint name");
-	zassert_not_null(strstr(peer.query, "lt=300"), "missing lifetime");
-	zassert_not_null(strstr(peer.query, "lwm2m=1.2"), "missing lwm2m version");
-	zassert_not_null(strstr(peer.query, "b=U"), "missing binding mode");
+	zassert_equal(peer.query_count, 4, "the query must carry one option per parameter");
+	zassert_true(peer_has_query("ep=sirena-test"), "missing endpoint name");
+	zassert_true(peer_has_query("lt=300"), "missing lifetime");
+	zassert_true(peer_has_query("lwm2m=1.2"), "missing lwm2m version");
+	zassert_true(peer_has_query("b=U"), "missing binding mode");
 	zassert_equal(peer.content_format, COAP_CONTENT_FORMAT_APP_LINK_FORMAT,
 		      "unexpected content format");
-	zassert_not_null(strstr(peer.payload, "</1/0>"), "missing server instance");
-	zassert_not_null(strstr(peer.payload, "</3/0>"), "missing device instance");
-	zassert_is_null(strstr(peer.payload, "</0/0>"), "security object must not be listed");
+	zassert_str_equal(peer.payload, "</1/0>,</3/0>", "unexpected registration payload");
+}
+
+ZTEST(sirena_lwm2m_coap, test_register_carries_maximum_endpoint_name)
+{
+	int rc;
+
+	rc = sirena_lwm2m_coap_set_endpoint_name(PEER_ENDPOINT_NAME_MAX);
+	zassert_equal(rc, 0, "endpoint name rejected");
+
+	rc = sirena_lwm2m_transport_register();
+	zassert_equal(rc, 0, "register failed");
+
+	zassert_true(peer.received, "peer received no request");
+	zassert_equal(peer.query_count, 4, "the query must carry one option per parameter");
+	zassert_true(peer_has_query("ep=sirena-endpoint-name-max-32chars"),
+		     "the endpoint name did not reach the peer");
 }
 
 ZTEST(sirena_lwm2m_coap, test_register_payload_follows_registry)
 {
 	int rc;
 
-	rc = sirena_lwm2m_coap_set_endpoint_name("sirena-test");
+	rc = sirena_lwm2m_coap_set_endpoint_name(PEER_ENDPOINT_NAME);
 	zassert_equal(rc, 0, "endpoint name rejected");
 
 	rc = sirena_lwm2m_create_instance(3U, 1U, NULL);
@@ -260,13 +369,27 @@ ZTEST(sirena_lwm2m_coap, test_register_payload_follows_registry)
 	zassert_not_null(strstr(peer.payload, "</3/0>"), "missing device instance");
 }
 
+ZTEST(sirena_lwm2m_coap, test_register_requires_mandatory_objects)
+{
+	int rc;
+
+	rc = sirena_lwm2m_coap_set_endpoint_name(PEER_ENDPOINT_NAME);
+	zassert_equal(rc, 0, "endpoint name rejected");
+
+	peer_provision_without_device_object();
+
+	rc = sirena_lwm2m_transport_register();
+	zassert_equal(rc, -EINVAL, "a registration without the mandatory objects must fail");
+	zassert_false(peer.received, "no request must be sent");
+}
+
 ZTEST(sirena_lwm2m_coap, test_register_stores_location_path)
 {
 	char location[64];
 	size_t length = sizeof(location);
 	int rc;
 
-	rc = sirena_lwm2m_coap_set_endpoint_name("sirena-test");
+	rc = sirena_lwm2m_coap_set_endpoint_name(PEER_ENDPOINT_NAME);
 	zassert_equal(rc, 0, "endpoint name rejected");
 
 	rc = sirena_lwm2m_transport_register();
@@ -281,7 +404,7 @@ ZTEST(sirena_lwm2m_coap, test_update_uses_location_path)
 {
 	int rc;
 
-	rc = sirena_lwm2m_coap_set_endpoint_name("sirena-test");
+	rc = sirena_lwm2m_coap_set_endpoint_name(PEER_ENDPOINT_NAME);
 	zassert_equal(rc, 0, "endpoint name rejected");
 
 	rc = sirena_lwm2m_transport_register();
@@ -293,16 +416,16 @@ ZTEST(sirena_lwm2m_coap, test_update_uses_location_path)
 	zassert_true(peer.received, "peer received no request");
 	zassert_equal(peer.method, COAP_METHOD_POST, "unexpected method");
 	zassert_str_equal(peer.path, "/rd/1", "unexpected path");
-	zassert_not_null(strstr(peer.query, "lt=300"), "missing lifetime");
-	zassert_not_null(strstr(peer.query, "b=U"), "missing binding mode");
-	zassert_is_null(strstr(peer.query, "ep="), "endpoint name must not be sent on update");
+	zassert_equal(peer.query_count, 2, "the query must carry one option per parameter");
+	zassert_true(peer_has_query("lt=300"), "missing lifetime");
+	zassert_true(peer_has_query("b=U"), "missing binding mode");
 }
 
 ZTEST(sirena_lwm2m_coap, test_deregister_uses_location_path)
 {
 	int rc;
 
-	rc = sirena_lwm2m_coap_set_endpoint_name("sirena-test");
+	rc = sirena_lwm2m_coap_set_endpoint_name(PEER_ENDPOINT_NAME);
 	zassert_equal(rc, 0, "endpoint name rejected");
 
 	rc = sirena_lwm2m_transport_register();
@@ -320,11 +443,16 @@ ZTEST(sirena_lwm2m_coap, test_deregister_without_registration)
 {
 	int rc;
 
-	rc = sirena_lwm2m_transport_deregister();
-	if (rc == 0) {
-		rc = sirena_lwm2m_transport_deregister();
-	}
+	rc = sirena_lwm2m_coap_set_endpoint_name(PEER_ENDPOINT_NAME);
+	zassert_equal(rc, 0, "endpoint name rejected");
 
+	rc = sirena_lwm2m_transport_register();
+	zassert_equal(rc, 0, "register failed");
+
+	rc = sirena_lwm2m_transport_deregister();
+	zassert_equal(rc, 0, "deregister failed");
+
+	rc = sirena_lwm2m_transport_deregister();
 	zassert_equal(rc, -EINVAL, "deregister without registration must fail");
 }
 
@@ -341,7 +469,7 @@ ZTEST(sirena_lwm2m_coap, test_register_rejects_secure_scheme)
 {
 	int rc;
 
-	rc = sirena_lwm2m_coap_set_endpoint_name("sirena-test");
+	rc = sirena_lwm2m_coap_set_endpoint_name(PEER_ENDPOINT_NAME);
 	zassert_equal(rc, 0, "endpoint name rejected");
 
 	peer_provision("coaps://127.0.0.1:5684");
@@ -355,7 +483,7 @@ ZTEST(sirena_lwm2m_coap, test_register_reports_precondition_failed)
 {
 	int rc;
 
-	rc = sirena_lwm2m_coap_set_endpoint_name("sirena-test");
+	rc = sirena_lwm2m_coap_set_endpoint_name(PEER_ENDPOINT_NAME);
 	zassert_equal(rc, 0, "endpoint name rejected");
 
 	peer_reject_register = true;
