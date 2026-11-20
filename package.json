@@ -1,0 +1,21 @@
+{
+  "name": "sirena-lwm2m-zephyr",
+  "private": true,
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0 <25.0.0"
+  },
+  "scripts": {
+    "check:node": "node scripts/check-node.mjs",
+    "check": "npm run check:node",
+    "init": "docker compose run --rm -T zephyr sh -c 'test -d /opt/zephyr-workspace/.west || west init -l /workspace /opt/zephyr-workspace'",
+    "update": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west update",
+    "build": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -b native_sim /workspace/src/smoke -d /workspace/build",
+    "test": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/smoke -d /workspace/build",
+    "clean": "docker compose run --rm -T zephyr rm -rf /workspace/build",
+    "smoke": "npm run init && npm run update && npm run build",
+    "flash": "docker compose --profile flash run --rm -w /opt/zephyr-workspace flash west flash -d /workspace/build",
+    "deploy": "docker compose --profile flash run --rm -w /opt/zephyr-workspace flash west flash -d /workspace/build"
+  }
+}

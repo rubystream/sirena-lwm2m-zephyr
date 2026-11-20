@@ -44,6 +44,90 @@ firmware.
 No JVM. No unnecessary layers. Just native embedded engineering, designed to make
 even the smallest devices first-class citizens of the connected world.
 
+## Repository Layout
+
+- `src/` - implementation code for the Sirena LwM2M Zephyr client.
+- `docs/` - developer-facing documentation.
+- Repository root - project entry point (`README.md`), agent instructions
+  (`AGENTS.md`), and Zephyr module build metadata expected by `west`
+  (`CMakeLists.txt`, `zephyr/module.yml` when introduced by later epics).
+  Root metadata is intentionally retained at the root and not moved.
+- Generated build, cache, and output paths are ignored by Git (see `.gitignore`).
+
+
+## First-time Setup
+
+1. Verify the host toolchain: `npm run check`.
+2. Build and run the smoke target: `npm run smoke`.
+
+See `docs/development.md` for the full first-time setup, caching, and
+troubleshooting.
+
+## Daily Commands
+
+Day-to-day work uses the npm scripts documented in `docs/development.md`
+(`build`, `test`, `clean`, `smoke`, and the opt-in `flash` / `deploy`).
+
+## Host Toolchain
+
+This repository uses Node.js LTS `24.22.0` as its host toolchain. The version is
+pinned through project metadata (`.nvmrc`, `.node-version`, `mise.toml`) and
+enforced by `package.json` `engines.node` (`>=24.0.0 <25.0.0`).
+
+Contributors should use a Node.js LTS `24.x` installation. Version managers such
+as `nvm`, `mise`, or `asdf` pick up the pinned version automatically from the
+metadata files.
+
+Verify the host Node.js version:
+
+```sh
+npm run check
+```
+
+Host scripts only orchestrate repository workflows. They never compile, flash, or
+install the Zephyr SDK.
+
+## Containerized Zephyr Dev Environment
+
+The Zephyr build environment is provided as a container based on the pinned
+base image `zephyrprojectrtos/zephyr-build:v0.30.0`. The image requires no host
+devices by default.
+
+Bring up the dev container:
+
+```sh
+docker compose run --rm zephyr west --version
+```
+
+Source is mounted from the repository root into `/workspace`; a named
+`zephyr-workspace` volume holds the external Zephyr workspace, and a named
+`ccache` volume persists the compiler cache across runs. The default service runs without
+`privileged`, devices, or added capabilities; hardware flashing is out of scope
+for the default container.
+
+Flashing/deployment is opt-in via the `flash` Compose profile, which runs a
+privileged container with `/dev/bus/usb` access. See `docs/development.md` for
+host permissions, device access, and safety notes.
+
+## Build and Smoke Workflow
+
+Container commands are exposed through npm scripts:
+
+```sh
+npm run init     # west init -l /workspace /opt/zephyr-workspace
+npm run update   # west update
+npm run build    # west build -b native_sim /workspace/src/smoke
+npm run test     # west build -t run
+npm run clean    # rm -rf /workspace/build
+npm run flash    # west flash (opt-in profile; requires host USB device permissions)
+npm run deploy   # same as npm run flash (opt-in profile)
+npm run smoke    # init, update, and build the smoke target
+```
+
+`npm run smoke` performs a headless initialization, update, and build of the
+minimal `src/smoke` target, which prints `sirena zephyr smoke ok`. The chain
+exits non-zero on any failure so CI can report success or failure.
+
 ## Reference
 
 * [The Zephyr Project. Zephyr](https://github.com/zephyrproject-rtos/zephyr) - a
