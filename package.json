@@ -8,6 +8,12 @@
   },
   "scripts": {
     "check:node": "node scripts/check-node.mjs",
-    "check": "npm run check:node"
+    "check": "npm run check:node",
+    "init": "docker compose run --rm zephyr west init -l .",
+    "update": "docker compose run --rm zephyr west update",
+    "build": "docker compose run --rm zephyr west build -b native_sim src/smoke",
+    "test": "docker compose run --rm zephyr west build -t run",
+    "clean": "docker compose run --rm zephyr rm -rf build",
+    "smoke": "npm run init && npm run update && npm run build"
   }
 }

@@ -56,6 +56,20 @@ Example: `feat/post-tag-filter`, `fix/sqlite-content-sync`.
   capabilities; hardware access is not granted by default.
 - Use `docker compose run --rm zephyr <command>` to run Zephyr toolchain commands.
 
+## Container Build Commands
+
+npm scripts wrap the containerized Zephyr workflow:
+
+- `npm run init` - `docker compose run --rm zephyr west init -l .`
+- `npm run update` - `docker compose run --rm zephyr west update`
+- `npm run build` - `docker compose run --rm zephyr west build -b native_sim src/smoke`
+- `npm run test` - `docker compose run --rm zephyr west build -t run`
+- `npm run clean` - `docker compose run --rm zephyr rm -rf build`
+- `npm run smoke` - init, update, then build
+
+The minimal smoke target lives under `src/smoke/` and prints
+`sirena zephyr smoke ok`.
+
 ## Host Toolchain
 
 - Node.js LTS `24.22.0` is the pinned host toolchain, declared via `.nvmrc`,

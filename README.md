@@ -91,6 +91,23 @@ volume persists the compiler cache across runs. The default service runs without
 `privileged`, devices, or added capabilities; hardware flashing is out of scope
 for the default container.
 
+## Build and Smoke Workflow
+
+Container commands are exposed through npm scripts:
+
+```sh
+npm run init     # west init -l .
+npm run update   # west update
+npm run build    # west build -b native_sim src/smoke
+npm run test     # west build -t run
+npm run clean    # rm -rf build
+npm run smoke    # init, update, and build the smoke target
+```
+
+`npm run smoke` performs a headless initialization, update, and build of the
+minimal `src/smoke` target, which prints `sirena zephyr smoke ok`. The chain
+exits non-zero on any failure so CI can report success or failure.
+
 ## Reference
 
 * [The Zephyr Project. Zephyr](https://github.com/zephyrproject-rtos/zephyr) - a
