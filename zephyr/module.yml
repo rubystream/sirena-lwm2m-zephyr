@@ -1,0 +1,4 @@
+name: sirena_lwm2m
+build:
+  cmake: .
+  kconfig: Kconfig
