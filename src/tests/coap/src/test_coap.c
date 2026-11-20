@@ -284,9 +284,6 @@ static void *suite_setup(void)
 		      net_ntohs(address.sin_port));
 	zassert_true(rc > 0 && rc < (int)sizeof(server_uri), "server uri build failed");
 
-	rc = sirena_lwm2m_coap_start();
-	zassert_equal(rc, 0, "transport start failed: %d", rc);
-
 	return NULL;
 }
 
@@ -309,6 +306,9 @@ static void test_before(void *fixture)
 	zassert_equal(rc, 0, "endpoint name reset failed");
 
 	peer_provision(server_uri);
+
+	rc = sirena_lwm2m_coap_start();
+	zassert_equal(rc, 0, "transport start failed: %d", rc);
 }
 
 ZTEST_SUITE(sirena_lwm2m_coap, NULL, suite_setup, test_before, NULL, NULL);

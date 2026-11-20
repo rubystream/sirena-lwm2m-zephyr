@@ -6,6 +6,7 @@
 #include <zephyr/net/tls_credentials.h>
 #include <zephyr/sys/util.h>
 #include <sirena/lwm2m/dtls.h>
+#include <sirena/lwm2m/engine.h>
 #include <sirena/lwm2m/object_registry.h>
 #include <sirena/lwm2m/objects.h>
 #include <sirena/lwm2m/transport.h>
@@ -48,6 +49,9 @@ static struct peer_request dtls_request;
 static struct peer_request plain_request;
 static char dtls_uri[64];
 static char plain_uri[64];
+static char custom_server_uri[64];
+static int64_t custom_security_mode;
+static k_tid_t security_read_thread;
 static int dtls_peer_socket = -1;
 static uint16_t peer_port;
 static uint16_t dtls_peer_port;
@@ -317,6 +321,79 @@ static void provision_nosec(const char *uri)
 	zassert_equal(rc, 0, "provisioning failed: %d", rc);
 }
 
+static int custom_read_string(uint16_t object_id, uint16_t instance_id, uint16_t resource_id,
+			      void *user_data, void *buffer, size_t *length)
+{
+	size_t used = strlen(custom_server_uri);
+
+	(void)object_id;
+	(void)instance_id;
+	(void)resource_id;
+	(void)user_data;
+
+	security_read_thread = k_current_get();
+
+	if (buffer == NULL || (length != NULL && *length < used)) {
+		return -ENOMEM;
+	}
+
+	memcpy(buffer, custom_server_uri, used);
+	if (length != NULL) {
+		*length = used;
+	}
+
+	return 0;
+}
+
+static int custom_read_integer(uint16_t object_id, uint16_t instance_id, uint16_t resource_id,
+			       void *user_data, void *buffer, size_t *length)
+{
+	(void)object_id;
+	(void)instance_id;
+	(void)resource_id;
+	(void)user_data;
+
+	security_read_thread = k_current_get();
+
+	if (buffer == NULL || length == NULL || *length < sizeof(custom_security_mode)) {
+		return -ENOMEM;
+	}
+
+	memcpy(buffer, &custom_security_mode, sizeof(custom_security_mode));
+	*length = sizeof(custom_security_mode);
+
+	return 0;
+}
+
+static void custom_security_object(const char *uri, int64_t mode)
+{
+	int rc;
+
+	rc = snprintf(custom_server_uri, sizeof(custom_server_uri), "%s", uri);
+	zassert_true(rc > 0 && rc < (int)sizeof(custom_server_uri), "custom uri build failed");
+
+	custom_security_mode = mode;
+
+	rc = sirena_lwm2m_registry_init();
+	zassert_equal(rc, 0, "registry init failed");
+
+	rc = sirena_lwm2m_register_object(SECURITY_OBJECT_ID, false);
+	zassert_equal(rc, 0, "security object registration failed");
+
+	rc = sirena_lwm2m_create_instance(SECURITY_OBJECT_ID, 0U, NULL);
+	zassert_equal(rc, 0, "security instance creation failed");
+
+	rc = sirena_lwm2m_add_resource(SECURITY_OBJECT_ID, 0U, 0U, SIRENA_LWM2M_VALUE_STRING,
+				       SIRENA_LWM2M_OP_READ, false, custom_read_string, NULL, NULL,
+				       NULL);
+	zassert_equal(rc, 0, "server uri resource registration failed");
+
+	rc = sirena_lwm2m_add_resource(SECURITY_OBJECT_ID, 0U, SECURITY_MODE_RESOURCE,
+				       SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ, false,
+				       custom_read_integer, NULL, NULL, NULL);
+	zassert_equal(rc, 0, "security mode resource registration failed");
+}
+
 static void *suite_setup(void)
 {
 	struct net_sockaddr_in address;
@@ -391,6 +468,27 @@ ZTEST(sirena_lwm2m_dtls, test_register_sends_expected_request)
 	zassert_str_equal(dtls_request.payload, "</1/0>,</3/0>", "unexpected registration payload");
 	zassert_true(strstr(dtls_request.payload, "</0/0>") == NULL,
 		      "the security object must not be listed");
+}
+
+ZTEST(sirena_lwm2m_dtls, test_the_security_object_is_read_in_the_engine_thread)
+{
+	k_tid_t application_thread = k_current_get();
+	k_tid_t engine_thread;
+	int rc;
+
+	custom_security_object(dtls_uri, SIRENA_LWM2M_SECURITY_MODE_PSK);
+
+	security_read_thread = NULL;
+
+	rc = sirena_lwm2m_transport_start();
+	zassert_equal(rc, 0, "transport start failed: %d", rc);
+
+	engine_thread = sirena_lwm2m_engine_thread_id();
+	zassert_not_null(engine_thread, "the engine thread is not running");
+	zassert_equal(security_read_thread, engine_thread,
+		      "the security object must be read in the engine thread");
+	zassert_not_equal(security_read_thread, application_thread,
+			  "the security object must not be read in the application thread");
 }
 
 ZTEST(sirena_lwm2m_dtls, test_dtls_binding_uses_the_secure_port)

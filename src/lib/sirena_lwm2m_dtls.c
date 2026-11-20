@@ -1,5 +1,7 @@
+#include "sirena_lwm2m_bindings.h"
 #include "sirena_lwm2m_coap_client.h"
 #include <sirena/lwm2m/dtls.h>
+#include <sirena/lwm2m/engine.h>
 #include <sirena/lwm2m/object_registry.h>
 #include <sirena/lwm2m/objects.h>
 #include <sirena/lwm2m/transport.h>
@@ -538,13 +540,13 @@ static int dtls_deregister(void)
     return rc;
 }
 
-static const struct sirena_lwm2m_transport_ops dtls_transport_ops = {
+const struct sirena_lwm2m_transport_ops sirena_lwm2m_dtls_transport_ops = {
     .register_client = dtls_register,
     .update = dtls_update,
     .deregister = dtls_deregister,
 };
 
-int sirena_lwm2m_dtls_start(void)
+int sirena_lwm2m_dtls_start_engine(void)
 {
     struct net_sockaddr_storage storage;
     int64_t mode;
@@ -574,23 +576,39 @@ int sirena_lwm2m_dtls_start(void)
         return rc;
     }
 
-    rc = sirena_lwm2m_transport_bind(&dtls_transport_ops);
-    if (rc != 0) {
-        return rc;
-    }
-
     transport_started = true;
 
     return 0;
 }
 
-int sirena_lwm2m_dtls_stop(void)
+int sirena_lwm2m_dtls_stop_engine(void)
 {
     dtls_session_close();
     location_path[0] = '\0';
     transport_started = false;
 
     return 0;
+}
+
+int sirena_lwm2m_dtls_start(void)
+{
+    int rc;
+
+    rc = sirena_lwm2m_transport_engine_ensure();
+    if (rc != 0) {
+        return rc;
+    }
+
+    return sirena_lwm2m_engine_submit(SIRENA_LWM2M_ENGINE_OPERATION_START_DTLS);
+}
+
+int sirena_lwm2m_dtls_stop(void)
+{
+    if (sirena_lwm2m_engine_thread_id() == NULL) {
+        return 0;
+    }
+
+    return sirena_lwm2m_engine_submit(SIRENA_LWM2M_ENGINE_OPERATION_STOP_DTLS);
 }
 
 int sirena_lwm2m_dtls_get_location_path(char *buffer, size_t *length)

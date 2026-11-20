@@ -1,8 +1,10 @@
+#include "sirena_lwm2m_bindings.h"
 #include "sirena_lwm2m_coap_client.h"
 #include <sirena/lwm2m/coap.h>
-#include <sirena/lwm2m/transport.h>
+#include <sirena/lwm2m/engine.h>
 #include <sirena/lwm2m/object_registry.h>
 #include <sirena/lwm2m/objects.h>
+#include <sirena/lwm2m/transport.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net/coap.h>
 #include <zephyr/net/coap_client.h>
@@ -370,7 +372,7 @@ static int coap_deregister(void)
     return rc;
 }
 
-static const struct sirena_lwm2m_transport_ops coap_transport_ops = {
+const struct sirena_lwm2m_transport_ops sirena_lwm2m_coap_transport_ops = {
     .register_client = coap_register,
     .update = coap_update,
     .deregister = coap_deregister,
@@ -381,12 +383,18 @@ int sirena_lwm2m_coap_set_endpoint_name(const char *name)
     return sirena_lwm2m_transport_set_endpoint_name(name);
 }
 
-int sirena_lwm2m_coap_start(void)
+int sirena_lwm2m_coap_start_engine(void)
 {
+    struct net_sockaddr_storage storage;
     int rc;
 
     if (transport_started) {
         return 0;
+    }
+
+    rc = server_address(&storage);
+    if (rc != 0) {
+        return rc;
     }
 
     client_socket = zsock_socket(NET_AF_INET, NET_SOCK_DGRAM, NET_IPPROTO_UDP);
@@ -401,19 +409,12 @@ int sirena_lwm2m_coap_start(void)
         return rc;
     }
 
-    rc = sirena_lwm2m_transport_bind(&coap_transport_ops);
-    if (rc != 0) {
-        (void)zsock_close(client_socket);
-        client_socket = -1;
-        return rc;
-    }
-
     transport_started = true;
 
     return 0;
 }
 
-int sirena_lwm2m_coap_stop(void)
+int sirena_lwm2m_coap_stop_engine(void)
 {
     if (client_socket >= 0) {
         (void)zsock_close(client_socket);
@@ -424,6 +425,27 @@ int sirena_lwm2m_coap_stop(void)
     transport_started = false;
 
     return 0;
+}
+
+int sirena_lwm2m_coap_start(void)
+{
+    int rc;
+
+    rc = sirena_lwm2m_transport_engine_ensure();
+    if (rc != 0) {
+        return rc;
+    }
+
+    return sirena_lwm2m_engine_submit(SIRENA_LWM2M_ENGINE_OPERATION_START_COAP);
+}
+
+int sirena_lwm2m_coap_stop(void)
+{
+    if (sirena_lwm2m_engine_thread_id() == NULL) {
+        return 0;
+    }
+
+    return sirena_lwm2m_engine_submit(SIRENA_LWM2M_ENGINE_OPERATION_STOP_COAP);
 }
 
 int sirena_lwm2m_coap_get_location_path(char *buffer, size_t *length)

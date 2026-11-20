@@ -1,18 +1,11 @@
-#include <sirena/lwm2m/transport.h>
+#include "sirena_lwm2m_bindings.h"
 #include <sirena/lwm2m/engine.h>
 #include <sirena/lwm2m/objects.h>
+#include <sirena/lwm2m/transport.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
 #include <errno.h>
 #include <string.h>
-
-#if IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_COAP)
-#include <sirena/lwm2m/coap.h>
-#endif
-
-#if IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_DTLS)
-#include <sirena/lwm2m/dtls.h>
-#endif
 
 #define SIRENA_LWM2M_SECURITY_OBJECT_ID 0U
 #define SIRENA_LWM2M_SERVER_URI_RESOURCE 0U
@@ -21,36 +14,106 @@
 #define SIRENA_LWM2M_COAP_SCHEME "coap://"
 #define SIRENA_LWM2M_COAPS_SCHEME "coaps://"
 
-enum sirena_lwm2m_transport_binding {
-    SIRENA_LWM2M_TRANSPORT_BINDING_NONE,
-    SIRENA_LWM2M_TRANSPORT_BINDING_COAP,
-    SIRENA_LWM2M_TRANSPORT_BINDING_DTLS,
+struct sirena_lwm2m_binding_entry {
+    enum sirena_lwm2m_transport_binding binding;
+    const struct sirena_lwm2m_transport_ops *ops;
+    int (*start)(void);
+    int (*stop)(void);
 };
 
+static const struct sirena_lwm2m_binding_entry binding_entries[] = {
+    {
+        .binding = SIRENA_LWM2M_TRANSPORT_BINDING_NONE,
+    },
+#if IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_COAP)
+    {
+        .binding = SIRENA_LWM2M_TRANSPORT_BINDING_COAP,
+        .ops = &sirena_lwm2m_coap_transport_ops,
+        .start = sirena_lwm2m_coap_start_engine,
+        .stop = sirena_lwm2m_coap_stop_engine,
+    },
+#endif
+#if IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_DTLS)
+    {
+        .binding = SIRENA_LWM2M_TRANSPORT_BINDING_DTLS,
+        .ops = &sirena_lwm2m_dtls_transport_ops,
+        .start = sirena_lwm2m_dtls_start_engine,
+        .stop = sirena_lwm2m_dtls_stop_engine,
+    },
+#endif
+};
+
+static struct k_mutex transport_lock;
 static const struct sirena_lwm2m_transport_ops *transport_ops;
+static const struct sirena_lwm2m_transport_ops *pending_ops;
+static enum sirena_lwm2m_transport_binding transport_binding;
 static char endpoint_name[CONFIG_SIRENA_LWM2M_ENDPOINT_NAME_MAX + 1U];
 
-static int transport_dispatch(enum sirena_lwm2m_engine_operation operation)
+static const struct sirena_lwm2m_binding_entry *binding_entry(
+    enum sirena_lwm2m_transport_binding binding)
 {
-    switch (operation) {
-    case SIRENA_LWM2M_ENGINE_OPERATION_REGISTER:
-        return transport_ops->register_client();
-    case SIRENA_LWM2M_ENGINE_OPERATION_UPDATE:
-        return transport_ops->update();
-    case SIRENA_LWM2M_ENGINE_OPERATION_DEREGISTER:
-        return transport_ops->deregister();
-    default:
-        return -EINVAL;
+    size_t i;
+
+    for (i = 0U; i < ARRAY_SIZE(binding_entries); ++i) {
+        if (binding_entries[i].binding == binding) {
+            return &binding_entries[i];
+        }
     }
+
+    return NULL;
 }
 
-static int transport_submit(enum sirena_lwm2m_engine_operation operation)
+static enum sirena_lwm2m_transport_binding binding_of(
+    const struct sirena_lwm2m_transport_ops *ops)
 {
-    if (transport_ops == NULL) {
+    size_t i;
+
+    for (i = 0U; i < ARRAY_SIZE(binding_entries); ++i) {
+        if (binding_entries[i].ops != NULL && binding_entries[i].ops == ops) {
+            return binding_entries[i].binding;
+        }
+    }
+
+    return SIRENA_LWM2M_TRANSPORT_BINDING_NONE;
+}
+
+static int transport_stop_binding(enum sirena_lwm2m_transport_binding binding)
+{
+    const struct sirena_lwm2m_binding_entry *entry = binding_entry(binding);
+    int rc = 0;
+
+    if (entry != NULL && entry->ops != NULL) {
+        rc = entry->stop();
+    }
+
+    if (transport_binding == binding) {
+        transport_ops = NULL;
+        transport_binding = SIRENA_LWM2M_TRANSPORT_BINDING_NONE;
+    }
+
+    return rc;
+}
+
+static int transport_start_binding(enum sirena_lwm2m_transport_binding binding)
+{
+    const struct sirena_lwm2m_binding_entry *entry = binding_entry(binding);
+    int rc;
+
+    if (entry == NULL || entry->ops == NULL) {
         return -ENOTSUP;
     }
 
-    return sirena_lwm2m_engine_submit(operation);
+    if (transport_binding != binding) {
+        rc = transport_stop_binding(transport_binding);
+        if (rc != 0) {
+            return rc;
+        }
+    }
+
+    transport_ops = entry->ops;
+    transport_binding = binding;
+
+    return entry->start();
 }
 
 static bool transport_scheme_is(const char *uri, const char *scheme)
@@ -82,28 +145,121 @@ static int transport_binding_for(const char *uri, int64_t mode,
     }
 }
 
-int sirena_lwm2m_transport_bind(const struct sirena_lwm2m_transport_ops *ops)
+static int transport_start_selected(void)
 {
-    const struct sirena_lwm2m_transport_ops *previous;
+    enum sirena_lwm2m_transport_binding binding = SIRENA_LWM2M_TRANSPORT_BINDING_NONE;
+    char uri[CONFIG_SIRENA_LWM2M_SERVER_URI_MAX + 1U];
+    size_t length = sizeof(uri);
+    int64_t mode;
     int rc;
+
+    rc = sirena_lwm2m_get_string(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                 SIRENA_LWM2M_SERVER_URI_RESOURCE, uri, &length);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = sirena_lwm2m_get_integer(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                  SIRENA_LWM2M_SECURITY_MODE_RESOURCE, &mode);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = transport_binding_for(uri, mode, &binding);
+    if (rc != 0) {
+        return rc;
+    }
+
+    return transport_start_binding(binding);
+}
+
+static int transport_bind_pending(void)
+{
+    const struct sirena_lwm2m_transport_ops *ops;
+
+    k_mutex_lock(&transport_lock, K_FOREVER);
+    ops = pending_ops;
+    pending_ops = NULL;
+    k_mutex_unlock(&transport_lock);
 
     if (ops == NULL) {
         return -EINVAL;
     }
 
-    previous = transport_ops;
     transport_ops = ops;
+    transport_binding = binding_of(ops);
+
+    return 0;
+}
+
+static int transport_dispatch(enum sirena_lwm2m_engine_operation operation)
+{
+    switch (operation) {
+    case SIRENA_LWM2M_ENGINE_OPERATION_START:
+        return transport_start_selected();
+    case SIRENA_LWM2M_ENGINE_OPERATION_START_COAP:
+        return transport_start_binding(SIRENA_LWM2M_TRANSPORT_BINDING_COAP);
+    case SIRENA_LWM2M_ENGINE_OPERATION_START_DTLS:
+        return transport_start_binding(SIRENA_LWM2M_TRANSPORT_BINDING_DTLS);
+    case SIRENA_LWM2M_ENGINE_OPERATION_STOP_COAP:
+        return transport_stop_binding(SIRENA_LWM2M_TRANSPORT_BINDING_COAP);
+    case SIRENA_LWM2M_ENGINE_OPERATION_STOP_DTLS:
+        return transport_stop_binding(SIRENA_LWM2M_TRANSPORT_BINDING_DTLS);
+    case SIRENA_LWM2M_ENGINE_OPERATION_REGISTER:
+        return transport_ops != NULL ? transport_ops->register_client() : -ENOTSUP;
+    case SIRENA_LWM2M_ENGINE_OPERATION_UPDATE:
+        return transport_ops != NULL ? transport_ops->update() : -ENOTSUP;
+    case SIRENA_LWM2M_ENGINE_OPERATION_DEREGISTER:
+        return transport_ops != NULL ? transport_ops->deregister() : -ENOTSUP;
+    case SIRENA_LWM2M_ENGINE_OPERATION_BIND:
+        return transport_bind_pending();
+    default:
+        return -EINVAL;
+    }
+}
+
+int sirena_lwm2m_transport_engine_ensure(void)
+{
+    int rc;
 
     rc = sirena_lwm2m_engine_start(transport_dispatch);
     if (rc == -EALREADY) {
         rc = 0;
     }
 
-    if (rc != 0) {
-        transport_ops = previous;
+    return rc;
+}
+
+int sirena_lwm2m_transport_bind(const struct sirena_lwm2m_transport_ops *ops)
+{
+    int rc;
+
+    if (ops == NULL) {
+        return -EINVAL;
     }
 
-    return rc;
+    rc = sirena_lwm2m_transport_engine_ensure();
+    if (rc != 0) {
+        return rc;
+    }
+
+    k_mutex_lock(&transport_lock, K_FOREVER);
+    pending_ops = ops;
+    k_mutex_unlock(&transport_lock);
+
+    return sirena_lwm2m_engine_submit(SIRENA_LWM2M_ENGINE_OPERATION_BIND);
+}
+
+static int transport_submit(enum sirena_lwm2m_engine_operation operation)
+{
+    int rc;
+
+    rc = sirena_lwm2m_transport_engine_ensure();
+    if (rc != 0) {
+        return rc;
+    }
+
+    return sirena_lwm2m_engine_submit(operation);
 }
 
 int sirena_lwm2m_transport_register(void)
@@ -146,49 +302,5 @@ const char *sirena_lwm2m_transport_endpoint_name(void)
 
 int sirena_lwm2m_transport_start(void)
 {
-    enum sirena_lwm2m_transport_binding binding = SIRENA_LWM2M_TRANSPORT_BINDING_NONE;
-    char uri[CONFIG_SIRENA_LWM2M_SERVER_URI_MAX + 1U];
-    size_t length = sizeof(uri);
-    int64_t mode;
-    int rc;
-
-    rc = sirena_lwm2m_get_string(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
-                                 SIRENA_LWM2M_SERVER_URI_RESOURCE, uri, &length);
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = sirena_lwm2m_get_integer(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
-                                  SIRENA_LWM2M_SECURITY_MODE_RESOURCE, &mode);
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = transport_binding_for(uri, mode, &binding);
-    if (rc != 0) {
-        return rc;
-    }
-
-    switch (binding) {
-    case SIRENA_LWM2M_TRANSPORT_BINDING_DTLS:
-#if IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_DTLS)
-#if IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_COAP)
-        (void)sirena_lwm2m_coap_stop();
-#endif
-        return sirena_lwm2m_dtls_start();
-#else
-        return -ENOTSUP;
-#endif
-    case SIRENA_LWM2M_TRANSPORT_BINDING_COAP:
-#if IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_COAP)
-#if IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_DTLS)
-        (void)sirena_lwm2m_dtls_stop();
-#endif
-        return sirena_lwm2m_coap_start();
-#else
-        return -ENOTSUP;
-#endif
-    default:
-        return -EINVAL;
-    }
+    return transport_submit(SIRENA_LWM2M_ENGINE_OPERATION_START);
 }

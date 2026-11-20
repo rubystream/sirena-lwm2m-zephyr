@@ -83,7 +83,26 @@ static request queue:
 ```c
 int sirena_lwm2m_engine_start(sirena_lwm2m_engine_handler_t handler);
 int sirena_lwm2m_engine_submit(enum sirena_lwm2m_engine_operation operation);
+k_tid_t sirena_lwm2m_engine_thread_id(void);
 ```
+
+The operations of the engine are the transport operations:
+
+| Operation | Work |
+| --- | --- |
+| `SIRENA_LWM2M_ENGINE_OPERATION_START` | Select the binding from the Security object and start it. |
+| `SIRENA_LWM2M_ENGINE_OPERATION_START_COAP` | Start the plaintext binding. |
+| `SIRENA_LWM2M_ENGINE_OPERATION_START_DTLS` | Start the secure binding. |
+| `SIRENA_LWM2M_ENGINE_OPERATION_STOP_COAP` | Stop the plaintext binding. |
+| `SIRENA_LWM2M_ENGINE_OPERATION_STOP_DTLS` | Stop the secure binding. |
+| `SIRENA_LWM2M_ENGINE_OPERATION_REGISTER` | Register with the server. |
+| `SIRENA_LWM2M_ENGINE_OPERATION_UPDATE` | Update the registration. |
+| `SIRENA_LWM2M_ENGINE_OPERATION_DEREGISTER` | Deregister from the server. |
+| `SIRENA_LWM2M_ENGINE_OPERATION_BIND` | Attach a binding to the transport interface. |
+
+`sirena_lwm2m_engine_thread_id()` returns the thread identifier of the engine
+thread, or `NULL` when the engine thread does not run. It lets a caller prove
+that a piece of work ran in engine context.
 
 `sirena_lwm2m_engine_start()` registers the transport handler and starts the
 engine thread. It returns `-EINVAL` for a `NULL` handler and `-EALREADY`
@@ -106,7 +125,9 @@ The stack size and the priority of the engine thread are configurable with
 ### Threading contract
 
 The application calls the transport API; the engine thread performs the work.
-The binding is never called re-entrantly from an application thread.
+The binding is never called re-entrantly from an application thread. The
+start and the stop of a binding are engine operations, so the application
+thread only queues them and waits for their completion.
 
 The object registry and the built-in objects API are not thread-safe. The
 binding reads the Security and Server objects from the engine thread, so the
@@ -148,12 +169,17 @@ int sirena_lwm2m_coap_get_location_path(char *buffer, size_t *length);
   longer than `CONFIG_SIRENA_LWM2M_ENDPOINT_NAME_MAX` is rejected with
   `-EINVAL`. Registering without an endpoint name fails with `-EINVAL` and no
   request is sent.
-- `sirena_lwm2m_coap_start()` creates the UDP socket, initializes the CoAP
-  client and binds the binding to the transport interface, which starts the
-  engine thread. It is idempotent and returns `0` when the transport is
-  already running.
+- `sirena_lwm2m_coap_start()` reads the server URI from the Security object,
+  creates the UDP socket, initializes the CoAP client and binds the binding to
+  the transport interface, which starts the engine thread. The work runs in the
+  engine thread, so the call returns the result of the work to the
+  application. It is idempotent and returns `0` when the transport is already
+  running. A server URI that does not use the `coap://` scheme is rejected
+  with `-EINVAL`, and a `coaps://` URI with `-ENOTSUP`.
 - `sirena_lwm2m_coap_stop()` closes the UDP socket and drops the registration
-  location path. The engine thread keeps running.
+  location path. The socket belongs to the engine thread, so the call queues
+  the stop on the engine thread and waits for its completion. The engine
+  thread keeps running.
 - `sirena_lwm2m_coap_get_location_path()` returns the location path the server
   assigned to the registration, for example `/rd/1`. It returns the character
   count without the terminating NUL, like the other string getters of the
@@ -244,13 +270,15 @@ int sirena_lwm2m_dtls_get_location_path(char *buffer, size_t *length);
 
 - `sirena_lwm2m_dtls_start()` checks the server URI and the security mode,
   binds the binding to the transport interface, which starts the engine
-  thread. It is idempotent and returns `0` when the transport is already
-  running. A server URI that does not use the `coaps://` scheme is rejected
-  with `-EINVAL` and a security mode that is not Pre-Shared Key with
-  `-EPROTONOSUPPORT`.
+  thread. The work runs in the engine thread, so the call returns the result
+  of the work to the application. It is idempotent and returns `0` when the
+  transport is already running. A server URI that does not use the `coaps://`
+  scheme is rejected with `-EINVAL` and a security mode that is not
+  Pre-Shared Key with `-EPROTONOSUPPORT`.
 - `sirena_lwm2m_dtls_stop()` closes the DTLS session, releases the
-  credentials and drops the registration location path. The engine thread
-  keeps running.
+  credentials and drops the registration location path. The session belongs to
+  the engine thread, so the call queues the stop on the engine thread and
+  waits for its completion. The engine thread keeps running.
 - `sirena_lwm2m_dtls_get_location_path()` returns the location path the server
   assigned to the registration, for example `/rd/1`.
 
