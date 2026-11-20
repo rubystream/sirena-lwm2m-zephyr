@@ -49,6 +49,13 @@ Use a lowercase, slash-separated prefix:
 
 Example: `feat/post-tag-filter`, `fix/sqlite-content-sync`.
 
+## Containerized Zephyr Build Environment
+
+- Base image is pinned to `zephyrprojectrtos/zephyr-build:v0.30.0`.
+- The default Compose service runs without privileged access, devices, or added
+  capabilities; hardware access is not granted by default.
+- Use `docker compose run --rm zephyr <command>` to run Zephyr toolchain commands.
+
 ## Host Toolchain
 
 - Node.js LTS `24.22.0` is the pinned host toolchain, declared via `.nvmrc`,
