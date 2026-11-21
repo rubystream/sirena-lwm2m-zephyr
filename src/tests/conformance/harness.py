@@ -27,10 +27,12 @@ TIERS = {
     "leshan": {
         "server": LeshanServer,
         "extra_conf": SOURCE_DIR + "/prj-leshan.conf",
+        "version": "1.1",
     },
     "sirena": {
         "server": SirenaServer,
         "extra_conf": SOURCE_DIR + "/prj-sirena.conf",
+        "version": "1.2",
     },
 }
 
@@ -160,7 +162,9 @@ def check_value(name, value, expected, expected_type):
     if str(value.value) != str(expected):
         raise HarnessError(name + " carries the value " + repr(value.value) + " instead of " +
                            repr(expected))
-    if value.type is not None and str(value.type).lower() != expected_type:
+    if value.type is None:
+        raise HarnessError(name + " carries no type")
+    if str(value.type).lower() != expected_type:
         raise HarnessError(name + " carries the type " + repr(value.type) + " instead of " +
                            repr(expected_type))
 
@@ -202,6 +206,10 @@ def run_tier(name):
         write_value = config_string(config, "CONFIG_SIRENA_LWM2M_CONFORMANCE_WRITE_VALUE")
         lifetime = config_int(config, "CONFIG_SIRENA_LWM2M_CONFORMANCE_LIFETIME")
         version = config_string(config, "CONFIG_SIRENA_LWM2M_LWM2M_VERSION")
+        if version != tier["version"]:
+            raise HarnessError("the client announces the LwM2M version " + repr(version) +
+                               " instead of " + repr(tier["version"]))
+        report("the client announces the LwM2M version " + version)
         binding = config_string(config, "CONFIG_SIRENA_LWM2M_CONFORMANCE_BINDING")
         host = server_uri.split("//")[1].split(":")[0]
         tap_address = host + "/24"
@@ -215,7 +223,7 @@ def run_tier(name):
         configure_tap(tap_address)
         registration = server.wait_for_registration(endpoint, 120)
         report("the " + server.name + " server registered the endpoint " + endpoint)
-        check_registration(registration, endpoint, lifetime, version, binding)
+        check_registration(registration, endpoint, lifetime, tier["version"], binding)
         observation = server.observe(battery_path)
         report("the " + server.name + " server observes " + battery_path)
         value = server.wait_for_notification(observation, battery_path, 60)
