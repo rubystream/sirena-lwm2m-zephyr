@@ -22,6 +22,20 @@ if(CONFIG_SIRENA_LWM2M_TRANSPORT_COAP OR CONFIG_SIRENA_LWM2M_TRANSPORT_DTLS)
     )
 endif()
 
+if(CONFIG_SIRENA_LWM2M_TRANSPORT_COAP OR CONFIG_SIRENA_LWM2M_TRANSPORT_DTLS OR
+   CONFIG_SIRENA_LWM2M_TRANSPORT_MQTT)
+    zephyr_library_sources(
+        src/lib/sirena_lwm2m_link_format.c
+    )
+endif()
+
+if(CONFIG_SIRENA_LWM2M_TRANSPORT_MQTT)
+    zephyr_library_sources(
+        src/lib/sirena_lwm2m_mqtt.c
+        src/lib/sirena_lwm2m_mqtt_payload.c
+    )
+endif()
+
 if(CONFIG_SIRENA_LWM2M_TRANSPORT_COAP)
     zephyr_library_sources(
         src/lib/sirena_lwm2m_coap.c

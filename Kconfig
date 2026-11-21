@@ -193,6 +193,67 @@ config SIRENA_LWM2M_TRANSPORT_DTLS
 	  enabled. An application that enables the mbed TLS heap instead
 	  does not need them for the key slot size.
 
+config SIRENA_LWM2M_TRANSPORT_MQTT
+	bool "Enable the MQTT transport binding"
+	default n
+	depends on NETWORKING
+	select MQTT_LIB
+	help
+	  Enables the MQTT transport binding of OMA LwM2M 1.2. The binding
+	  connects to the MQTT broker of the Security object, subscribes to
+	  the topic of the endpoint and publishes the registration, the
+	  answers and the notifications on it. The payloads are CBOR maps,
+	  as the specification defines them.
+
+	  The binding needs the MQTT library of Zephyr, which needs the
+	  networking stack, so it is not enabled by default.
+
+config SIRENA_LWM2M_MQTT_TOPIC_MAX
+	int "Maximum length of the MQTT topic of the endpoint"
+	default 128
+	range 32 512
+	depends on SIRENA_LWM2M_TRANSPORT_MQTT
+	help
+	  The topic of the endpoint is the prefix, the "lwm2m/rd/" root and
+	  the endpoint name. The buffer has to hold all of them.
+
+config SIRENA_LWM2M_MQTT_CLIENT_ID_MAX
+	int "Maximum length of the MQTT client identifier"
+	default 23
+	range 1 23
+	depends on SIRENA_LWM2M_TRANSPORT_MQTT
+	help
+	  MQTT 3.1.1 limits the client identifier to 23 bytes. The endpoint
+	  name is used as the client identifier when the application does not
+	  set one, and it is cut to this length.
+
+config SIRENA_LWM2M_MQTT_TOPIC_PREFIX_MAX
+	int "Maximum length of the MQTT topic prefix"
+	default 32
+	range 0 128
+	depends on SIRENA_LWM2M_TRANSPORT_MQTT
+	help
+	  The prefix is the tenant name the specification defines. It is
+	  optional and empty by default.
+
+config SIRENA_LWM2M_MQTT_BUFFER_SIZE
+	int "Size of the MQTT receive and transmit buffers"
+	default 512
+	range 128 2048
+	depends on SIRENA_LWM2M_TRANSPORT_MQTT
+	help
+	  The buffers hold a whole MQTT packet, so they have to hold the
+	  topic, the CBOR payload and the value it carries.
+
+config SIRENA_LWM2M_MQTT_RESPONSE_TIMEOUT_MS
+	int "Time the binding waits for a server response in milliseconds"
+	default 10000
+	range 100 60000
+	depends on SIRENA_LWM2M_TRANSPORT_MQTT
+	help
+	  The binding waits for the answer of the server to the Register,
+	  the Update and the Deregister request for this time.
+
 config SIRENA_LWM2M_TRANSPORT_NOSEC
 	bool "Allow the NoSec security mode"
 	default n

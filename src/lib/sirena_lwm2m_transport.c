@@ -14,6 +14,7 @@
 
 #define SIRENA_LWM2M_COAP_SCHEME "coap://"
 #define SIRENA_LWM2M_COAPS_SCHEME "coaps://"
+#define SIRENA_LWM2M_MQTT_SCHEME "mqtt://"
 
 struct sirena_lwm2m_binding_entry {
     enum sirena_lwm2m_transport_binding binding;
@@ -40,6 +41,14 @@ static const struct sirena_lwm2m_binding_entry binding_entries[] = {
         .ops = &sirena_lwm2m_dtls_transport_ops,
         .start = sirena_lwm2m_dtls_start_engine,
         .stop = sirena_lwm2m_dtls_stop_engine,
+    },
+#endif
+#if IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_MQTT)
+    {
+        .binding = SIRENA_LWM2M_TRANSPORT_BINDING_MQTT,
+        .ops = &sirena_lwm2m_mqtt_transport_ops,
+        .start = sirena_lwm2m_mqtt_start_engine,
+        .stop = sirena_lwm2m_mqtt_stop_engine,
     },
 #endif
 };
@@ -149,11 +158,15 @@ static int transport_binding_for(const char *uri, int64_t mode,
         if (!IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_NOSEC)) {
             return -EPERM;
         }
-        if (!transport_scheme_is(uri, SIRENA_LWM2M_COAP_SCHEME)) {
-            return -EINVAL;
+        if (transport_scheme_is(uri, SIRENA_LWM2M_COAP_SCHEME)) {
+            *binding = SIRENA_LWM2M_TRANSPORT_BINDING_COAP;
+            return 0;
         }
-        *binding = SIRENA_LWM2M_TRANSPORT_BINDING_COAP;
-        return 0;
+        if (transport_scheme_is(uri, SIRENA_LWM2M_MQTT_SCHEME)) {
+            *binding = SIRENA_LWM2M_TRANSPORT_BINDING_MQTT;
+            return 0;
+        }
+        return -EINVAL;
     default:
         return -ENOTSUP;
     }
@@ -232,6 +245,10 @@ static int transport_dispatch(enum sirena_lwm2m_engine_operation operation, void
         return transport_stop_binding(SIRENA_LWM2M_TRANSPORT_BINDING_COAP);
     case SIRENA_LWM2M_ENGINE_OPERATION_STOP_DTLS:
         return transport_stop_binding(SIRENA_LWM2M_TRANSPORT_BINDING_DTLS);
+    case SIRENA_LWM2M_ENGINE_OPERATION_START_MQTT:
+        return transport_start_binding(SIRENA_LWM2M_TRANSPORT_BINDING_MQTT);
+    case SIRENA_LWM2M_ENGINE_OPERATION_STOP_MQTT:
+        return transport_stop_binding(SIRENA_LWM2M_TRANSPORT_BINDING_MQTT);
     case SIRENA_LWM2M_ENGINE_OPERATION_REGISTER:
         return transport_ops != NULL ? transport_ops->register_client() : -ENOTSUP;
     case SIRENA_LWM2M_ENGINE_OPERATION_UPDATE:

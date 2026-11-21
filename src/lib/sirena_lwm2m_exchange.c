@@ -1,5 +1,6 @@
 #include "sirena_lwm2m_exchange.h"
 #include "sirena_lwm2m_coap_endpoint.h"
+#include "sirena_lwm2m_link_format.h"
 #include <sirena/lwm2m/object_registry.h>
 #include <sirena/lwm2m/objects.h>
 #include <sirena/lwm2m/transport.h>
@@ -27,14 +28,6 @@
 #define SIRENA_LWM2M_COAP_REGISTER_PATH "rd"
 #define SIRENA_LWM2M_COAP_LWM2M_VERSION "1.2"
 #define SIRENA_LWM2M_COAP_BINDING_MODE "U"
-
-struct sirena_lwm2m_exchange_payload {
-    char *buffer;
-    size_t capacity;
-    size_t length;
-    bool server_present;
-    bool device_present;
-};
 
 static char server_uri[CONFIG_SIRENA_LWM2M_SERVER_URI_MAX + 1U];
 
@@ -106,32 +99,6 @@ int sirena_lwm2m_exchange_request(enum sirena_lwm2m_exchange_scheme scheme, cons
     return 0;
 }
 
-static int payload_append(uint16_t object_id, uint16_t instance_id, void *user_data)
-{
-    struct sirena_lwm2m_exchange_payload *payload = user_data;
-    int written;
-
-    if (object_id == SIRENA_LWM2M_SECURITY_OBJECT_ID) {
-        return 0;
-    }
-
-    written = snprintf(payload->buffer + payload->length, payload->capacity - payload->length,
-                       "%s</%u/%u>", payload->length > 0U ? "," : "", object_id, instance_id);
-    if (written < 0 || (size_t)written >= payload->capacity - payload->length) {
-        return -ENOMEM;
-    }
-
-    payload->length += (size_t)written;
-
-    if (object_id == SIRENA_LWM2M_SERVER_OBJECT_ID) {
-        payload->server_present = true;
-    } else if (object_id == SIRENA_LWM2M_DEVICE_OBJECT_ID) {
-        payload->device_present = true;
-    }
-
-    return 0;
-}
-
 static int server_lifetime(int64_t *lifetime)
 {
     return sirena_lwm2m_get_integer(SIRENA_LWM2M_SERVER_OBJECT_ID, 0U,
@@ -141,11 +108,6 @@ static int server_lifetime(int64_t *lifetime)
 int sirena_lwm2m_exchange_register(char *path, size_t path_capacity, char *payload,
                                    size_t payload_capacity, size_t *payload_length)
 {
-    struct sirena_lwm2m_exchange_payload context = {
-        .buffer = payload,
-        .capacity = payload_capacity,
-        .length = 0U,
-    };
     const char *endpoint_name = sirena_lwm2m_transport_endpoint_name();
     int64_t lifetime;
     int rc;
@@ -160,13 +122,9 @@ int sirena_lwm2m_exchange_register(char *path, size_t path_capacity, char *paylo
         return rc;
     }
 
-    rc = sirena_lwm2m_foreach_instance(payload_append, &context);
+    rc = sirena_lwm2m_link_format_objects(payload, payload_capacity, payload_length);
     if (rc != 0) {
         return rc;
-    }
-
-    if (!context.server_present || !context.device_present) {
-        return -EINVAL;
     }
 
     written = snprintf(path, path_capacity, "%s?ep=%s&lt=%lld&lwm2m=%s&b=%s",
@@ -176,8 +134,6 @@ int sirena_lwm2m_exchange_register(char *path, size_t path_capacity, char *paylo
     if (written < 0 || (size_t)written >= path_capacity) {
         return -ENOMEM;
     }
-
-    *payload_length = context.length;
 
     return 0;
 }
