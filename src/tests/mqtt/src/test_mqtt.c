@@ -1076,7 +1076,8 @@ ZTEST(sirena_lwm2m_mqtt, test_the_registration_carries_the_registration_paramete
     zassert_true(message.has_lifetime, "the registration carries no lifetime");
     zassert_equal(message.lifetime, PEER_LIFETIME, "unexpected lifetime");
     zassert_true(message.has_version, "the registration carries no version");
-    zassert_str_equal(message.version, "1.2", "unexpected version");
+    zassert_str_equal(message.version, CONFIG_SIRENA_LWM2M_LWM2M_VERSION,
+                      "unexpected version");
     zassert_true(message.has_binding, "the registration carries no binding");
     zassert_str_equal(message.binding, "M", "unexpected binding");
     zassert_true(message.has_content_format, "the registration carries no content format");
