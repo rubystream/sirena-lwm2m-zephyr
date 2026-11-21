@@ -29,8 +29,8 @@ The flow of the sample is the sequence an application follows:
    Endpoint Client Name, which no OMA object carries.
 4. **Command handler.** `sirena_lwm2m_set_execute_handler()` registers the
    handler the protocol core calls when the server executes a resource. The
-   handler of the sample answers Device 4 Reboot and Server 8 Registration
-   Update Trigger.
+   handler of the sample answers every execute resource the client offers,
+   among them Device 4 Reboot and Server 8 Registration Update Trigger.
 5. **Transport.** `sirena_lwm2m_transport_start()` starts the binding that the
    server URI and the security mode select.
 6. **Registration.** `sirena_lwm2m_transport_register()` registers the client.
@@ -42,10 +42,12 @@ The flow of the sample is the sequence an application follows:
    client on the way out.
 
 The telemetry of the sample is the Device 9 Battery Level, which it lowers by
-five on every report. The v1 object registry accepts the mandatory objects 0,
-1 and 3 only, so an application cannot register an object of its own yet. A
-real application replaces the simulated battery level with the value of its own
-sensor, on a resource it owns.
+five on every report. The Device 9 resource belongs to the optional resources
+of the Device object, so the sample enables
+`CONFIG_SIRENA_LWM2M_OBJECT_DEVICE_OPTIONAL`. The v1 object registry accepts
+the mandatory objects 0, 1 and 3 only, so an application cannot register an
+object of its own yet. A real application replaces the simulated battery
+level with the value of its own sensor, on a resource it owns.
 
 The flow lives in `sample_flow.c` and not in `main.c`, so that the test suite
 runs the very same code the application runs. `main.c` only reads the
