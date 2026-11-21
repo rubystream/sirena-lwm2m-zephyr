@@ -33,19 +33,29 @@ services:
     command: bash
 
   leshan:
-    image: sirena-lwm2m-zephyr-leshan:v2.0.0-M17
+    image: sirena-lwm2m-zephyr-leshan:v2.0.0-M18
     build:
       context: .
       dockerfile: src/tests/leshan/leshan.Dockerfile
       args:
-        LESHAN_VERSION: 2.0.0-M17
+        LESHAN_VERSION: 2.0.0-M18
     profiles:
-      - leshan
+      - conformance
     command:
       - "-lp"
       - "5683"
       - "-wp"
       - "8080"
+
+  sirena-lwm2m2:
+    image: sirena-lwm2m2-server:0.5.0
+    build:
+      context: .
+      dockerfile: src/tests/sirena/sirena-lwm2m2.Dockerfile
+      args:
+        SIRENA_SERVER_VERSION: 0.5.0
+    profiles:
+      - conformance
 
   leshan-client:
     image: sirena-lwm2m-zephyr-dev:v0.30.0
@@ -53,10 +63,12 @@ services:
       context: .
       dockerfile: Dockerfile
     profiles:
-      - leshan
+      - conformance
     depends_on:
       - leshan
     network_mode: "service:leshan"
+    environment:
+      SIRENA_CONFORMANCE_TIER: leshan
     user: root
     devices:
       - /dev/net/tun:/dev/net/tun
@@ -66,11 +78,36 @@ services:
     volumes:
       - .:/workspace:ro
       - zephyr-workspace:/opt/zephyr-workspace
-      - leshan-build:/opt/leshan-build
+      - conformance-build:/opt/conformance-build
       - ccache:/opt/ccache
-    command: python3 /workspace/src/tests/leshan/harness.py
+    command: python3 /workspace/src/tests/conformance/harness.py
+
+  sirena-client:
+    image: sirena-lwm2m-zephyr-dev:v0.30.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - conformance
+    depends_on:
+      - sirena-lwm2m2
+    network_mode: "service:sirena-lwm2m2"
+    environment:
+      SIRENA_CONFORMANCE_TIER: sirena
+    user: root
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+      - zephyr-workspace:/opt/zephyr-workspace
+      - conformance-build:/opt/conformance-build
+      - ccache:/opt/ccache
+    command: python3 /workspace/src/tests/conformance/harness.py
 
 volumes:
   ccache:
   zephyr-workspace:
-  leshan-build:
+  conformance-build:

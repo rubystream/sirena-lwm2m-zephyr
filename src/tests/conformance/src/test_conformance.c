@@ -38,7 +38,7 @@ static void harness_execute_handler(uint16_t object_id, uint16_t instance_id,
 	harness_command_resource_id = resource_id;
 	k_mutex_unlock(&harness_lock);
 
-	printk("sirena lwm2m leshan harness: the command %u/%u/%u was received\n", object_id,
+	printk("sirena lwm2m conformance harness: the command %u/%u/%u was received\n", object_id,
 	       instance_id, resource_id);
 }
 
@@ -78,29 +78,29 @@ static int harness_set_device_string(uint16_t resource_id, const char *value)
 static int harness_prepare(void)
 {
 	struct sirena_lwm2m_provisioning provisioning = {
-		.server_uri = CONFIG_SIRENA_LWM2M_LESHAN_SERVER_URI,
+		.server_uri = CONFIG_SIRENA_LWM2M_CONFORMANCE_SERVER_URI,
 		.security_mode = SIRENA_LWM2M_SECURITY_MODE_NOSEC,
 		.short_server_id = 1U,
-		.lifetime = CONFIG_SIRENA_LWM2M_LESHAN_LIFETIME,
-		.binding = CONFIG_SIRENA_LWM2M_LESHAN_BINDING,
+		.lifetime = CONFIG_SIRENA_LWM2M_CONFORMANCE_LIFETIME,
+		.binding = CONFIG_SIRENA_LWM2M_CONFORMANCE_BINDING,
 	};
 	int rc;
 
 	rc = sirena_lwm2m_registry_init();
 	if (rc != 0) {
-		printk("sirena lwm2m leshan harness: the registry failed: %d\n", rc);
+		printk("sirena lwm2m conformance harness: the registry failed: %d\n", rc);
 		return rc;
 	}
 
 	rc = sirena_lwm2m_objects_init();
 	if (rc != 0) {
-		printk("sirena lwm2m leshan harness: the objects failed: %d\n", rc);
+		printk("sirena lwm2m conformance harness: the objects failed: %d\n", rc);
 		return rc;
 	}
 
 	rc = sirena_lwm2m_provision(&provisioning);
 	if (rc != 0) {
-		printk("sirena lwm2m leshan harness: the provisioning failed: %d\n", rc);
+		printk("sirena lwm2m conformance harness: the provisioning failed: %d\n", rc);
 		return rc;
 	}
 
@@ -109,12 +109,12 @@ static int harness_prepare(void)
 		return rc;
 	}
 
-	rc = harness_set_device_string(HARNESS_MODEL_RESOURCE_ID, "sirena-leshan");
+	rc = harness_set_device_string(HARNESS_MODEL_RESOURCE_ID, "sirena-conformance");
 	if (rc != 0) {
 		return rc;
 	}
 
-	rc = harness_set_device_string(HARNESS_SERIAL_RESOURCE_ID, "sirena-leshan-0001");
+	rc = harness_set_device_string(HARNESS_SERIAL_RESOURCE_ID, "sirena-conformance-0001");
 	if (rc != 0) {
 		return rc;
 	}
@@ -126,13 +126,13 @@ static int harness_prepare(void)
 
 	rc = sirena_lwm2m_set_execute_handler(harness_execute_handler, NULL);
 	if (rc != 0) {
-		printk("sirena lwm2m leshan harness: the execute handler failed: %d\n", rc);
+		printk("sirena lwm2m conformance harness: the execute handler failed: %d\n", rc);
 		return rc;
 	}
 
-	rc = sirena_lwm2m_transport_set_endpoint_name(CONFIG_SIRENA_LWM2M_LESHAN_ENDPOINT_NAME);
+	rc = sirena_lwm2m_transport_set_endpoint_name(CONFIG_SIRENA_LWM2M_CONFORMANCE_ENDPOINT_NAME);
 	if (rc != 0) {
-		printk("sirena lwm2m leshan harness: the endpoint name failed: %d\n", rc);
+		printk("sirena lwm2m conformance harness: the endpoint name failed: %d\n", rc);
 		return rc;
 	}
 
@@ -141,7 +141,7 @@ static int harness_prepare(void)
 
 static int harness_register(void)
 {
-	int64_t deadline = k_uptime_get() + CONFIG_SIRENA_LWM2M_LESHAN_REGISTRATION_TIMEOUT_MS;
+	int64_t deadline = k_uptime_get() + CONFIG_SIRENA_LWM2M_CONFORMANCE_REGISTRATION_TIMEOUT_MS;
 	int rc;
 
 	do {
@@ -150,7 +150,7 @@ static int harness_register(void)
 			return 0;
 		}
 
-		printk("sirena lwm2m leshan harness: the registration failed: %d\n", rc);
+		printk("sirena lwm2m conformance harness: the registration failed: %d\n", rc);
 		k_sleep(K_MSEC(HARNESS_RETRY_INTERVAL_MS));
 	} while (k_uptime_get() < deadline);
 
@@ -164,19 +164,19 @@ static int harness_publish_telemetry(void)
 	};
 	int rc;
 
-	value.data.integer = CONFIG_SIRENA_LWM2M_LESHAN_TELEMETRY_VALUE;
+	value.data.integer = CONFIG_SIRENA_LWM2M_CONFORMANCE_TELEMETRY_VALUE;
 
 	rc = sirena_lwm2m_set_value(HARNESS_OBJECT_ID, HARNESS_INSTANCE_ID,
 				    HARNESS_BATTERY_RESOURCE_ID, &value);
 	if (rc != 0) {
-		printk("sirena lwm2m leshan harness: the telemetry value failed: %d\n", rc);
+		printk("sirena lwm2m conformance harness: the telemetry value failed: %d\n", rc);
 		return rc;
 	}
 
 	rc = sirena_lwm2m_notify_resource(HARNESS_OBJECT_ID, HARNESS_INSTANCE_ID,
 					  HARNESS_BATTERY_RESOURCE_ID);
 	if (rc < 0) {
-		printk("sirena lwm2m leshan harness: the notification failed: %d\n", rc);
+		printk("sirena lwm2m conformance harness: the notification failed: %d\n", rc);
 		return rc;
 	}
 
@@ -184,7 +184,7 @@ static int harness_publish_telemetry(void)
 	harness_notifications += (uint32_t)rc;
 	k_mutex_unlock(&harness_lock);
 
-	printk("sirena lwm2m leshan harness: the telemetry %lld was sent to %d observers\n",
+	printk("sirena lwm2m conformance harness: the telemetry %lld was sent to %d observers\n",
 	       (long long)value.data.integer, rc);
 
 	return 0;
@@ -200,12 +200,12 @@ static bool harness_write_applied(void)
 		return false;
 	}
 
-	return strcmp(value, CONFIG_SIRENA_LWM2M_LESHAN_WRITE_VALUE) == 0;
+	return strcmp(value, CONFIG_SIRENA_LWM2M_CONFORMANCE_WRITE_VALUE) == 0;
 }
 
-ZTEST_SUITE(sirena_lwm2m_leshan, NULL, NULL, NULL, NULL, NULL);
+ZTEST_SUITE(sirena_lwm2m_conformance, NULL, NULL, NULL, NULL, NULL);
 
-ZTEST(sirena_lwm2m_leshan, test_the_client_registers_publishes_telemetry_and_takes_a_command)
+ZTEST(sirena_lwm2m_conformance, test_the_client_registers_publishes_telemetry_and_takes_a_command)
 {
 	uint16_t object_id = 0U;
 	uint16_t instance_id = 0U;
@@ -219,15 +219,15 @@ ZTEST(sirena_lwm2m_leshan, test_the_client_registers_publishes_telemetry_and_tak
 	rc = sirena_lwm2m_transport_start();
 	zassert_equal(rc, 0, "the transport failed: %d", rc);
 
-	printk("sirena lwm2m leshan harness: registering with %s as %s\n",
-	       CONFIG_SIRENA_LWM2M_LESHAN_SERVER_URI, CONFIG_SIRENA_LWM2M_LESHAN_ENDPOINT_NAME);
+	printk("sirena lwm2m conformance harness: registering with %s as %s\n",
+	       CONFIG_SIRENA_LWM2M_CONFORMANCE_SERVER_URI, CONFIG_SIRENA_LWM2M_CONFORMANCE_ENDPOINT_NAME);
 
 	rc = harness_register();
-	zassert_equal(rc, 0, "the registration with the Leshan server failed: %d", rc);
+	zassert_equal(rc, 0, "the registration with the server failed: %d", rc);
 
-	printk("sirena lwm2m leshan harness: registered\n");
+	printk("sirena lwm2m conformance harness: registered\n");
 
-	deadline = k_uptime_get() + CONFIG_SIRENA_LWM2M_LESHAN_COMMAND_TIMEOUT_MS;
+	deadline = k_uptime_get() + CONFIG_SIRENA_LWM2M_CONFORMANCE_COMMAND_TIMEOUT_MS;
 
 	while (k_uptime_get() < deadline) {
 		(void)harness_publish_telemetry();
@@ -237,15 +237,15 @@ ZTEST(sirena_lwm2m_leshan, test_the_client_registers_publishes_telemetry_and_tak
 			break;
 		}
 
-		k_sleep(K_MSEC(CONFIG_SIRENA_LWM2M_LESHAN_TELEMETRY_INTERVAL_MS));
+		k_sleep(K_MSEC(CONFIG_SIRENA_LWM2M_CONFORMANCE_TELEMETRY_INTERVAL_MS));
 	}
 
 	zassert_true(harness_notification_count() > 0U,
-		     "the Leshan server did not receive a telemetry notification");
+		     "the server did not receive a telemetry notification");
 	zassert_true(harness_write_applied(),
-		     "the Leshan server did not write the UTC offset resource of the client");
+		     "the server did not write the UTC offset resource of the client");
 	zassert_true(harness_command_seen(&object_id, &instance_id, &resource_id),
-		     "the Leshan server did not execute a command on the client");
+		     "the server did not execute a command on the client");
 	zassert_equal(object_id, HARNESS_OBJECT_ID, "the command carries an unexpected object");
 	zassert_equal(instance_id, HARNESS_INSTANCE_ID, "the command carries an unexpected instance");
 	zassert_equal(resource_id, HARNESS_REBOOT_RESOURCE_ID,
@@ -254,5 +254,5 @@ ZTEST(sirena_lwm2m_leshan, test_the_client_registers_publishes_telemetry_and_tak
 	rc = sirena_lwm2m_transport_deregister();
 	zassert_equal(rc, 0, "the deregistration failed: %d", rc);
 
-	printk("sirena lwm2m leshan harness: deregistered\n");
+	printk("sirena lwm2m conformance harness: deregistered\n");
 }

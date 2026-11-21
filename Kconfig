@@ -361,7 +361,7 @@ endif
 
 rsource "src/samples/lwm2m_client/Kconfig.sample"
 
-rsource "src/tests/leshan/Kconfig.leshan"
+rsource "src/tests/conformance/Kconfig.conformance"
 
 endif
 

@@ -1,0 +1,63 @@
+menu "Sirena LwM2M conformance harness"
+
+config SIRENA_LWM2M_CONFORMANCE_SERVER_URI
+	string "LwM2M server URI the harness registers with"
+	default "coap://192.168.0.1:5683"
+	help
+	  The URI of the server the harness registers with. The address is
+	  the one the harness gives to the Linux side of the TAP device the
+	  native_sim build creates.
+
+config SIRENA_LWM2M_CONFORMANCE_ENDPOINT_NAME
+	string "Endpoint name the harness registers with"
+	default "sirena-conformance"
+	help
+	  The LwM2M Endpoint Client Name of the harness. The server shows
+	  it as the name of the registered endpoint.
+
+config SIRENA_LWM2M_CONFORMANCE_LIFETIME
+	int "Registration lifetime of the harness in seconds"
+	default 300
+	range 1 86400
+
+config SIRENA_LWM2M_CONFORMANCE_BINDING
+	string "Binding mode the harness registers with"
+	default "U"
+	help
+	  The binding mode the client sends in the registration. The harness
+	  checks that the server shows it.
+
+config SIRENA_LWM2M_CONFORMANCE_TELEMETRY_VALUE
+	int "Value the harness reports in the telemetry resource"
+	default 42
+
+config SIRENA_LWM2M_CONFORMANCE_WRITE_VALUE
+	string "Value the harness expects the server to write"
+	default "+02:00"
+	help
+	  The harness writes this value in the UTC offset resource of the
+	  device object and checks that the client kept it.
+
+config SIRENA_LWM2M_CONFORMANCE_REGISTRATION_TIMEOUT_MS
+	int "Time the harness waits for the registration in milliseconds"
+	default 30000
+	range 1000 300000
+	help
+	  The harness retries the registration until the server accepts it.
+	  The TAP device only carries traffic once the harness has given its
+	  Linux side an address, so the first attempts can fail.
+
+config SIRENA_LWM2M_CONFORMANCE_TELEMETRY_INTERVAL_MS
+	int "Interval between the telemetry reports of the harness in milliseconds"
+	default 500
+	range 100 60000
+
+config SIRENA_LWM2M_CONFORMANCE_COMMAND_TIMEOUT_MS
+	int "Time the harness waits for the command of the server in milliseconds"
+	default 60000
+	range 1000 600000
+	help
+	  The harness publishes telemetry and waits for the server to observe
+	  it, to write a resource and to execute a resource.
+
+endmenu
