@@ -273,6 +273,16 @@ static int transport_dispatch(enum sirena_lwm2m_engine_operation operation, void
         return transport_ops->notify(request->object_id, request->instance_id,
                                      request->resource_id);
     }
+    case SIRENA_LWM2M_ENGINE_OPERATION_SET_VALUE: {
+        struct sirena_lwm2m_set_value_request *request = payload;
+
+        if (request == NULL) {
+            return -EINVAL;
+        }
+
+        return sirena_lwm2m_set_value(request->object_id, request->instance_id,
+                                      request->resource_id, request->value);
+    }
     default:
         return -EINVAL;
     }

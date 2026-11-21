@@ -90,15 +90,22 @@ A successful run prints `sirena zephyr smoke ok`.
 | Build and run DTLS transport tests with the noSec development gate open | `npm run test:dtls-nosec` |
 | Build and run protocol tests | `npm run test:protocol` |
 | Build and run MQTT transport tests | `npm run test:mqtt` |
+| Build the native simulator sample | `npm run build:sample` |
+| Run the native simulator sample | `npm run run:sample` |
+| Build and run the end-to-end sample tests | `npm run test:sample` |
 | Remove build output | `npm run clean` |
 | Full smoke workflow | `npm run smoke` |
 | Flash firmware (opt-in) | `npm run flash` |
 | Deploy firmware (opt-in) | `npm run deploy` |
 
-Registry APIs and the built-in objects API are not thread-safe and must be
-called from the engine thread. The transport API is called from the
-application, the transport work itself runs in the engine thread. See
-[Transport Bindings](transport.md).
+Registry APIs and the built-in objects API are not thread-safe. The
+application calls them while it prepares the client, before it starts the
+transport and the engine thread runs, and the engine calls them from the
+engine thread. The transport API is called from the application, the
+transport work itself runs in the engine thread.
+`sirena_lwm2m_set_value()` of the objects API is the exception: it applies the
+write in engine context, so an application thread may publish a value with it.
+See [Built-in LwM2M Objects](objects.md) and [Transport Bindings](transport.md).
 
 Rebuild from scratch without removing dependencies:
 
@@ -236,6 +243,7 @@ Flashing requires host access to USB programming/debugging hardware.
 - [Built-in LwM2M objects](objects.md)
 - [Transport bindings](transport.md)
 - [Protocol core](protocol.md)
+- [Native simulator sample](sample.md)
 - [Compose services](../compose.yml)
 - [Docker build](../Dockerfile)
 - [Project entry point](../README.md)
@@ -258,8 +266,10 @@ state that cannot be registered, `-ENOTSUP` for an unsupported scheme, a
 missing binding, a transport that is not running or a security mode that
 is not implemented, `-ENOMEM` for a value that does not fit the
 configured capacity, `-ENOENT` for a missing object, a missing credential
-or an unknown registration, and `-EALREADY` for an engine thread that is
-already running, which only `sirena_lwm2m_engine_start()` returns. The
+or an unknown registration, `-EALREADY` for an engine thread that is
+already running and `-EAGAIN` for an engine thread that cannot be created
+or for a full engine queue, which only `sirena_lwm2m_engine_start()` and
+`sirena_lwm2m_engine_submit()` return. The
 server response codes are mapped to distinct codes so that the caller can
 tell them apart: `-EBADMSG` for a bad request, `-EACCES` for a forbidden
 request, `-EPROTO` for a precondition that failed, `-EEXIST` for a
@@ -276,5 +286,7 @@ The built-in objects module and the typed application API use the same negative
 `errno` values: `-EINVAL` for a type mismatch or an invalid argument, `-ENOENT`
 for an unknown object, instance or resource, `-ENOMEM` for a value that exceeds
 the configured capacity, and `-ENOTSUP` for an operation the resource does not
-support. See [Built-in LwM2M Objects](objects.md) for the full API reference, the
+support. The thread-safe setter `sirena_lwm2m_set_value()` adds `-EINVAL` for
+a missing value and `-ENOTSUP` for a value of a type the registry does not
+store. See [Built-in LwM2M Objects](objects.md) for the full API reference, the
 resource sets and the Kconfig symbols.

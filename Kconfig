@@ -351,6 +351,8 @@ config SIRENA_LWM2M_COAP_MESSAGE_MAX
 
 endif
 
+rsource "src/samples/lwm2m_client/Kconfig.sample"
+
 endif
 
 endmenu

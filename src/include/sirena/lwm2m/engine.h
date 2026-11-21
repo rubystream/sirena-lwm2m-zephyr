@@ -16,6 +16,7 @@ enum sirena_lwm2m_engine_operation {
     SIRENA_LWM2M_ENGINE_OPERATION_DEREGISTER,
     SIRENA_LWM2M_ENGINE_OPERATION_BIND,
     SIRENA_LWM2M_ENGINE_OPERATION_NOTIFY,
+    SIRENA_LWM2M_ENGINE_OPERATION_SET_VALUE,
 };
 
 typedef int (*sirena_lwm2m_engine_handler_t)(enum sirena_lwm2m_engine_operation operation,

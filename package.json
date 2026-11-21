@@ -26,6 +26,9 @@
     "test:dtls": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/dtls -d /workspace/build/dtls",
     "test:dtls-nosec": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/dtls -d /workspace/build/dtls-nosec --extra-conf /workspace/src/tests/dtls/prj-nosec.conf",
     "test:protocol": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/protocol -d /workspace/build/protocol",
-    "test:mqtt": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/mqtt -d /workspace/build/mqtt"
+    "test:mqtt": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/mqtt -d /workspace/build/mqtt",
+    "build:sample": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -b native_sim /workspace/src/samples/lwm2m_client -d /workspace/build/sample",
+    "run:sample": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/samples/lwm2m_client -d /workspace/build/sample",
+    "test:sample": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/sample -d /workspace/build/sample-test"
   }
 }

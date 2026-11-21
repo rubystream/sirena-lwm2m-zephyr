@@ -15,6 +15,8 @@ intent; detailed documentation lives here to avoid bloating the root.
   the topics, the credentials and the error codes.
 - `protocol.md` - the server initiated read, write and execute operations, the
   content format negotiation, the observations and the notifications.
+- `sample.md` - the native simulator sample, its configuration, its bounded
+  lifetime and the end-to-end proof of its flow.
 
 Generated documentation output and build artifacts are ignored and never
 committed.

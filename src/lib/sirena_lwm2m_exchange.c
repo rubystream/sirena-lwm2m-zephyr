@@ -18,6 +18,7 @@
 
 #define SIRENA_LWM2M_SERVER_URI_RESOURCE 0U
 #define SIRENA_LWM2M_SERVER_LIFETIME_RESOURCE 1U
+#define SIRENA_LWM2M_SERVER_BINDING_RESOURCE 7U
 
 #define SIRENA_LWM2M_COAP_REGISTER_PATH "rd"
 #define SIRENA_LWM2M_COAP_LWM2M_VERSION "1.2"
@@ -97,10 +98,36 @@ static int server_lifetime(int64_t *lifetime)
                                     SIRENA_LWM2M_SERVER_LIFETIME_RESOURCE, lifetime);
 }
 
+static int server_binding(char *binding, size_t capacity)
+{
+    size_t default_length = strlen(SIRENA_LWM2M_COAP_BINDING_MODE);
+    size_t length = capacity;
+    int rc;
+
+    rc = sirena_lwm2m_get_string(SIRENA_LWM2M_SERVER_OBJECT_ID, 0U,
+                                  SIRENA_LWM2M_SERVER_BINDING_RESOURCE, binding, &length);
+    if (rc == -ENOENT) {
+        length = 0U;
+    } else if (rc != 0) {
+        return rc;
+    }
+
+    if (length == 0U) {
+        if (default_length >= capacity) {
+            return -ENOMEM;
+        }
+
+        memcpy(binding, SIRENA_LWM2M_COAP_BINDING_MODE, default_length + 1U);
+    }
+
+    return 0;
+}
+
 int sirena_lwm2m_exchange_register(char *path, size_t path_capacity, char *payload,
                                    size_t payload_capacity, size_t *payload_length)
 {
     const char *endpoint_name = sirena_lwm2m_transport_endpoint_name();
+    char binding[CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX + 1U];
     int64_t lifetime;
     int rc;
     int written;
@@ -114,6 +141,11 @@ int sirena_lwm2m_exchange_register(char *path, size_t path_capacity, char *paylo
         return rc;
     }
 
+    rc = server_binding(binding, sizeof(binding));
+    if (rc != 0) {
+        return rc;
+    }
+
     rc = sirena_lwm2m_link_format_objects(payload, payload_capacity, payload_length);
     if (rc != 0) {
         return rc;
@@ -121,8 +153,7 @@ int sirena_lwm2m_exchange_register(char *path, size_t path_capacity, char *paylo
 
     written = snprintf(path, path_capacity, "%s?ep=%s&lt=%lld&lwm2m=%s&b=%s",
                        SIRENA_LWM2M_COAP_REGISTER_PATH, endpoint_name,
-                       (long long)lifetime, SIRENA_LWM2M_COAP_LWM2M_VERSION,
-                       SIRENA_LWM2M_COAP_BINDING_MODE);
+                       (long long)lifetime, SIRENA_LWM2M_COAP_LWM2M_VERSION, binding);
     if (written < 0 || (size_t)written >= path_capacity) {
         return -ENOMEM;
     }
@@ -132,6 +163,7 @@ int sirena_lwm2m_exchange_register(char *path, size_t path_capacity, char *paylo
 
 int sirena_lwm2m_exchange_update(const char *location, char *path, size_t path_capacity)
 {
+    char binding[CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX + 1U];
     int64_t lifetime;
     int rc;
     int written;
@@ -141,8 +173,13 @@ int sirena_lwm2m_exchange_update(const char *location, char *path, size_t path_c
         return rc;
     }
 
+    rc = server_binding(binding, sizeof(binding));
+    if (rc != 0) {
+        return rc;
+    }
+
     written = snprintf(path, path_capacity, "%s?lt=%lld&b=%s", location, (long long)lifetime,
-                       SIRENA_LWM2M_COAP_BINDING_MODE);
+                       binding);
     if (written < 0 || (size_t)written >= path_capacity) {
         return -ENOMEM;
     }

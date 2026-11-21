@@ -120,9 +120,11 @@ observations that were notified, so `0` means that no observation of that path
 was registered. It returns `-ENOTSUP` when no transport is bound or when the
 engine thread does not run.
 
-The application sets the value before it publishes it, with the typed setters of
-`sirena/lwm2m/objects.h`, and the client reads the value from the registry when
-it builds the notification.
+The application publishes the value with `sirena_lwm2m_set_value()` of
+`sirena/lwm2m/objects.h` before it calls `sirena_lwm2m_notify_resource()`. The
+setter applies the write in engine context, so the value the client reads from
+the registry when it builds the notification is the value the application
+published.
 
 The execute handler of the application is registered with
 `sirena_lwm2m_set_execute_handler()`. The protocol core calls it when the server
@@ -139,9 +141,9 @@ The application calls the transport API and the notification API. Both only
 queue their work on the engine thread and wait for its completion.
 
 The object registry and the built-in objects API are not thread-safe. The
-application must set the values it publishes before it calls
-`sirena_lwm2m_notify_resource()`, and it must not touch the registry while the
-transport runs.
+application must not touch the registry while the transport runs. It publishes
+the values it observes with `sirena_lwm2m_set_value()` of
+`sirena/lwm2m/objects.h`, which applies the write in engine context.
 
 ## The socket ownership
 

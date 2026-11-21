@@ -1,4 +1,5 @@
 #include <sirena/lwm2m/objects.h>
+#include <sirena/lwm2m/engine.h>
 #include <sirena/lwm2m/object_registry.h>
 #include <zephyr/sys/util.h>
 #include <string.h>
@@ -497,6 +498,64 @@ static int resource_read(uint16_t object_id, uint16_t instance_id, uint16_t reso
 
     return resource->read(object_id, instance_id, resource_id, resource->user_data,
                           buffer, length);
+}
+
+static int value_write_typed(uint16_t object_id, uint16_t instance_id,
+                             uint16_t resource_id, const struct sirena_lwm2m_value *value)
+{
+    switch (value->type) {
+    case SIRENA_LWM2M_VALUE_BOOLEAN:
+        return resource_write(object_id, instance_id, resource_id,
+                              SIRENA_LWM2M_VALUE_BOOLEAN, &value->data.boolean,
+                              sizeof(value->data.boolean));
+    case SIRENA_LWM2M_VALUE_INTEGER:
+        return resource_write(object_id, instance_id, resource_id,
+                              SIRENA_LWM2M_VALUE_INTEGER, &value->data.integer,
+                              sizeof(value->data.integer));
+    case SIRENA_LWM2M_VALUE_UNSIGNED:
+        return resource_write(object_id, instance_id, resource_id,
+                              SIRENA_LWM2M_VALUE_UNSIGNED, &value->data.unsigned_integer,
+                              sizeof(value->data.unsigned_integer));
+    case SIRENA_LWM2M_VALUE_STRING:
+        if (value->data.string.value == NULL) {
+            return -EINVAL;
+        }
+        return resource_write(object_id, instance_id, resource_id,
+                              SIRENA_LWM2M_VALUE_STRING, value->data.string.value,
+                              value->data.string.length);
+    case SIRENA_LWM2M_VALUE_OPAQUE:
+        if (value->data.opaque.value == NULL && value->data.opaque.length > 0U) {
+            return -EINVAL;
+        }
+        return resource_write(object_id, instance_id, resource_id,
+                              SIRENA_LWM2M_VALUE_OPAQUE, value->data.opaque.value,
+                              value->data.opaque.length);
+    default:
+        return -ENOTSUP;
+    }
+}
+
+int sirena_lwm2m_set_value(uint16_t object_id, uint16_t instance_id,
+                           uint16_t resource_id, const struct sirena_lwm2m_value *value)
+{
+    struct sirena_lwm2m_set_value_request request;
+    k_tid_t engine_tid;
+
+    if (value == NULL) {
+        return -EINVAL;
+    }
+
+    engine_tid = sirena_lwm2m_engine_thread_id();
+    if (engine_tid == NULL || engine_tid == k_current_get()) {
+        return value_write_typed(object_id, instance_id, resource_id, value);
+    }
+
+    request.object_id = object_id;
+    request.instance_id = instance_id;
+    request.resource_id = resource_id;
+    request.value = value;
+
+    return sirena_lwm2m_engine_submit(SIRENA_LWM2M_ENGINE_OPERATION_SET_VALUE, &request);
 }
 
 int sirena_lwm2m_set_string(uint16_t object_id, uint16_t instance_id,

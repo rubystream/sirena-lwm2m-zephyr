@@ -1,6 +1,7 @@
 #ifndef SIRENA_LWM2M_OBJECTS_H
 #define SIRENA_LWM2M_OBJECTS_H
 
+#include <sirena/lwm2m/object_registry.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -27,6 +28,31 @@ struct sirena_lwm2m_provisioning {
     const char *binding;
 };
 
+struct sirena_lwm2m_value {
+    enum sirena_lwm2m_value_type type;
+    union {
+        bool boolean;
+        int64_t integer;
+        uint64_t unsigned_integer;
+        double floating_point;
+        struct {
+            const char *value;
+            size_t length;
+        } string;
+        struct {
+            const void *value;
+            size_t length;
+        } opaque;
+    } data;
+};
+
+struct sirena_lwm2m_set_value_request {
+    uint16_t object_id;
+    uint16_t instance_id;
+    uint16_t resource_id;
+    const struct sirena_lwm2m_value *value;
+};
+
 typedef void (*sirena_lwm2m_execute_handler_t)(uint16_t object_id,
                                                uint16_t instance_id,
                                                uint16_t resource_id,
@@ -36,6 +62,8 @@ int sirena_lwm2m_objects_init(void);
 
 int sirena_lwm2m_set_string(uint16_t object_id, uint16_t instance_id,
                             uint16_t resource_id, const char *value);
+int sirena_lwm2m_set_value(uint16_t object_id, uint16_t instance_id,
+                           uint16_t resource_id, const struct sirena_lwm2m_value *value);
 int sirena_lwm2m_get_string(uint16_t object_id, uint16_t instance_id,
                             uint16_t resource_id, char *buffer, size_t *length);
 int sirena_lwm2m_set_integer(uint16_t object_id, uint16_t instance_id,
