@@ -407,7 +407,9 @@ config SIRENA_LWM2M_SAMPLE_BINDING
 	default "U"
 	help
 	  The binding mode the sample registers with: "U" for UDP, "T" for TCP
-	  and "UQ" for UDP and TCP.
+	  and "UQ" for UDP and TCP. The sample writes it to the Binding
+	  resource of the Server object, and the client sends it as the "b"
+	  parameter of the registration.
 
 config SIRENA_LWM2M_SAMPLE_MANUFACTURER
 	string "Manufacturer of the sample device"
