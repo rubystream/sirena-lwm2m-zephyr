@@ -1,7 +1,7 @@
 # Transport Bindings
 
 The transport layer connects the LwM2M client core to a server. It is split in
-five parts:
+nine parts:
 
 | Part | Header | Implementation |
 | --- | --- | --- |
@@ -28,8 +28,8 @@ the registration payload, the request paths, the server address and the request
 itself with the mapping of its response. A change to the response mapping or to
 the path handling is therefore made once.
 
-Both bindings share one CoAP endpoint, which owns the socket of the transport.
-Zephyr's CoAP client cannot be used for that: it is response only. It
+The two CoAP bindings share one CoAP endpoint, which owns the socket of the
+transport. Zephyr's CoAP client cannot be used for that: it is response only. It
 dispatches an incoming datagram by the token of a request the client itself
 sent and answers a request with no matching token with a reset, so a server
 initiated request never reaches the application. It also owns the thread that
@@ -100,11 +100,13 @@ completion.
 | Server URI scheme | Security mode | Binding | Result |
 | --- | --- | --- | --- |
 | `coaps://` | 0, Pre-Shared Key | CoAP/DTLS | The DTLS binding starts. |
+| `mqtts://` | 0, Pre-Shared Key | MQTT | The MQTT binding starts and protects the connection with TLS. |
 | `coap://` | 3, NoSec | CoAP/UDP | The plaintext binding starts, but only when the noSec development gate is open. |
 | `mqtt://` | 3, NoSec | MQTT | The MQTT binding starts, but only when the noSec development gate is open. |
 | `coap://` | 0, Pre-Shared Key | none | `-EINVAL`, a pre-shared key server needs the secure scheme. |
 | `coaps://` | 3, NoSec | none | `-EINVAL`, a noSec server has no secure transport. |
 | `mqtt://` | 0, Pre-Shared Key | none | `-EINVAL`, a pre-shared key server needs the secure scheme. |
+| `mqtts://` | 3, NoSec | none | `-EINVAL`, a noSec server has no secure transport. |
 | any | 1, 2, 4 | none | `-ENOTSUP`, the security mode is not implemented. |
 
 The selection never falls back: a server that needs DTLS is never contacted in
@@ -184,7 +186,10 @@ binding reads the Security and Server objects from the engine thread, so the
 application must finish provisioning and configuring the client before it
 starts the transport. The DTLS binding reads the pre-shared key credentials
 from the Security object and runs the DTLS handshake in the engine thread as
-well.
+well. The MQTT binding reads the pre-shared key credentials from the Security
+object and runs the TLS handshake in the engine thread as well, and the
+client identifier and the topic prefix, which belong to the engine thread,
+may only be set before the transport runs.
 
 ### Callback context
 
@@ -462,11 +467,16 @@ int sirena_lwm2m_mqtt_stop(void);
 - `sirena_lwm2m_mqtt_set_client_id()` sets the MQTT Client Identifier of
   the CONNECT message. An identifier longer than
   `CONFIG_SIRENA_LWM2M_MQTT_CLIENT_ID_MAX` is rejected with `-EINVAL`, and
-  an empty identifier clears it, so the endpoint name is used again.
+  an empty identifier clears it, so the endpoint name is used again. The
+  identifier belongs to the engine thread, which reads it when it
+  connects, so the setter may only be called before the transport runs.
+  It returns `-EBUSY` while the transport runs.
 - `sirena_lwm2m_mqtt_set_topic_prefix()` sets the prefix of the topic of
   the endpoint. A prefix longer than
   `CONFIG_SIRENA_LWM2M_MQTT_TOPIC_PREFIX_MAX` is rejected with `-EINVAL`,
-  and an empty prefix clears it.
+  and an empty prefix clears it. Like the client identifier, the prefix
+  may only be set before the transport runs and the setter returns
+  `-EBUSY` while it runs.
 - `sirena_lwm2m_mqtt_start()` starts the binding in the engine thread. It
   is idempotent and returns `0` when the transport already runs.
 - `sirena_lwm2m_mqtt_stop()` stops the binding in the engine thread. The
@@ -476,10 +486,42 @@ int sirena_lwm2m_mqtt_stop(void);
 
 The binding is selected the same way as the other bindings: from the
 server URI in the Security object and from the security mode. The
-`mqtt://` scheme with the NoSec security mode selects the MQTT binding,
-and the noSec development gate applies to it as it applies to the
-plaintext CoAP binding. The `mqtts://` scheme is refused with `-ENOTSUP`:
-the MQTT transport over TLS is not part of this slice.
+`mqtt://` scheme with the NoSec security mode selects the MQTT binding
+over a plain TCP connection, and the noSec development gate applies to
+it as it applies to the plaintext CoAP binding. The `mqtts://` scheme
+with the Pre-Shared Key security mode selects the MQTT binding over a
+TLS connection. The two combinations never mix: the `mqtt://` scheme is
+refused with `-EINVAL` when the server uses the Pre-Shared Key mode,
+and the `mqtts://` scheme is refused with `-EINVAL` when the server
+uses the NoSec mode.
+
+### The transport over TLS
+
+The `mqtts://` scheme protects the connection to the broker with TLS,
+as the specification of the MQTT transport binding asks. The
+credentials come from the Security object of the server instance and
+from nowhere else, the same way the DTLS binding reads them:
+
+| Resource | Content |
+| --- | --- |
+| Security 0, resource 2 | The security mode, 0 for Pre-Shared Key |
+| Security 0, resource 3 | The PSK identity |
+| Security 0, resource 5 | The PSK |
+
+The binding registers the identity and the key with the TLS credential
+subsystem under the secure tag `CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG` and
+attaches the tag to the socket of the MQTT client, which connects over
+TLS 1.2 with the `TLS_PSK_WITH_AES_128_CCM_8` ciphersuite and without
+peer verification, because a pre-shared key server has no certificate
+to verify. The credentials are released when the transport stops, so a
+re-provisioning with other credentials cannot leave the old key
+registered. The TLS handshake runs in the engine thread, like the rest
+of the transport work.
+
+The MQTT library of Zephyr needs `CONFIG_MQTT_LIB_TLS` for the TLS
+transport and the TLS socket of Zephyr needs mbed TLS with the PSK key
+exchange, so the application enables `CONFIG_MQTT_LIB`,
+`CONFIG_MBEDTLS` and `CONFIG_NET_SOCKETS_SOCKOPT_TLS`.
 
 ### The topic structure
 
@@ -514,9 +556,13 @@ request it answers.
 The messages of the client and the messages of the server therefore share
 one topic. A broker delivers the messages a client publishes to the
 clients that subscribed to the topic, so the client receives its own
-messages back. The binding ignores the operations it sends itself, the
-Register, the Update, the De-register and the Notify, and it uses the
-token to match a response to its request.
+messages back. The binding therefore ignores the operations it sends
+itself, the Register, the Update, the De-register and the Notify, and
+it accepts a result only when it carries the token of the request it
+is waiting an answer for. The client uses the upper half of the token
+space for its own requests, so that the answer to a request of the
+server, which carries the token of the server, can never be mistaken
+for the answer to a request of the client.
 
 ### The payload
 
@@ -567,7 +613,7 @@ structure.
 
 | Operation | Operation code | Payload |
 | --- | --- | --- |
-| Register | 6 | `operation`, `token`, `ep`, `lifetime`, `version`, `b`, `payload` |
+| Register | 6 | `operation`, `token`, `ep`, `lifetime`, `version`, `b`, `ct`, `payload` |
 | Update | 7 | `operation`, `token`, `lifetime`, `b` |
 | De-register | 8 | `operation`, `token` |
 
@@ -576,6 +622,12 @@ object, the LwM2M version `1.2`, the binding mode `M` and the object list
 of the registry, as the CoAP binding does. The binding mode `M` is the
 MQTT value of the binding modes of the LwM2M Core specification, section
 6.2.1.2, the same way the CoAP binding uses `U` for UDP.
+
+The `ct` member of the registration carries the content format of the
+`payload` member, which is the CoRE link format of the object list, so
+it is `application/link-format`, 40. The CDDL of the specification,
+section 8.3.2, does not list the `ct` member for the registration
+interface, so it is an extension of the registration payload.
 
 The binding waits for the answer of the server to the Register, the
 Update and the De-register request, and it reports the result of the
@@ -614,8 +666,9 @@ and the negotiated content format.
 
 | Parameter | Source |
 | --- | --- |
-| Broker address | Security object resource 0, the LwM2M Server URI, for example `mqtt://192.0.2.10:1883` |
-| Port | 1883 when the URI carries no port |
+| Broker address | Security object resource 0, the LwM2M Server URI, for example `mqtt://192.0.2.10:1883` or `mqtts://192.0.2.10:8883` |
+| Port | 1883 for the `mqtt://` scheme and 8883 for the `mqtts://` scheme, when the URI carries no port |
+| Credentials | Security object instance 0, resources 3 and 5, the PSK identity and the PSK, for the `mqtts://` scheme |
 | Client identifier | The endpoint name, or the value of `sirena_lwm2m_mqtt_set_client_id()` |
 | Topic prefix | The value of `sirena_lwm2m_mqtt_set_topic_prefix()`, empty by default |
 | Lifetime | Server object instance 0, resource 1 |
@@ -636,7 +689,9 @@ The binding owns the MQTT connection and runs in the engine thread, like
 the other bindings. It connects to the broker, subscribes to the topic of
 the endpoint, publishes the messages and answers the requests of the
 server from the engine thread. The application only queues the lifecycle
-calls and waits for their completion.
+calls and waits for their completion. The TLS handshake of the
+`mqtts://` scheme runs in the engine thread as well, so the stack of the
+engine thread has to hold it.
 
 The MQTT client library of Zephyr has no thread of its own: the
 application reads the socket with `mqtt_input()`. The engine thread polls
@@ -664,21 +719,26 @@ sends and the results it maps:
 | 412 | - | `-EPROTO`, the LwM2M versions are not compatible |
 | 415 | a content format the codec cannot decode | `-EIO` |
 | 500 | an internal error of the client | `-EIO` |
-| 501 | - | `-EIO`, the operation is not implemented |
+| 501 | an operation the client does not implement | `-EIO`, the operation is not implemented |
 | 503 | an observation that does not fit the observation capacity | `-EIO`, the service is unavailable |
 
 The results the client sends are the results of the operation it
 answered: a read answers with 205, a write and an execute answer with
 204, an observe and a cancel-observe answer with 205, and a failure
-answers with the result of the failure.
+answers with the result of the failure. An operation the client does not
+implement, for example a composite operation, a Discover or a Delete, is
+answered with 501, as the generic errors of the specification ask. The
+answer carries the token of the request it answers, so that the server
+can match it.
 
 ### Error codes
 
 | Code | Meaning |
 | --- | --- |
 | `0` | The server accepted the operation. |
-| `-EINVAL` | The endpoint name is missing, the server URI is malformed or does not use the `mqtt://` scheme, the client identifier or the topic prefix is too long, the server is provisioned with the Pre-Shared Key security mode and needs the secure scheme, or the URI of a request does not name a resource. |
-| `-ENOTSUP` | The server URI uses the `mqtts://` scheme, the host is not a numeric IPv4 address, the binding is not built, or the server answered that the operation is not implemented or that the format is not supported. |
+| `-EINVAL` | The endpoint name is missing, the server URI is malformed or does not use the `mqtt://` or the `mqtts://` scheme, the client identifier or the topic prefix is too long, the server is provisioned with the Pre-Shared Key security mode and needs the secure scheme, the server is provisioned with the NoSec security mode and needs the plain scheme, or the URI of a request does not name a resource. |
+| `-EBUSY` | The client identifier or the topic prefix is set while the transport runs. |
+| `-ENOTSUP` | The host is not a numeric IPv4 address, the binding is not built, or the security mode of the server is not implemented: Raw Public Key (1), Certificate (2) or Certificate with EST (4). |
 | `-EPERM` | The noSec development gate is closed and the server is provisioned with the NoSec security mode. |
 | `-ENOENT` | The Security object, the Server object or the resource that holds the server URI or the lifetime does not exist, or the server answered that the URI is not found. |
 | `-ENOMEM` | The topic, the payload or the CBOR message does not fit the configured buffer. |
@@ -692,11 +752,10 @@ answers with the result of the failure.
 
 ### Not in this binding
 
-- The MQTT transport over TLS. The `mqtts://` scheme is refused with
-  `-ENOTSUP`.
 - The bootstrap interface, the `bs` topics.
 - The composite operations, the Create and the Delete operations, the
-  Discover and the Write-Attributes operations, the Send operation.
+  Discover and the Write-Attributes operations, the Send operation. The
+  client answers them with 501.
 - The block-wise transfer of large payloads.
 - The MQTT Server object (id 24) and the COSE object (id 23).
 
@@ -710,7 +769,7 @@ answers with the result of the failure.
 | `CONFIG_SIRENA_LWM2M_PSK_IDENTITY_MAX` | Maximum size of the PSK identity. | 128 |
 | `CONFIG_SIRENA_LWM2M_PSK_KEY_MAX` | Maximum size of the PSK key. | 64 |
 | `CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG` | Secure tag under which the DTLS binding registers the credentials. It has to be unique in the application. | 1 |
-| `CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX` | Size of the identity, public key and secret key buffers of the Security object. It is 128 when the DTLS binding is enabled. | 32 |
+| `CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX` | Size of the identity, public key and secret key buffers of the Security object. It is 128 when the DTLS or the MQTT binding is enabled. | 32 |
 | `CONFIG_COAP_EXTENDED_OPTIONS_LEN_VALUE` | Length of a CoAP option value. The module sizes it so that the endpoint client name fits. | 64 |
 | `CONFIG_SIRENA_LWM2M_ENGINE_QUEUE_SIZE` | Number of queued engine requests. | 8 |
 | `CONFIG_SIRENA_LWM2M_ENGINE_STACK_SIZE` | Stack size of the engine thread. | 2048 |
@@ -723,10 +782,11 @@ answers with the result of the failure.
 | `CONFIG_SIRENA_LWM2M_COAP_RESPONSE_TIMEOUT_MS` | Time the binding waits for a server response. | 10000 |
 | `CONFIG_SIRENA_LWM2M_ENGINE_POLL_INTERVAL_MS` | Interval the engine thread polls the transport socket with. | 20 |
 | `CONFIG_SIRENA_LWM2M_COAP_MESSAGE_MAX` | Size of the buffer that holds a CoAP message. | 512 |
-| `CONFIG_SIRENA_LWM2M_TRANSPORT_MQTT` | Enables the MQTT binding. It depends on `CONFIG_NETWORKING` and selects `CONFIG_MQTT_LIB`. | `n` |
+| `CONFIG_SIRENA_LWM2M_TRANSPORT_MQTT` | Enables the MQTT binding. It depends on `CONFIG_NET_SOCKETS`, `CONFIG_NET_TCP`, `CONFIG_MQTT_LIB`, `CONFIG_MBEDTLS` and `CONFIG_NET_SOCKETS_SOCKOPT_TLS` and selects `CONFIG_MQTT_LIB_TLS` and the mbed TLS PSK key exchange. | `n` |
+| `CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG` | Secure tag under which the MQTT binding registers the credentials. It has to be unique in the application. | 2 |
 | `CONFIG_SIRENA_LWM2M_MQTT_TOPIC_MAX` | Maximum length of the MQTT topic of the endpoint. | 128 |
 | `CONFIG_SIRENA_LWM2M_MQTT_CLIENT_ID_MAX` | Maximum length of the MQTT client identifier. MQTT 3.1.1 limits it to 23 bytes. | 23 |
-| `CONFIG_SIRENA_LWM2M_MQTT_TOPIC_PREFIX_MAX` | Maximum length of the MQTT topic prefix. | 32 |
+| `CONFIG_SIRENA_LWM2M_MQTT_TOPIC_PREFIX_MAX` | Maximum length of the MQTT topic prefix. It cannot be longer than the topic it is part of. | 32 |
 | `CONFIG_SIRENA_LWM2M_MQTT_BUFFER_SIZE` | Size of the MQTT receive and transmit buffers. | 512 |
 | `CONFIG_SIRENA_LWM2M_MQTT_RESPONSE_TIMEOUT_MS` | Time the binding waits for a server response. | 10000 |
 
@@ -737,6 +797,12 @@ secret is 48 bytes long and the static PSA key slots are sized by the largest
 hash of the build, so the master secret only fits into a key slot when HMAC
 and SHA-384 are enabled. An application that enables the mbed TLS heap
 instead does not need them for the key slot size.
+
+The MQTT binding needs the MQTT library and the TLS socket of Zephyr, so the
+application enables `CONFIG_MQTT_LIB`, `CONFIG_MBEDTLS` and
+`CONFIG_NET_SOCKETS_SOCKOPT_TLS`. It selects the same mbed TLS features as
+the DTLS binding, so that the pre-shared key of the Security object works
+with the same key exchange in both bindings.
 
 The registration request carries the endpoint client name in a URI-Query
 option. Zephyr limits the length of an option value to
@@ -819,3 +885,13 @@ execute and observe operations are answered on the wire and the answers
 are read back from the broker. The suite raises the size of the file
 descriptor table and of the network connection tables, because the broker
 and the client open and close a connection per test case.
+
+The MQTT suite covers the broker that speaks TLS as well: it runs a TLS
+broker with the pre-shared key of the Security object, connects the
+client to it with the `mqtts://` scheme and asserts on the bytes the
+broker received over the secured session. It also covers the refusal of
+the two combinations that do not match, the `mqtts://` scheme with a
+NoSec server and the `mqtt://` scheme with a Pre-Shared Key server, the
+answer with 501 for an operation the client does not implement, the
+refusal of an answer that carries another token and the refusal of an
+oversized publish and of the hostile CBOR payloads.
