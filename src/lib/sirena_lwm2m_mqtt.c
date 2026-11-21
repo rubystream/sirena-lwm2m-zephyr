@@ -750,13 +750,13 @@ static int mqtt_result_to_error(uint32_t result)
         return 0;
     case SIRENA_LWM2M_MQTT_RESULT_BAD_REQUEST:
         return -EBADMSG;
-    case 403U:
+    case SIRENA_LWM2M_MQTT_RESULT_FORBIDDEN:
         return -EACCES;
     case SIRENA_LWM2M_MQTT_RESULT_NOT_FOUND:
         return -ENOENT;
-    case 409U:
+    case SIRENA_LWM2M_MQTT_RESULT_CONFLICT:
         return -EEXIST;
-    case 412U:
+    case SIRENA_LWM2M_MQTT_RESULT_PRECONDITION_FAILED:
         return -EPROTO;
     default:
         return -EIO;
