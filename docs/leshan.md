@@ -32,11 +32,15 @@ the server instead of changing the client. Do not raise the version of the
 Leshan image without checking the registration again: a newer Leshan answers
 the registration with an error and the harness fails at its first step.
 
-The version is pinned twice: `compose.yml` names the image tag, and
-`src/tests/leshan/leshan.Dockerfile` downloads the jar of that version from
-Maven Central and checks its SHA-256 sum. The jar is the self contained
-`leshan-demo-server` artifact, so the image needs no other artifact and the
-host needs no Java.
+The version is named in `compose.yml`, in the tag of the image and in the
+build argument of the `leshan` service, which is the version of the jar the
+image is built from. The `src/tests/leshan/leshan.Dockerfile` keeps
+`2.0.0-M17` as the default of its own build argument, so a direct
+`docker build` works on its own, downloads the jar of that version from Maven
+Central and checks its SHA-256 sum. The sum is the guard: a jar that does not
+match the pinned sum stops the build instead of changing the server silently.
+The jar is the self contained `leshan-demo-server` artifact, so the image needs
+no other artifact and the host needs no Java.
 
 ## What the harness proves
 
@@ -78,6 +82,10 @@ TAP device, no container and no port behind.
 The host needs Docker and the `/dev/net/tun` device. It needs no Java, no TAP
 device of its own and no privileges: the device and the capability live in the
 container.
+
+A fresh checkout has no west workspace yet, so the first run creates it and
+clones the whole Zephyr tree into it, which takes a while. The later runs
+reuse that workspace and only rebuild the client.
 
 ## How the run is wired
 
@@ -132,5 +140,8 @@ not touch the wire format of the client.
 
 The `Kconfig.leshan` file holds the values both sides agree on: the server
 URI, the endpoint name, the lifetime, the version, the binding mode, the
-telemetry value and the value the server writes. The harness reads them from
-that file, so the client and the harness cannot drift apart.
+telemetry value and the value the server writes. The client is built from
+them, and the harness reads them from the resolved configuration of that
+build, the `.config` file of the build directory, so the harness always sees
+the values the client was built with and the client and the harness cannot
+drift apart.

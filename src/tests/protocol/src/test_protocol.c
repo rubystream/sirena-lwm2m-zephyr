@@ -244,7 +244,7 @@ static size_t peer_encode_integer(uint16_t object_id, uint16_t resource_id, int6
     return length;
 }
 
-static int64_t peer_decode_integer(uint16_t *content_format)
+static int64_t peer_decode_integer(uint16_t expected_resource_id, uint16_t *content_format)
 {
     struct sirena_lwm2m_codec_value values[4];
     size_t count = ARRAY_SIZE(values);
@@ -255,6 +255,10 @@ static int64_t peer_decode_integer(uint16_t *content_format)
     zassert_equal(rc, 0, "the tlv decoding failed: %d", rc);
     zassert_equal(count, 1U, "unexpected value count");
     zassert_equal(values[0].type, SIRENA_LWM2M_VALUE_INTEGER, "unexpected value type");
+    zassert_equal(values[0].id, expected_resource_id,
+                  "the encoded value carries an unexpected resource id");
+    zassert_equal(values[0].resource_id, expected_resource_id,
+                  "the decoded value carries an unexpected resource id");
 
     if (content_format != NULL) {
         *content_format = peer_capture.content_format;
@@ -346,7 +350,7 @@ ZTEST(sirena_lwm2m_protocol, test_read_returns_the_resource_value)
     zassert_equal(peer_capture.content_format, SIRENA_LWM2M_CF_TLV,
                   "the response must use the preferred content format");
 
-    value = peer_decode_integer(NULL);
+    value = peer_decode_integer(PEER_SERVER_LIFETIME_RESOURCE, NULL);
     zassert_equal(value, PEER_LIFETIME, "unexpected resource value");
 }
 
@@ -685,7 +689,7 @@ ZTEST(sirena_lwm2m_protocol, test_observe_registers_and_notifies)
     token_length = peer_capture.token_length;
     memcpy(token, peer_capture.token, token_length);
 
-    value = peer_decode_integer(NULL);
+    value = peer_decode_integer(PEER_SERVER_LIFETIME_RESOURCE, NULL);
     zassert_equal(value, PEER_LIFETIME, "unexpected resource value");
 
     rc = sirena_lwm2m_set_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
@@ -706,7 +710,7 @@ ZTEST(sirena_lwm2m_protocol, test_observe_registers_and_notifies)
     zassert_equal(memcmp(peer_capture.token, token, token_length), 0,
                   "the notification must reuse the observation token");
 
-    value = peer_decode_integer(NULL);
+    value = peer_decode_integer(PEER_SERVER_LIFETIME_RESOURCE, NULL);
     zassert_equal(value, PEER_LIFETIME_NOTIFIED, "the notification carries a stale value");
 }
 

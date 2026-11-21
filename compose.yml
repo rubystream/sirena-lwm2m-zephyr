@@ -37,6 +37,8 @@ services:
     build:
       context: .
       dockerfile: src/tests/leshan/leshan.Dockerfile
+      args:
+        LESHAN_VERSION: 2.0.0-M17
     profiles:
       - leshan
     command:

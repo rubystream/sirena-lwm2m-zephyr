@@ -3,6 +3,7 @@
 #include <zephyr/sys/printk.h>
 #include <sirena/lwm2m/object_registry.h>
 #include <sirena/lwm2m/objects.h>
+#include <sirena/lwm2m/protocol.h>
 #include <sirena/lwm2m/transport.h>
 #include <string.h>
 

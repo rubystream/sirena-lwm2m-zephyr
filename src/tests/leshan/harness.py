@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import subprocess
 import sys
 import threading
@@ -8,7 +7,7 @@ import time
 import urllib.error
 import urllib.request
 
-KCONFIG_PATH = "/workspace/src/tests/leshan/Kconfig.leshan"
+CONFIG_PATH = "/opt/leshan-build/zephyr/.config"
 BUILD_DIR = "/opt/leshan-build"
 WEST_DIR = "/opt/zephyr-workspace"
 CCACHE_DIR = "/opt/ccache"
@@ -31,29 +30,40 @@ def report(message):
     print("harness: " + message, flush=True)
 
 
-def kconfig_block(name):
-    with open(KCONFIG_PATH, "r", encoding="utf-8") as handle:
-        content = handle.read()
-    pattern = re.compile(r"^config\s+" + re.escape(name) + r"\s*$(.*?)(?=^config\s|\Z)",
-                         re.MULTILINE | re.DOTALL)
-    match = pattern.search(content)
-    if match is None:
-        raise HarnessError("the Kconfig option " + name + " is missing")
-    return match.group(1)
+def resolved_config():
+    values = {}
+
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as handle:
+            content = handle.read()
+    except OSError as error:
+        raise HarnessError("the resolved configuration is not readable: " + str(error))
+
+    for line in content.splitlines():
+        line = line.strip()
+        if not line.startswith("CONFIG_SIRENA_LWM2M_LESHAN_"):
+            continue
+        name, separator, value = line.partition("=")
+        if not separator:
+            continue
+        if len(value) > 1 and value.startswith('"') and value.endswith('"'):
+            value = value[1:-1]
+        values[name] = value
+
+    return values
 
 
-def kconfig_string(name):
-    match = re.search(r'default\s+"([^"]*)"', kconfig_block(name))
-    if match is None:
-        raise HarnessError("the Kconfig option " + name + " has no default")
-    return match.group(1)
+def config_string(values, name):
+    if name not in values:
+        raise HarnessError("the resolved configuration does not carry " + name)
+    return values[name]
 
 
-def kconfig_int(name):
-    match = re.search(r"default\s+(-?\d+)", kconfig_block(name))
-    if match is None:
-        raise HarnessError("the Kconfig option " + name + " has no default")
-    return int(match.group(1))
+def config_int(values, name):
+    value = config_string(values, name)
+    if not value.lstrip("-").isdigit():
+        raise HarnessError("the resolved configuration carries " + name + " as " + repr(value))
+    return int(value)
 
 
 def http_request(method, path, body=None, timeout=20):
@@ -323,26 +333,27 @@ def print_client_log():
 
 
 def main():
-    endpoint = kconfig_string("SIRENA_LWM2M_LESHAN_ENDPOINT_NAME")
-    server_uri = kconfig_string("SIRENA_LWM2M_LESHAN_SERVER_URI")
-    telemetry_value = kconfig_int("SIRENA_LWM2M_LESHAN_TELEMETRY_VALUE")
-    write_value = kconfig_string("SIRENA_LWM2M_LESHAN_WRITE_VALUE")
-    lifetime = kconfig_int("SIRENA_LWM2M_LESHAN_LIFETIME")
-    version = kconfig_string("SIRENA_LWM2M_LESHAN_LWM2M_VERSION")
-    binding = kconfig_string("SIRENA_LWM2M_LESHAN_BINDING")
-    host = server_uri.split("//")[1].split(":")[0]
-    tap_address = host + "/24"
-    battery_path = "/" + str(DEVICE_OBJECT_ID) + "/" + str(INSTANCE_ID) + "/" + \
-        str(BATTERY_RESOURCE_ID)
-    utc_offset_path = "/" + str(DEVICE_OBJECT_ID) + "/" + str(INSTANCE_ID) + "/" + \
-        str(UTC_OFFSET_RESOURCE_ID)
-    reboot_path = "/" + str(DEVICE_OBJECT_ID) + "/" + str(INSTANCE_ID) + "/" + \
-        str(REBOOT_RESOURCE_ID)
     process = None
     stream = None
     try:
         wait_for_server()
         build_client()
+        config = resolved_config()
+        endpoint = config_string(config, "CONFIG_SIRENA_LWM2M_LESHAN_ENDPOINT_NAME")
+        server_uri = config_string(config, "CONFIG_SIRENA_LWM2M_LESHAN_SERVER_URI")
+        telemetry_value = config_int(config, "CONFIG_SIRENA_LWM2M_LESHAN_TELEMETRY_VALUE")
+        write_value = config_string(config, "CONFIG_SIRENA_LWM2M_LESHAN_WRITE_VALUE")
+        lifetime = config_int(config, "CONFIG_SIRENA_LWM2M_LESHAN_LIFETIME")
+        version = config_string(config, "CONFIG_SIRENA_LWM2M_LESHAN_LWM2M_VERSION")
+        binding = config_string(config, "CONFIG_SIRENA_LWM2M_LESHAN_BINDING")
+        host = server_uri.split("//")[1].split(":")[0]
+        tap_address = host + "/24"
+        battery_path = "/" + str(DEVICE_OBJECT_ID) + "/" + str(INSTANCE_ID) + "/" + \
+            str(BATTERY_RESOURCE_ID)
+        utc_offset_path = "/" + str(DEVICE_OBJECT_ID) + "/" + str(INSTANCE_ID) + "/" + \
+            str(UTC_OFFSET_RESOURCE_ID)
+        reboot_path = "/" + str(DEVICE_OBJECT_ID) + "/" + str(INSTANCE_ID) + "/" + \
+            str(REBOOT_RESOURCE_ID)
         process = start_client()
         configure_tap(tap_address)
         registration = wait_for_registration(endpoint)
@@ -373,6 +384,9 @@ def main():
     except subprocess.CalledProcessError as error:
         report("the harness failed: the command " + " ".join(error.cmd) + " returned " +
                str(error.returncode))
+        return 1
+    except Exception as error:
+        report("the harness failed: " + type(error).__name__ + ": " + str(error))
         return 1
     finally:
         if stream is not None:
