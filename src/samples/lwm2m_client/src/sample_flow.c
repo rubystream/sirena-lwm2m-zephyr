@@ -8,11 +8,9 @@
 #include <errno.h>
 #include <string.h>
 
-#define SIRENA_LWM2M_SAMPLE_BATTERY_START 100
-#define SIRENA_LWM2M_SAMPLE_BATTERY_STEP 5
-
 static K_MUTEX_DEFINE(sample_lock);
 static struct sirena_lwm2m_sample_state sample_state;
+static bool sample_telemetry_reset;
 
 static void sample_state_error(int error)
 {
@@ -47,10 +45,27 @@ static void sample_execute_handler(uint16_t object_id, uint16_t instance_id,
 	sample_state.command_object_id = object_id;
 	sample_state.command_instance_id = instance_id;
 	sample_state.command_resource_id = resource_id;
+	if (object_id == SIRENA_LWM2M_SAMPLE_DEVICE_OBJECT_ID &&
+	    instance_id == SIRENA_LWM2M_SAMPLE_INSTANCE_ID &&
+	    resource_id == SIRENA_LWM2M_SAMPLE_REBOOT_RESOURCE_ID) {
+		sample_telemetry_reset = true;
+	}
 	k_mutex_unlock(&sample_lock);
 
 	printk("sirena lwm2m sample: command %u/%u/%u received\n", object_id, instance_id,
 	       resource_id);
+}
+
+static bool sample_telemetry_reset_take(void)
+{
+	bool reset;
+
+	k_mutex_lock(&sample_lock, K_FOREVER);
+	reset = sample_telemetry_reset;
+	sample_telemetry_reset = false;
+	k_mutex_unlock(&sample_lock);
+
+	return reset;
 }
 
 static int sample_set_device_string(uint16_t resource_id, const char *value)
@@ -170,7 +185,9 @@ static void sample_run_telemetry(const struct sirena_lwm2m_sample_config *config
 
 		k_sleep(K_MSEC(config->telemetry_interval_ms));
 
-		if (value > 0) {
+		if (sample_telemetry_reset_take()) {
+			value = SIRENA_LWM2M_SAMPLE_BATTERY_START;
+		} else if (value > 0) {
 			value -= SIRENA_LWM2M_SAMPLE_BATTERY_STEP;
 		}
 

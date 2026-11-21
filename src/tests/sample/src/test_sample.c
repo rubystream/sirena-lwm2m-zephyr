@@ -32,8 +32,6 @@
 #define SAMPLE_RUN_SECONDS 8U
 #define SAMPLE_TELEMETRY_INTERVAL_MS 500U
 #define SAMPLE_STACK_SIZE 4096
-#define SAMPLE_BATTERY_START 100
-#define SAMPLE_BATTERY_STEP 5
 
 struct peer_capture {
 	int count;
@@ -375,7 +373,9 @@ ZTEST(sirena_lwm2m_sample, test_the_sample_registers_publishes_telemetry_and_han
 	int64_t observed;
 	int64_t notified;
 	size_t payload_length;
+	bool reset;
 	int rc;
+	int i;
 
 	k_thread_create(&sample_thread, sample_stack, SAMPLE_STACK_SIZE, sample_thread_entry, NULL,
 			NULL, NULL, 5, 0, K_NO_WAIT);
@@ -404,7 +404,7 @@ ZTEST(sirena_lwm2m_sample, test_the_sample_registers_publishes_telemetry_and_han
 	memcpy(token, peer_capture.token, token_length);
 
 	observed = peer_decode_integer();
-	zassert_true(observed >= 0 && observed <= SAMPLE_BATTERY_START,
+	zassert_true(observed >= 0 && observed <= SIRENA_LWM2M_SAMPLE_BATTERY_START,
 		     "the observed value is out of range: %lld", (long long)observed);
 
 	rc = k_sem_take(&peer_semaphore, K_SECONDS(15));
@@ -418,9 +418,9 @@ ZTEST(sirena_lwm2m_sample, test_the_sample_registers_publishes_telemetry_and_han
 		      "the notification must reuse the observation token");
 
 	notified = peer_decode_integer();
-	zassert_true(notified >= 0 && notified <= SAMPLE_BATTERY_START,
+	zassert_true(notified >= 0 && notified <= SIRENA_LWM2M_SAMPLE_BATTERY_START,
 		     "the notified value is out of range: %lld", (long long)notified);
-	zassert_equal(notified % SAMPLE_BATTERY_STEP, 0,
+	zassert_equal(notified % SIRENA_LWM2M_SAMPLE_BATTERY_STEP, 0,
 		      "the notified value is not one the sample publishes");
 
 	rc = sirena_lwm2m_sample_state_read(&state);
@@ -440,6 +440,21 @@ ZTEST(sirena_lwm2m_sample, test_the_sample_registers_publishes_telemetry_and_han
 	zassert_equal(state.command_instance_id, PEER_INSTANCE_ID, "unexpected instance id");
 	zassert_equal(state.command_resource_id, PEER_DEVICE_REBOOT_RESOURCE,
 		      "unexpected resource id");
+
+	reset = false;
+
+	for (i = 0; i < 5; i++) {
+		rc = k_sem_take(&peer_semaphore, K_SECONDS(2));
+		zassert_equal(rc, 0, "no notification was received after the command");
+
+		notified = peer_decode_integer();
+		if (notified == SIRENA_LWM2M_SAMPLE_BATTERY_START) {
+			reset = true;
+			break;
+		}
+	}
+
+	zassert_true(reset, "the command must change the value the sample publishes");
 
 	rc = peer_request(COAP_METHOD_GET, "/3/0/0", 0U, NULL, 0U, -1);
 	zassert_equal(rc, 0, "the read request failed: %d", rc);
