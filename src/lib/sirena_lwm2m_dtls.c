@@ -1,5 +1,6 @@
 #include "sirena_lwm2m_bindings.h"
 #include "sirena_lwm2m_coap_endpoint.h"
+#include "sirena_lwm2m_credentials.h"
 #include "sirena_lwm2m_exchange.h"
 #include <sirena/lwm2m/dtls.h>
 #include <sirena/lwm2m/engine.h>
@@ -19,8 +20,6 @@
 #define SIRENA_LWM2M_SECURITY_OBJECT_ID 0U
 
 #define SIRENA_LWM2M_SECURITY_MODE_RESOURCE 2U
-#define SIRENA_LWM2M_IDENTITY_RESOURCE 3U
-#define SIRENA_LWM2M_SECRET_KEY_RESOURCE 5U
 
 static bool transport_started;
 static bool session_active;
@@ -43,69 +42,12 @@ static int security_mode_allowed(int64_t mode)
 
 static void credentials_release(void)
 {
-    (void)tls_credential_delete(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG, TLS_CREDENTIAL_PSK);
-    (void)tls_credential_delete(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG, TLS_CREDENTIAL_PSK_ID);
+    sirena_lwm2m_credentials_release(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG);
 }
 
 static int credentials_register(void)
 {
-    const void *identity = NULL;
-    const void *secret_key = NULL;
-    size_t identity_length = 0U;
-    size_t secret_key_length = 0U;
-    int rc;
-
-    rc = sirena_lwm2m_get_opaque_ref(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
-                                      SIRENA_LWM2M_IDENTITY_RESOURCE, &identity,
-                                      &identity_length);
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = sirena_lwm2m_get_opaque_ref(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
-                                      SIRENA_LWM2M_SECRET_KEY_RESOURCE, &secret_key,
-                                      &secret_key_length);
-    if (rc != 0) {
-        return rc;
-    }
-
-    if (identity_length == 0U) {
-        return -ENOENT;
-    }
-
-    if (identity_length > CONFIG_SIRENA_LWM2M_PSK_IDENTITY_MAX) {
-        return -EINVAL;
-    }
-
-    if (secret_key_length == 0U) {
-        return -ENOENT;
-    }
-
-    if (secret_key_length > CONFIG_SIRENA_LWM2M_PSK_KEY_MAX) {
-        return -EINVAL;
-    }
-
-    if (secret_key_length > MBEDTLS_PSK_MAX_LEN) {
-        return -ENOMEM;
-    }
-
-    credentials_release();
-
-    rc = tls_credential_add(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG, TLS_CREDENTIAL_PSK, secret_key,
-                             secret_key_length);
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = tls_credential_add(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG, TLS_CREDENTIAL_PSK_ID, identity,
-                             identity_length);
-    if (rc != 0) {
-        credentials_release();
-
-        return rc;
-    }
-
-    return 0;
+    return sirena_lwm2m_credentials_register(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG);
 }
 
 static void dtls_session_close(void)
@@ -145,7 +87,7 @@ static int dtls_session_open(void)
         return rc;
     }
 
-    rc = sirena_lwm2m_exchange_server_address(&storage, SIRENA_LWM2M_EXCHANGE_SCHEME_COAPS);
+    rc = sirena_lwm2m_exchange_server_address(&storage, SIRENA_LWM2M_URI_SCHEME_COAPS);
     if (rc != 0) {
         return rc;
     }
@@ -218,7 +160,7 @@ static int dtls_request(const char *path, enum coap_method method, bool content_
         return -ENOTSUP;
     }
 
-    return sirena_lwm2m_exchange_request(SIRENA_LWM2M_EXCHANGE_SCHEME_COAPS, path, method,
+    return sirena_lwm2m_exchange_request(SIRENA_LWM2M_URI_SCHEME_COAPS, path, method,
                                           content_format_present, content_format, payload,
                                           payload_length, location, location_capacity);
 }
@@ -341,7 +283,7 @@ int sirena_lwm2m_dtls_start_engine(void)
         return rc;
     }
 
-    rc = sirena_lwm2m_exchange_server_address(&storage, SIRENA_LWM2M_EXCHANGE_SCHEME_COAPS);
+    rc = sirena_lwm2m_exchange_server_address(&storage, SIRENA_LWM2M_URI_SCHEME_COAPS);
     if (rc != 0) {
         return rc;
     }

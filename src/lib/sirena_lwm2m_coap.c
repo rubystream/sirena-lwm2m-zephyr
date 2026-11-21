@@ -67,7 +67,7 @@ static int coap_request(const char *path, enum coap_method method, bool content_
         return rc;
     }
 
-    return sirena_lwm2m_exchange_request(SIRENA_LWM2M_EXCHANGE_SCHEME_COAP, path, method,
+    return sirena_lwm2m_exchange_request(SIRENA_LWM2M_URI_SCHEME_COAP, path, method,
                                           content_format_present, content_format, payload,
                                           payload_length, location, location_capacity);
 }
@@ -175,7 +175,7 @@ int sirena_lwm2m_coap_start_engine(void)
         return rc;
     }
 
-    rc = sirena_lwm2m_exchange_server_address(&storage, SIRENA_LWM2M_EXCHANGE_SCHEME_COAP);
+    rc = sirena_lwm2m_exchange_server_address(&storage, SIRENA_LWM2M_URI_SCHEME_COAP);
     if (rc != 0) {
         return rc;
     }
