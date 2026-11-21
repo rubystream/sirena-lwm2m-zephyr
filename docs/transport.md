@@ -145,6 +145,7 @@ The operations of the engine are the transport operations:
 | `SIRENA_LWM2M_ENGINE_OPERATION_DEREGISTER` | Deregister from the server. |
 | `SIRENA_LWM2M_ENGINE_OPERATION_BIND` | Attach a binding to the transport interface. |
 | `SIRENA_LWM2M_ENGINE_OPERATION_NOTIFY` | Publish a resource value to the observations of the binding. |
+| `SIRENA_LWM2M_ENGINE_OPERATION_SET_VALUE` | Apply a resource value that an application thread publishes. |
 
 `sirena_lwm2m_engine_thread_id()` returns the thread identifier of the engine
 thread, or `NULL` when the engine thread does not run. It lets a caller prove
@@ -191,6 +192,10 @@ well. The MQTT binding reads the pre-shared key credentials from the Security
 object and runs the TLS handshake in the engine thread as well, and the
 client identifier and the topic prefix, which belong to the engine thread,
 may only be set before the transport runs.
+
+An application thread that publishes a value while the transport runs uses
+`sirena_lwm2m_set_value()` of `sirena/lwm2m/objects.h`, which queues the write
+on the engine thread and applies it in engine context.
 
 ### Callback context
 

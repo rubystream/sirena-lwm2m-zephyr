@@ -92,6 +92,46 @@ resource is written again. The DTLS binding uses it to hand the pre-shared key
 credentials of the Security object to the TLS credential subsystem without
 copying the key material into a second buffer.
 
+### The thread-safe setter
+
+```c
+struct sirena_lwm2m_value {
+    enum sirena_lwm2m_value_type type;
+    union {
+        bool boolean;
+        int64_t integer;
+        uint64_t unsigned_integer;
+        double floating_point;
+        struct {
+            const char *value;
+            size_t length;
+        } string;
+        struct {
+            const void *value;
+            size_t length;
+        } opaque;
+    } data;
+};
+
+int sirena_lwm2m_set_value(uint16_t object_id, uint16_t instance_id,
+                           uint16_t resource_id, const struct sirena_lwm2m_value *value);
+```
+
+`sirena_lwm2m_set_value()` writes a value of any type the registry knows. The
+type of the value selects the member of the union that carries it. A string
+value carries its length in bytes, without the terminating NUL, and an opaque
+value carries the length of its bytes.
+
+The call is the entry point for an application thread. It applies the write in
+engine context, so the write is serialised with the reads of the engine thread
+and with the notification the engine builds from the value. It applies the
+write directly when the caller runs in the engine thread, so it never
+deadlocks, and when the engine thread does not run yet, which is the case
+before the transport starts.
+
+The typed setters above stay engine-context-only. The client itself uses them
+from the engine thread.
+
 The built-in integer resources use a byte width of 8 when read through the typed
 API: `sirena_lwm2m_get_integer()` fills an `int64_t` and the server path
 returns the same 8 bytes for an integer resource. The LwM2M codec encodes
@@ -103,8 +143,9 @@ it.
 The application path and the server path reach the same stored value but enforce
 different rules.
 
-The **application path** is the typed setters above. It writes values the
-application owns — device identity and metadata, server account parameters and
+The **application path** is the typed setters above and the thread-safe
+setter `sirena_lwm2m_set_value()`. It writes values the application
+owns — device identity and metadata, server account parameters and
 credentials — and may write a resource whose server-facing access mode is
 read-only, because the server may not write those but the application must be
 able to supply them. It dispatches through the registered write callback of the
@@ -190,10 +231,20 @@ modes 0 to 3 are supported; any other value is rejected with `-EINVAL`. There is
 no bootstrap field because bootstrap is excluded from this version, and Security
 resource 1 stays `false`.
 
+The provisioning writes through the typed setters, so it belongs to the engine
+context as well. The application calls it before it starts the transport, when
+the engine thread does not run yet.
+
 ## Thread safety
 
 The objects API shares the thread-safety contract of the object registry: it is
 not thread-safe and must be called from the engine thread.
+
+`sirena_lwm2m_set_value()` is the entry point for an application thread. It
+applies the write in engine context, so the write is serialised with the reads
+of the engine thread and with the notification the engine builds. It never
+deadlocks: it applies the write directly when the caller runs in the engine
+thread, and when the engine thread does not run yet.
 
 ## Storage
 
@@ -222,7 +273,7 @@ Server instance 9.
 | `-EINVAL` | The typed setter does not match the registered value type, an argument is invalid, or the provisioning security mode is unsupported. |
 | `-ENOENT` | The object, instance or resource does not exist. |
 | `-ENOMEM` | The value does not fit the configured capacity of the target buffer. |
-| `-ENOTSUP` | The operation is not supported for the resource: a server write to a read-only resource, a write to an execute-only resource, or an execute with no handler registered. |
+| `-ENOTSUP` | The operation is not supported for the resource: a server write to a read-only resource, a write to an execute-only resource, an execute with no handler registered, or a value of a type the registry does not store. |
 
 ## Tests
 

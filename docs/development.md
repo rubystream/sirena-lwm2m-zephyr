@@ -100,8 +100,10 @@ A successful run prints `sirena zephyr smoke ok`.
 
 Registry APIs and the built-in objects API are not thread-safe and must be
 called from the engine thread. The transport API is called from the
-application, the transport work itself runs in the engine thread. See
-[Transport Bindings](transport.md).
+application, the transport work itself runs in the engine thread.
+`sirena_lwm2m_set_value()` of the objects API is the exception: it applies the
+write in engine context, so an application thread may publish a value with it.
+See [Transport Bindings](transport.md).
 
 Rebuild from scratch without removing dependencies:
 
@@ -280,5 +282,7 @@ The built-in objects module and the typed application API use the same negative
 `errno` values: `-EINVAL` for a type mismatch or an invalid argument, `-ENOENT`
 for an unknown object, instance or resource, `-ENOMEM` for a value that exceeds
 the configured capacity, and `-ENOTSUP` for an operation the resource does not
-support. See [Built-in LwM2M Objects](objects.md) for the full API reference, the
+support. The thread-safe setter `sirena_lwm2m_set_value()` adds `-EINVAL` for
+a missing value and `-ENOTSUP` for a value of a type the registry does not
+store. See [Built-in LwM2M Objects](objects.md) for the full API reference, the
 resource sets and the Kconfig symbols.
