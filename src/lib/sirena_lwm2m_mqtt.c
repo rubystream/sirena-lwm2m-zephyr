@@ -25,7 +25,6 @@
 #define SIRENA_LWM2M_SECURITY_MODE_RESOURCE 2U
 #define SIRENA_LWM2M_SERVER_LIFETIME_RESOURCE 1U
 
-#define SIRENA_LWM2M_MQTT_LWM2M_VERSION "1.2"
 #define SIRENA_LWM2M_MQTT_BINDING_MODE "M"
 #define SIRENA_LWM2M_MQTT_TOPIC_ROOT "lwm2m/rd/"
 #define SIRENA_LWM2M_MQTT_WAIT_INTERVAL_MS 5
@@ -855,7 +854,8 @@ static int mqtt_register(void)
         return rc;
     }
 
-    rc = mqtt_set_text(message.version, sizeof(message.version), SIRENA_LWM2M_MQTT_LWM2M_VERSION);
+    rc = mqtt_set_text(message.version, sizeof(message.version),
+                        CONFIG_SIRENA_LWM2M_LWM2M_VERSION);
     if (rc != 0) {
         return rc;
     }

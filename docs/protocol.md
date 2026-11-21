@@ -61,7 +61,7 @@ account.
 | The request carries no Accept option | The client uses its preferred format, `CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT`, when the codec can encode the resource in it. Otherwise it uses the first format it supports that the codec can encode the resource in. |
 | No format of the Accept list is supported, or none of them encodes the resource | The client answers 4.06 Not Acceptable. |
 | The Accept list is longer than `CONFIG_SIRENA_LWM2M_ACCEPTED_FORMATS_MAX` | The client answers 4.06 Not Acceptable. It never ignores the formats it cannot hold. |
-| The request is a write | The payload is decoded with the Content-Format of the request. Without a Content-Format option the preferred format is used. The Accept option of a write is ignored: the response of a write carries no representation, so there is nothing for the server to constrain. |
+| The request is a write | The payload is decoded with the Content-Format of the request. The TLV format carries no type of its own, so the type of the value comes from the object model of the resource the request addresses. Without a Content-Format option the preferred format is used. The Accept option of a write is ignored: the response of a write carries no representation, so there is nothing for the server to constrain. |
 | The request is an execute | The payload is passed to the execute handler as it is. The Accept option of an execute is ignored, for the same reason. |
 
 The preferred format defaults to the TLV format, because the codec encodes every
@@ -200,6 +200,7 @@ error codes of the API are the negative `errno` values of the table.
 | `CONFIG_SIRENA_LWM2M_ACCEPTED_FORMATS_MAX` | Number of acceptable content formats the client reads from one request. | 4 |
 | `CONFIG_SIRENA_LWM2M_ENGINE_POLL_INTERVAL_MS` | Interval the engine thread polls the transport socket with. | 20 |
 | `CONFIG_SIRENA_LWM2M_COAP_MESSAGE_MAX` | Size of the buffer that holds a CoAP message. | 512 |
+| `CONFIG_SIRENA_LWM2M_LWM2M_VERSION` | The LwM2M version the client announces in the registration. | 1.2 |
 
 ## Not in this slice
 

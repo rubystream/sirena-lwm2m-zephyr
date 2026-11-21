@@ -214,15 +214,15 @@ static int encode_tlv_value(void *buffer, size_t capacity, size_t *used,
         tmp[0] = v->data.boolean ? 1U : 0U;
         break;
     case SIRENA_LWM2M_VALUE_INTEGER:
-        value_len = 4U;
-        for (size_t i = 0U; i < 4U; ++i) {
-            tmp[3U - i] = (uint8_t)((v->data.integer >> (i * 8U)) & 0xFF);
+        value_len = 8U;
+        for (size_t i = 0U; i < 8U; ++i) {
+            tmp[7U - i] = (uint8_t)(((uint64_t)v->data.integer >> (i * 8U)) & 0xFF);
         }
         break;
     case SIRENA_LWM2M_VALUE_UNSIGNED:
-        value_len = 4U;
-        for (size_t i = 0U; i < 4U; ++i) {
-            tmp[3U - i] = (uint8_t)((v->data.unsigned_integer >> (i * 8U)) & 0xFF);
+        value_len = 8U;
+        for (size_t i = 0U; i < 8U; ++i) {
+            tmp[7U - i] = (uint8_t)((v->data.unsigned_integer >> (i * 8U)) & 0xFF);
         }
         break;
     case SIRENA_LWM2M_VALUE_FLOAT:
@@ -730,9 +730,46 @@ int sirena_lwm2m_codec_encode(uint16_t content_format,
     return -ENOTSUP;
 }
 
+static bool decode_signed_integer(const uint8_t *bytes, size_t length, int64_t *value)
+{
+    int64_t result;
+
+    if (length != 1U && length != 2U && length != 4U && length != 8U) {
+        return false;
+    }
+
+    result = (bytes[0] & 0x80U) ? -1 : 0;
+
+    for (size_t i = 0U; i < length; ++i) {
+        result = (int64_t)(((uint64_t)result << 8) | bytes[i]);
+    }
+
+    *value = result;
+
+    return true;
+}
+
+static bool decode_unsigned_integer(const uint8_t *bytes, size_t length, uint64_t *value)
+{
+    uint64_t result = 0U;
+
+    if (length != 1U && length != 2U && length != 4U && length != 8U) {
+        return false;
+    }
+
+    for (size_t i = 0U; i < length; ++i) {
+        result = (result << 8) | bytes[i];
+    }
+
+    *value = result;
+
+    return true;
+}
+
 static int decode_tlv_value(const uint8_t *buf, size_t len,
                            struct sirena_lwm2m_codec_value *v,
-                           size_t *consumed)
+                           size_t *consumed,
+                           enum sirena_lwm2m_value_type expected)
 {
     uint8_t type_byte;
     size_t cursor = 0U;
@@ -776,27 +813,56 @@ static int decode_tlv_value(const uint8_t *buf, size_t len,
     v->instance_id = 0U;
     v->resource_id = id;
     v->id = id;
-    switch (value_len) {
-    case 1U:
-        v->type = SIRENA_LWM2M_VALUE_INTEGER;
-        v->data.integer = buf[value_start];
+    switch (expected) {
+    case SIRENA_LWM2M_VALUE_BOOLEAN:
+        if (value_len != 1U) return -EINVAL;
+        v->type = SIRENA_LWM2M_VALUE_BOOLEAN;
+        v->data.boolean = buf[value_start] != 0U;
         break;
-    case 4U:
+    case SIRENA_LWM2M_VALUE_INTEGER: {
+        int64_t value = 0;
+
+        if (!decode_signed_integer(&buf[value_start], value_len, &value)) return -EINVAL;
         v->type = SIRENA_LWM2M_VALUE_INTEGER;
-        v->data.integer = ((int32_t)buf[value_start] << 24) |
-                          ((int32_t)buf[value_start + 1] << 16) |
-                          ((int32_t)buf[value_start + 2] << 8) |
-                          (int32_t)buf[value_start + 3];
-        break;
-    case 8U: {
-        uint64_t bits = 0U;
-        v->type = SIRENA_LWM2M_VALUE_FLOAT;
-        for (size_t i = 0U; i < 8U; ++i) {
-            bits = (bits << 8) | buf[value_start + i];
-        }
-        memcpy(&v->data.floating_point, &bits, 8U);
+        v->data.integer = value;
         break;
     }
+    case SIRENA_LWM2M_VALUE_UNSIGNED: {
+        uint64_t value = 0U;
+
+        if (!decode_unsigned_integer(&buf[value_start], value_len, &value)) return -EINVAL;
+        v->type = SIRENA_LWM2M_VALUE_UNSIGNED;
+        v->data.unsigned_integer = value;
+        break;
+    }
+    case SIRENA_LWM2M_VALUE_FLOAT: {
+        if (value_len == 4U) {
+            uint32_t bits = 0U;
+            float single;
+
+            for (size_t i = 0U; i < 4U; ++i) {
+                bits = (bits << 8) | buf[value_start + i];
+            }
+            memcpy(&single, &bits, sizeof(single));
+            v->data.floating_point = (double)single;
+        } else if (value_len == 8U) {
+            uint64_t bits = 0U;
+
+            for (size_t i = 0U; i < 8U; ++i) {
+                bits = (bits << 8) | buf[value_start + i];
+            }
+            memcpy(&v->data.floating_point, &bits, sizeof(v->data.floating_point));
+        } else {
+            return -EINVAL;
+        }
+        v->type = SIRENA_LWM2M_VALUE_FLOAT;
+        break;
+    }
+    case SIRENA_LWM2M_VALUE_STRING:
+        v->type = SIRENA_LWM2M_VALUE_STRING;
+        v->data.string.value = (const char *)&buf[value_start];
+        v->data.string.length = value_len;
+        break;
     default:
         v->type = SIRENA_LWM2M_VALUE_OPAQUE;
         v->data.opaque.value = &buf[value_start];
@@ -806,7 +872,9 @@ static int decode_tlv_value(const uint8_t *buf, size_t len,
     return 0;
 }
 
-int sirena_lwm2m_codec_decode(uint16_t content_format, const void *buffer,
+int sirena_lwm2m_codec_decode(uint16_t content_format,
+                              enum sirena_lwm2m_value_type type,
+                              const void *buffer,
                               size_t length,
                               struct sirena_lwm2m_codec_value *values,
                               size_t *value_count)
@@ -862,7 +930,7 @@ int sirena_lwm2m_codec_decode(uint16_t content_format, const void *buffer,
             if (count >= cap) return -ENOMEM;
             if (decode_tlv_value((const uint8_t *)buffer + cursor,
                                 length - cursor, &values[count],
-                                &consumed) != 0) {
+                                &consumed, type) != 0) {
                 return -EINVAL;
             }
             count += 1U;

@@ -811,7 +811,8 @@ static int64_t peer_decode_integer(const struct sirena_lwm2m_mqtt_message *messa
     size_t count = ARRAY_SIZE(values);
     int rc;
 
-    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV, message->payload, message->payload_length,
+    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV, SIRENA_LWM2M_VALUE_INTEGER,
+                                   message->payload, message->payload_length,
                                    values, &count);
     zassert_equal(rc, 0, "the cbor decoding failed: %d", rc);
     zassert_equal(count, 1U, "unexpected value count");
@@ -1075,7 +1076,8 @@ ZTEST(sirena_lwm2m_mqtt, test_the_registration_carries_the_registration_paramete
     zassert_true(message.has_lifetime, "the registration carries no lifetime");
     zassert_equal(message.lifetime, PEER_LIFETIME, "unexpected lifetime");
     zassert_true(message.has_version, "the registration carries no version");
-    zassert_str_equal(message.version, "1.2", "unexpected version");
+    zassert_str_equal(message.version, CONFIG_SIRENA_LWM2M_LWM2M_VERSION,
+                      "unexpected version");
     zassert_true(message.has_binding, "the registration carries no binding");
     zassert_str_equal(message.binding, "M", "unexpected binding");
     zassert_true(message.has_content_format, "the registration carries no content format");

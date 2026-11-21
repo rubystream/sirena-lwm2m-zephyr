@@ -37,7 +37,8 @@ ZTEST(sirena_lwm2m_codec, test_plain_roundtrip)
 
     struct sirena_lwm2m_codec_value dec[1];
     size_t count = 1;
-    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_PLAIN_TEXT, out, len, dec,
+    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_PLAIN_TEXT,
+                                   SIRENA_LWM2M_VALUE_STRING, out, len, dec,
                                    &count);
     zassert_equal(rc, 0, "decode failed");
     zassert_equal(count, 1U, "count wrong");
@@ -62,7 +63,8 @@ ZTEST(sirena_lwm2m_codec, test_opaque_roundtrip)
 
     struct sirena_lwm2m_codec_value dec[1];
     size_t count=1;
-    rc=sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_OPAQUE,out,len,dec,&count);
+    rc=sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_OPAQUE,
+                               SIRENA_LWM2M_VALUE_OPAQUE,out,len,dec,&count);
     zassert_equal(rc,0,"dec");
     zassert_equal(dec[0].data.opaque.length,3U,"deco len");
 }
@@ -83,7 +85,8 @@ ZTEST(sirena_lwm2m_codec, test_tlv_roundtrip)
 
     struct sirena_lwm2m_codec_value dec[1];
     size_t count=1;
-    rc=sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV,out,len,dec,&count);
+    rc=sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV,
+                               SIRENA_LWM2M_VALUE_INTEGER,out,len,dec,&count);
     zassert_equal(rc,0,"dec");
     zassert_equal(count,1U,"count");
     zassert_equal(dec[0].id,5U,"id");
@@ -108,7 +111,8 @@ ZTEST(sirena_lwm2m_codec, test_cbor_roundtrip_dispatch)
 
     struct sirena_lwm2m_codec_value dec[1];
     size_t count=1;
-    rc=sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_CBOR,out,len,dec,&count);
+    rc=sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_CBOR,
+                               SIRENA_LWM2M_VALUE_OPAQUE,out,len,dec,&count);
     zassert_equal(rc, -ENOTSUP, "dec");
 }
 
@@ -161,7 +165,8 @@ ZTEST(sirena_lwm2m_codec, test_tlv_truncated_decode)
 
     struct sirena_lwm2m_codec_value dec[1];
     size_t count = 1;
-    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV, out, len - 1, dec,
+    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV,
+                                   SIRENA_LWM2M_VALUE_INTEGER, out, len - 1, dec,
                                    &count);
     zassert_not_equal(rc, 0, "truncated accepted");
 }
@@ -226,7 +231,8 @@ ZTEST(sirena_lwm2m_codec, test_tlv_16bit_id)
 
     struct sirena_lwm2m_codec_value dec[1];
     size_t count = 1;
-    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV, out, len, dec,
+    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV,
+                                   SIRENA_LWM2M_VALUE_INTEGER, out, len, dec,
                                    &count);
     zassert_equal(rc, 0, "dec");
     zassert_equal(count, 1U, "count");
@@ -262,6 +268,103 @@ ZTEST(sirena_lwm2m_codec, test_string_float_encode)
     zassert_equal(rc, 0, "enc");
     zassert_true(strstr(out, "abc") != NULL, "string missing");
     zassert_true(strstr(out, "1.5") != NULL, "float missing");
+}
+
+ZTEST(sirena_lwm2m_codec, test_tlv_integer_uses_eight_bytes)
+{
+    struct sirena_lwm2m_codec_value v;
+    uint8_t out[64];
+    size_t len = sizeof(out);
+    int rc;
+    memset(&v, 0, sizeof(v));
+    v.id = 5;
+    v.type = SIRENA_LWM2M_VALUE_INTEGER;
+    v.data.integer = 42;
+    rc = sirena_lwm2m_codec_encode(SIRENA_LWM2M_CF_TLV, &v, 1, out, &len);
+    zassert_equal(rc, 0, "enc");
+    zassert_equal(len, 11U, "an integer takes a type byte, an id, a length and eight bytes");
+
+    struct sirena_lwm2m_codec_value dec[1];
+    size_t count = 1;
+    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV,
+                                   SIRENA_LWM2M_VALUE_INTEGER, out, len, dec,
+                                   &count);
+    zassert_equal(rc, 0, "dec");
+    zassert_equal(count, 1U, "count");
+    zassert_equal(dec[0].type, SIRENA_LWM2M_VALUE_INTEGER, "type");
+    zassert_equal(dec[0].data.integer, 42, "val");
+}
+
+ZTEST(sirena_lwm2m_codec, test_tlv_integer_accepts_the_minimal_widths)
+{
+    static const uint8_t one_byte[] = {0xC1, 0x05, 0x2A};
+    static const uint8_t two_bytes[] = {0xC2, 0x05, 0x01, 0x02};
+    static const uint8_t four_bytes[] = {0xC4, 0x05, 0x00, 0x00, 0x01, 0x00};
+    static const uint8_t eight_bytes[] = {0xC8, 0x05, 0x08, 0x00, 0x00, 0x00,
+                                          0x00, 0x00, 0x00, 0x01, 0x00};
+    struct sirena_lwm2m_codec_value dec[1];
+    size_t count = 1;
+    int rc;
+
+    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV,
+                                   SIRENA_LWM2M_VALUE_INTEGER, one_byte,
+                                   sizeof(one_byte), dec, &count);
+    zassert_equal(rc, 0, "the one byte integer is refused");
+    zassert_equal(dec[0].type, SIRENA_LWM2M_VALUE_INTEGER, "type");
+    zassert_equal(dec[0].data.integer, 42, "val");
+
+    count = 1;
+    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV,
+                                   SIRENA_LWM2M_VALUE_INTEGER, two_bytes,
+                                   sizeof(two_bytes), dec, &count);
+    zassert_equal(rc, 0, "the two byte integer is refused");
+    zassert_equal(dec[0].data.integer, 258, "val");
+
+    count = 1;
+    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV,
+                                   SIRENA_LWM2M_VALUE_INTEGER, four_bytes,
+                                   sizeof(four_bytes), dec, &count);
+    zassert_equal(rc, 0, "the four byte integer is refused");
+    zassert_equal(dec[0].data.integer, 256, "val");
+
+    count = 1;
+    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV,
+                                   SIRENA_LWM2M_VALUE_INTEGER, eight_bytes,
+                                   sizeof(eight_bytes), dec, &count);
+    zassert_equal(rc, 0, "the eight byte integer is refused");
+    zassert_equal(dec[0].data.integer, 256, "val");
+}
+
+ZTEST(sirena_lwm2m_codec, test_tlv_type_comes_from_the_object_model)
+{
+    struct sirena_lwm2m_codec_value v;
+    uint8_t out[64];
+    size_t len = sizeof(out);
+    int rc;
+    memset(&v, 0, sizeof(v));
+    v.id = 5;
+    v.type = SIRENA_LWM2M_VALUE_FLOAT;
+    v.data.floating_point = 1.5;
+    rc = sirena_lwm2m_codec_encode(SIRENA_LWM2M_CF_TLV, &v, 1, out, &len);
+    zassert_equal(rc, 0, "enc");
+    zassert_equal(len, 11U, "a float takes eight bytes");
+
+    struct sirena_lwm2m_codec_value dec[1];
+    size_t count = 1;
+    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV,
+                                   SIRENA_LWM2M_VALUE_FLOAT, out, len, dec,
+                                   &count);
+    zassert_equal(rc, 0, "dec");
+    zassert_equal(dec[0].type, SIRENA_LWM2M_VALUE_FLOAT, "type");
+    zassert_equal(dec[0].data.floating_point, 1.5, "val");
+
+    count = 1;
+    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV,
+                                   SIRENA_LWM2M_VALUE_INTEGER, out, len, dec,
+                                   &count);
+    zassert_equal(rc, 0, "dec");
+    zassert_equal(dec[0].type, SIRENA_LWM2M_VALUE_INTEGER,
+                  "the expected type decides, not the length");
 }
 
 ZTEST_SUITE(sirena_lwm2m_codec, NULL, NULL, NULL, NULL, NULL);

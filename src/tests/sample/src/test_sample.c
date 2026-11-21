@@ -300,8 +300,9 @@ static int64_t peer_decode_integer(void)
 	size_t count = ARRAY_SIZE(values);
 	int rc;
 
-	rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV, peer_capture.payload,
-					peer_capture.payload_length, values, &count);
+	rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV, SIRENA_LWM2M_VALUE_INTEGER,
+					peer_capture.payload, peer_capture.payload_length,
+					values, &count);
 	zassert_equal(rc, 0, "the tlv decoding failed: %d", rc);
 	zassert_equal(count, 1U, "unexpected value count");
 	zassert_equal(values[0].type, SIRENA_LWM2M_VALUE_INTEGER, "unexpected value type");

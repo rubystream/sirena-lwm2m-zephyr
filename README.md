@@ -125,7 +125,9 @@ npm run smoke    # init, update, and build the smoke target
 npm run build:sample  # build the native simulator sample
 npm run run:sample   # build and run the native simulator sample
 npm run test:sample  # build and run the end-to-end sample tests
-npm run test:leshan  # build and run the Leshan conformance harness
+npm run test:conformance  # build and run the two-tier conformance harness
+npm run test:conformance:leshan  # run the Leshan tier of the conformance harness
+npm run test:conformance:sirena  # run the Sirena tier of the conformance harness
 ```
 
 `npm run smoke` performs a headless initialization, update, and build of the
@@ -139,10 +141,11 @@ lifetime and ends the process on its own. `npm run test:sample` runs the same
 flow against a local in-process server and asserts the observable behavior.
 See [the sample guide](docs/sample.md).
 
-`npm run test:leshan` runs the real client against a real Leshan server and
+`npm run test:conformance` runs the real client against real LwM2M servers and
 asserts the registration, the telemetry and the commands from the point of view
-of the server. The harness pins Leshan `2.0.0-M17`, the newest release that
-accepts a LwM2M 1.2 client. See [the Leshan guide](docs/leshan.md).
+of the server. It runs in two tiers: Leshan `2.0.0-M18` verifies the client up
+to LwM2M `1.1`, the version Leshan implements, and `sirena-lwm2m2-server`
+verifies LwM2M `1.2`. See [the conformance guide](docs/conformance.md).
 
 ## Reference
 

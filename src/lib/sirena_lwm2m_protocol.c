@@ -260,7 +260,8 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
                            ? request->content_format
                            : (uint16_t)SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
 
-        rc = sirena_lwm2m_codec_decode(write_format, request->payload, request->payload_length,
+        rc = sirena_lwm2m_codec_decode(write_format, resource->type,
+                                       request->payload, request->payload_length,
                                        protocol_values, &value_count);
         if (rc != 0) {
             protocol_set_status(response,

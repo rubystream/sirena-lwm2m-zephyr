@@ -93,7 +93,9 @@ A successful run prints `sirena zephyr smoke ok`.
 | Build the native simulator sample | `npm run build:sample` |
 | Run the native simulator sample | `npm run run:sample` |
 | Build and run the end-to-end sample tests | `npm run test:sample` |
-| Build and run the Leshan conformance harness | `npm run test:leshan` |
+| Build and run the two-tier conformance harness | `npm run test:conformance` |
+| Build and run the Leshan tier of the conformance harness | `npm run test:conformance:leshan` |
+| Build and run the Sirena tier of the conformance harness | `npm run test:conformance:sirena` |
 | Remove build output | `npm run clean` |
 | Full smoke workflow | `npm run smoke` |
 | Flash firmware (opt-in) | `npm run flash` |

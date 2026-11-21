@@ -30,6 +30,9 @@
     "build:sample": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -b native_sim /workspace/src/samples/lwm2m_client -d /workspace/build/sample",
     "run:sample": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/samples/lwm2m_client -d /workspace/build/sample",
     "test:sample": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/sample -d /workspace/build/sample-test",
-    "test:leshan": "sh scripts/test-leshan.sh"
+    "test:conformance": "sh scripts/test-conformance.sh all",
+    "test:conformance:leshan": "sh scripts/test-conformance.sh leshan",
+    "test:conformance:sirena": "sh scripts/test-conformance.sh sirena",
+    "test:leshan": "sh scripts/test-conformance.sh leshan"
   }
 }

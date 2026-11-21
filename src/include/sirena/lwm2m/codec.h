@@ -52,7 +52,9 @@ int sirena_lwm2m_codec_encode(uint16_t content_format,
                               size_t value_count, void *buffer,
                               size_t *length);
 
-int sirena_lwm2m_codec_decode(uint16_t content_format, const void *buffer,
+int sirena_lwm2m_codec_decode(uint16_t content_format,
+                              enum sirena_lwm2m_value_type type,
+                              const void *buffer,
                               size_t length,
                               struct sirena_lwm2m_codec_value *values,
                               size_t *value_count);

@@ -21,7 +21,6 @@
 #define SIRENA_LWM2M_SERVER_BINDING_RESOURCE 7U
 
 #define SIRENA_LWM2M_COAP_REGISTER_PATH "rd"
-#define SIRENA_LWM2M_COAP_LWM2M_VERSION "1.2"
 #define SIRENA_LWM2M_COAP_BINDING_MODE "U"
 
 int sirena_lwm2m_exchange_status(int16_t code)
@@ -153,7 +152,7 @@ int sirena_lwm2m_exchange_register(char *path, size_t path_capacity, char *paylo
 
     written = snprintf(path, path_capacity, "%s?ep=%s&lt=%lld&lwm2m=%s&b=%s",
                        SIRENA_LWM2M_COAP_REGISTER_PATH, endpoint_name,
-                       (long long)lifetime, SIRENA_LWM2M_COAP_LWM2M_VERSION, binding);
+                       (long long)lifetime, CONFIG_SIRENA_LWM2M_LWM2M_VERSION, binding);
     if (written < 0 || (size_t)written >= path_capacity) {
         return -ENOMEM;
     }

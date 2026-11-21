@@ -1,7 +1,7 @@
 FROM eclipse-temurin:17-jre
 
-ARG LESHAN_VERSION=2.0.0-M17
-ARG LESHAN_SHA256=0eb7f583376d6547f6214c836ec5e172c9ee46f6cb4e98684bcaf33e49b64f3a
+ARG LESHAN_VERSION=2.0.0-M18
+ARG LESHAN_SHA256=734b5b8487aa208847b676e7f543744998c6b6ab7bc154551220336d633b02da
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
