@@ -284,6 +284,16 @@ static bool peer_payload_contains(const char *needle)
 	return false;
 }
 
+static void peer_assert_read(const char *path, const char *expected)
+{
+	int rc;
+
+	rc = peer_request(COAP_METHOD_GET, path, 0U, NULL, 0U, -1);
+	zassert_equal(rc, 0, "the read request failed: %d", rc);
+	zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CONTENT, "unexpected response code");
+	zassert_true(peer_payload_contains(expected), "the read of %s must carry %s", path, expected);
+}
+
 static int64_t peer_decode_integer(void)
 {
 	struct sirena_lwm2m_codec_value values[4];
@@ -394,6 +404,7 @@ ZTEST(sirena_lwm2m_sample, test_the_sample_registers_publishes_telemetry_and_han
 		     "the registration must carry the endpoint name");
 	zassert_true(peer_has_query("lwm2m=1.2"), "the registration must carry the lwm2m version");
 	zassert_true(peer_has_query("lt=300"), "the registration must carry the lifetime");
+	zassert_true(peer_has_query("b=U"), "the registration must carry the binding");
 
 	rc = peer_request(COAP_METHOD_GET, "/3/0/9", 0U, NULL, 0U, 0);
 	zassert_equal(rc, 0, "the observe request failed: %d", rc);
@@ -456,11 +467,10 @@ ZTEST(sirena_lwm2m_sample, test_the_sample_registers_publishes_telemetry_and_han
 
 	zassert_true(reset, "the command must change the value the sample publishes");
 
-	rc = peer_request(COAP_METHOD_GET, "/3/0/0", 0U, NULL, 0U, -1);
-	zassert_equal(rc, 0, "the read request failed: %d", rc);
-	zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CONTENT, "unexpected response code");
-	zassert_true(peer_payload_contains("Sirena"),
-		     "the read must carry the manufacturer of the sample");
+	peer_assert_read("/3/0/0", sample_config.manufacturer);
+	peer_assert_read("/3/0/1", sample_config.model_number);
+	peer_assert_read("/3/0/2", sample_config.serial_number);
+	peer_assert_read("/3/0/3", sample_config.firmware_version);
 
 	payload_length = peer_encode_integer(PEER_SERVER_OBJECT_ID, PEER_SERVER_LIFETIME_RESOURCE,
 					     PEER_LIFETIME_UPDATED, payload, sizeof(payload));

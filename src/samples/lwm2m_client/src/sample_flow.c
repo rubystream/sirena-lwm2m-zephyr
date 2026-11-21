@@ -70,20 +70,12 @@ static bool sample_reset_take(void)
 
 static int sample_set_device_string(uint16_t resource_id, const char *value)
 {
-	struct sirena_lwm2m_value device_value = {
-		.type = SIRENA_LWM2M_VALUE_STRING,
-	};
-
 	if (value == NULL) {
 		return 0;
 	}
 
-	device_value.data.string.value = value;
-	device_value.data.string.length = strlen(value);
-
-	return sirena_lwm2m_set_value(SIRENA_LWM2M_SAMPLE_DEVICE_OBJECT_ID,
-				      SIRENA_LWM2M_SAMPLE_INSTANCE_ID, resource_id,
-				      &device_value);
+	return sirena_lwm2m_set_string(SIRENA_LWM2M_SAMPLE_DEVICE_OBJECT_ID,
+				       SIRENA_LWM2M_SAMPLE_INSTANCE_ID, resource_id, value);
 }
 
 static int sample_prepare(const struct sirena_lwm2m_sample_config *config)
@@ -266,6 +258,7 @@ int sirena_lwm2m_sample_run(const struct sirena_lwm2m_sample_config *config)
 
 	k_mutex_lock(&sample_lock, K_FOREVER);
 	memset(&sample_state, 0, sizeof(sample_state));
+	sample_reset_pending = false;
 	k_mutex_unlock(&sample_lock);
 
 	rc = sample_prepare(config);
