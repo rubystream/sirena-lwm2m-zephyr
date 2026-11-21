@@ -109,8 +109,9 @@ completion.
 | `mqtts://` | 3, NoSec | none | `-EINVAL`, a noSec server has no secure transport. |
 | any | 1, 2, 4 | none | `-ENOTSUP`, the security mode is not implemented. |
 
-The selection never falls back: a server that needs DTLS is never contacted in
-the clear, and a noSec server is never contacted over DTLS. The binding that
+The selection never falls back: a server that needs DTLS or TLS is never
+contacted in the clear, and a noSec server is never contacted over DTLS
+or TLS. The binding that
 is selected enforces the security mode on its own, so a direct call of
 `sirena_lwm2m_coap_start()` cannot reach a server in the clear either.
 Starting the transport again with another server URI stops the binding that
@@ -430,8 +431,9 @@ The gate is enforced in the plaintext binding, which reads the security mode
 of the server when it starts and before every request. With the gate closed, a
 server that is provisioned with the NoSec security mode is refused with
 `-EPERM` and no request is sent. The transport layer refuses the same server
-with `-EPERM` when it selects the binding. The gate has no effect on the DTLS
-binding: NoSec is not a DTLS security mode.
+with `-EPERM` when it selects the binding. The gate has no effect on the DTLS binding: NoSec is not a DTLS security
+mode. It has no effect on the secure MQTT transport either: NoSec is not
+a TLS security mode.
 
 ### Error codes
 
