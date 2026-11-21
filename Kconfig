@@ -353,6 +353,8 @@ endif
 
 rsource "src/samples/lwm2m_client/Kconfig.sample"
 
+rsource "src/tests/leshan/Kconfig.leshan"
+
 endif
 
 endmenu

@@ -95,6 +95,7 @@ int sirena_lwm2m_protocol_read(uint16_t object_id, uint16_t instance_id, uint16_
     value.object_id = object_id;
     value.instance_id = instance_id;
     value.resource_id = resource_id;
+    value.id = resource_id;
 
     return sirena_lwm2m_codec_encode(content_format, &value, 1U, buffer, length);
 }
