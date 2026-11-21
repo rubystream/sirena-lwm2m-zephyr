@@ -148,12 +148,15 @@ The operations of the engine are the transport operations:
 | `SIRENA_LWM2M_ENGINE_OPERATION_SET_VALUE` | Apply a resource value that an application thread publishes. |
 
 `sirena_lwm2m_engine_thread_id()` returns the thread identifier of the engine
-thread, or `NULL` when the engine thread does not run. It lets a caller prove
-that a piece of work ran in engine context.
+thread, or `NULL` when the engine thread does not exist. The identifier is
+published as soon as the thread exists, so a `NULL` identifier proves that
+no engine thread shares the registry. It lets a caller prove that a piece of
+work ran in engine context.
 
 `sirena_lwm2m_engine_start()` registers the transport handler and starts the
-engine thread. It returns `-EINVAL` for a `NULL` handler and `-EALREADY`
-when the engine thread is already running. The transport interface calls it
+engine thread. It returns `-EINVAL` for a `NULL` handler, `-EALREADY`
+when the engine thread is already running and `-EAGAIN` when the thread of
+the engine cannot be created. The transport interface calls it
 from `sirena_lwm2m_transport_bind()`; an application does not call it.
 
 - The queue holds `CONFIG_SIRENA_LWM2M_ENGINE_QUEUE_SIZE` requests. There is no
@@ -162,7 +165,9 @@ from `sirena_lwm2m_transport_bind()`; an application does not call it.
   it and waits on the entry semaphore for the engine to complete it. Requests
   are processed in the order they were queued.
 - When every queue entry is in use the submit returns `-EAGAIN`.
-- A submit without a running engine thread returns `-ENOTSUP`.
+- A full queue releases the entry and returns `-EAGAIN` as well, so the caller
+  never waits for a completion that cannot come.
+- A submit without an engine thread returns `-ENOTSUP`.
 - The engine thread runs the transport work, so the binding is never called
   re-entrantly from an application thread.
 

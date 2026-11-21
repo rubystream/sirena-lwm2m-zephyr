@@ -23,19 +23,20 @@ The flow of the sample is the sequence an application follows:
    with the server URI, the security mode, the credentials, the short server id
    and the lifetime, and the Server (1) instance with the same short server id
    and the lifetime.
-2. **Identity.** `sirena_lwm2m_set_value()` of `sirena/lwm2m/objects.h` fills the
+2. **Identity.** `sirena_lwm2m_set_string()` of `sirena/lwm2m/objects.h` fills the
    Device (3) instance: the manufacturer, the model number, the serial number
-   and the firmware version. The setter is the thread-safe entry point of the
-   objects API, so the application may call it from its own thread.
+   and the firmware version. The typed setter writes the resource directly,
+   so the sample calls it while it prepares the client, before it starts the
+   transport and the engine thread runs.
 3. **Endpoint name.** `sirena_lwm2m_transport_set_endpoint_name()` sets the LwM2M
    Endpoint Client Name, which no OMA object carries.
 4. **Command handler.** `sirena_lwm2m_set_execute_handler()` registers the
    handler the protocol core calls when the server executes a resource. The
-   handler of the sample answers every execute resource the client offers,
+   handler of the sample runs for every execute resource the client offers,
    among them Device 4 Reboot and Server 8 Registration Update Trigger. It
-   acts on the reboot command: it resets the telemetry the sample publishes,
-   so that the next report carries the initial value again. Every other
-   command is only recorded.
+   records the command it receives and acts on the reboot command: it resets
+   the telemetry the sample publishes, so that the next report carries the
+   initial value again. Every other command is only recorded.
 5. **Transport.** `sirena_lwm2m_transport_start()` starts the binding that the
    server URI and the security mode select.
 6. **Registration.** `sirena_lwm2m_transport_register()` registers the client.
@@ -158,7 +159,8 @@ docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -b native_
 
 The `coaps` scheme selects the DTLS binding, so the build needs the DTLS
 binding and its mbed TLS prerequisites, which the `prj-dtls.conf` of the
-sample enables. The `prj.conf` of the sample is applied by `west` on its own,
+sample enables: the DTLS protocol support of mbed TLS and its server role
+that carries it. The `prj.conf` of the sample is applied by `west` on its own,
 so it must not be passed again.
 
 The noSec mode of the default configuration needs the development gate
@@ -206,13 +208,13 @@ copy of it.
 | Assertion | What it proves |
 | --- | --- |
 | The peer receives the registration and its payload carries `</1/0>` and `</3/0>` and no `</0/0>` | The client registers and the registration holds the mandatory objects only. |
-| The registration carries `ep=sirena-sample-test`, `lwm2m=1.2` and `lt=300` | The endpoint name, the version and the lifetime of the registration reach the server. |
+| The registration carries `ep=sirena-sample-test`, `lwm2m=1.2`, `lt=300` and `b=U` | The endpoint name, the version, the lifetime and the binding of the registration reach the server. |
 | The peer observes `/3/0/9` and receives the notification of the sample | The telemetry of the sample reaches the observer of the server. |
 | The notification is a confirmable message and carries a value the sample publishes | The notification follows the observation of RFC 7641 and carries the current value. |
 | The peer executes `/3/0/4` and receives the changed answer | The command of the server reaches the client and the peer receives the answer. |
 | The state of the sample reports the command | The execute handler of the sample ran for the command of the server. |
 | The peer receives the initial value again after the command | The handler acts on the command and changes the value the sample publishes. |
-| The peer reads `/3/0/0` and receives the manufacturer of the sample | A remote read reaches the resources of the application. |
+| The peer reads the four identity resources and receives the manufacturer, the model number, the serial number and the firmware version of the sample | The identity the sample sets with the typed setters reaches the server. |
 | The peer writes `/1/0/1` and reads the new value back | A remote write reaches the client and the value is stored. |
 | The peer receives the deregistration and the sample thread ends on its own | The sample shuts down cleanly and within its bounded lifetime. |
 
