@@ -233,7 +233,9 @@ int sirena_lwm2m_sample_run(const struct sirena_lwm2m_sample_config *config)
 		return -EINVAL;
 	}
 
+	k_mutex_lock(&sample_lock, K_FOREVER);
 	memset(&sample_state, 0, sizeof(sample_state));
+	k_mutex_unlock(&sample_lock);
 
 	rc = sample_prepare(config);
 	if (rc != 0) {
