@@ -68,6 +68,8 @@ static void engine_entry(void *first, void *second, void *third)
 
 int sirena_lwm2m_engine_start(sirena_lwm2m_engine_handler_t handler)
 {
+    k_tid_t tid;
+
     if (handler == NULL) {
         return -EINVAL;
     }
@@ -82,9 +84,21 @@ int sirena_lwm2m_engine_start(sirena_lwm2m_engine_handler_t handler)
     engine_starting = true;
     k_mutex_unlock(&engine_lock);
 
-    k_thread_create(&engine_thread, engine_stack, CONFIG_SIRENA_LWM2M_ENGINE_STACK_SIZE,
-                    engine_entry, NULL, NULL, NULL, CONFIG_SIRENA_LWM2M_ENGINE_PRIORITY, 0,
-                    K_NO_WAIT);
+    tid = k_thread_create(&engine_thread, engine_stack, CONFIG_SIRENA_LWM2M_ENGINE_STACK_SIZE,
+                           engine_entry, NULL, NULL, NULL, CONFIG_SIRENA_LWM2M_ENGINE_PRIORITY, 0,
+                           K_NO_WAIT);
+    if (tid == NULL) {
+        k_mutex_lock(&engine_lock, K_FOREVER);
+        engine_handler = NULL;
+        engine_starting = false;
+        k_mutex_unlock(&engine_lock);
+
+        return -EAGAIN;
+    }
+
+    k_mutex_lock(&engine_lock, K_FOREVER);
+    engine_tid = tid;
+    k_mutex_unlock(&engine_lock);
 
     k_sem_take(&engine_ready, K_FOREVER);
 
@@ -98,12 +112,10 @@ int sirena_lwm2m_engine_start(sirena_lwm2m_engine_handler_t handler)
 
 k_tid_t sirena_lwm2m_engine_thread_id(void)
 {
-    k_tid_t tid = NULL;
+    k_tid_t tid;
 
     k_mutex_lock(&engine_lock, K_FOREVER);
-    if (engine_running) {
-        tid = engine_tid;
-    }
+    tid = engine_tid;
     k_mutex_unlock(&engine_lock);
 
     return tid;
@@ -125,7 +137,7 @@ int sirena_lwm2m_engine_submit(enum sirena_lwm2m_engine_operation operation, voi
     int result;
 
     k_mutex_lock(&engine_lock, K_FOREVER);
-    if (!engine_running) {
+    if (engine_tid == NULL) {
         k_mutex_unlock(&engine_lock);
         return -ENOTSUP;
     }
@@ -147,7 +159,15 @@ int sirena_lwm2m_engine_submit(enum sirena_lwm2m_engine_operation operation, voi
     request->payload = payload;
     request->result = -EINPROGRESS;
     k_sem_init(&request->completion, 0, 1);
-    k_msgq_put(&engine_queue, &request, K_NO_WAIT);
+
+    result = k_msgq_put(&engine_queue, &request, K_NO_WAIT);
+    if (result != 0) {
+        request->busy = false;
+        k_mutex_unlock(&engine_lock);
+
+        return -EAGAIN;
+    }
+
     k_mutex_unlock(&engine_lock);
 
     result = k_sem_take(&request->completion, K_FOREVER);
