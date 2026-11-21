@@ -98,6 +98,14 @@ The observations live in static storage. The client never uses the heap for
 them. The client does not retransmit a notification it did not get an
 acknowledgement for.
 
+The MQTT binding keeps its own observations, as the CoAP endpoint keeps its
+own, because the wire format of an observation is the one of the binding: the
+CoAP endpoint registers an observation with the Observe option of a GET, the
+MQTT binding registers one with the Observe operation of the information
+reporting interface and removes it with the Cancel-Observe operation. The
+notification entry point is the same for both, so the application publishes a
+value the same way whatever the binding is.
+
 ## The application interface
 
 ```c

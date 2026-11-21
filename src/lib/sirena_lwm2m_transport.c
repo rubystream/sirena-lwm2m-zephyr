@@ -1,4 +1,5 @@
 #include "sirena_lwm2m_bindings.h"
+#include "sirena_lwm2m_uri.h"
 #include <sirena/lwm2m/engine.h>
 #include <sirena/lwm2m/objects.h>
 #include <sirena/lwm2m/protocol.h>
@@ -11,9 +12,6 @@
 #define SIRENA_LWM2M_SECURITY_OBJECT_ID 0U
 #define SIRENA_LWM2M_SERVER_URI_RESOURCE 0U
 #define SIRENA_LWM2M_SECURITY_MODE_RESOURCE 2U
-
-#define SIRENA_LWM2M_COAP_SCHEME "coap://"
-#define SIRENA_LWM2M_COAPS_SCHEME "coaps://"
 
 struct sirena_lwm2m_binding_entry {
     enum sirena_lwm2m_transport_binding binding;
@@ -40,6 +38,14 @@ static const struct sirena_lwm2m_binding_entry binding_entries[] = {
         .ops = &sirena_lwm2m_dtls_transport_ops,
         .start = sirena_lwm2m_dtls_start_engine,
         .stop = sirena_lwm2m_dtls_stop_engine,
+    },
+#endif
+#if IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_MQTT)
+    {
+        .binding = SIRENA_LWM2M_TRANSPORT_BINDING_MQTT,
+        .ops = &sirena_lwm2m_mqtt_transport_ops,
+        .start = sirena_lwm2m_mqtt_start_engine,
+        .stop = sirena_lwm2m_mqtt_stop_engine,
     },
 #endif
 };
@@ -130,30 +136,43 @@ static int transport_start_binding(enum sirena_lwm2m_transport_binding binding)
     return rc;
 }
 
-static bool transport_scheme_is(const char *uri, const char *scheme)
-{
-    return strncmp(uri, scheme, strlen(scheme)) == 0;
-}
-
 static int transport_binding_for(const char *uri, int64_t mode,
                                  enum sirena_lwm2m_transport_binding *binding)
 {
+    enum sirena_lwm2m_uri_scheme scheme;
+    int rc;
+
+    rc = sirena_lwm2m_uri_scheme(uri, &scheme);
+    if (rc != 0) {
+        return rc;
+    }
+
     switch (mode) {
     case SIRENA_LWM2M_SECURITY_MODE_PSK:
-        if (!transport_scheme_is(uri, SIRENA_LWM2M_COAPS_SCHEME)) {
+        switch (scheme) {
+        case SIRENA_LWM2M_URI_SCHEME_COAPS:
+            *binding = SIRENA_LWM2M_TRANSPORT_BINDING_DTLS;
+            return 0;
+        case SIRENA_LWM2M_URI_SCHEME_MQTTS:
+            *binding = SIRENA_LWM2M_TRANSPORT_BINDING_MQTT;
+            return 0;
+        default:
             return -EINVAL;
         }
-        *binding = SIRENA_LWM2M_TRANSPORT_BINDING_DTLS;
-        return 0;
     case SIRENA_LWM2M_SECURITY_MODE_NOSEC:
         if (!IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_NOSEC)) {
             return -EPERM;
         }
-        if (!transport_scheme_is(uri, SIRENA_LWM2M_COAP_SCHEME)) {
+        switch (scheme) {
+        case SIRENA_LWM2M_URI_SCHEME_COAP:
+            *binding = SIRENA_LWM2M_TRANSPORT_BINDING_COAP;
+            return 0;
+        case SIRENA_LWM2M_URI_SCHEME_MQTT:
+            *binding = SIRENA_LWM2M_TRANSPORT_BINDING_MQTT;
+            return 0;
+        default:
             return -EINVAL;
         }
-        *binding = SIRENA_LWM2M_TRANSPORT_BINDING_COAP;
-        return 0;
     default:
         return -ENOTSUP;
     }
@@ -232,6 +251,10 @@ static int transport_dispatch(enum sirena_lwm2m_engine_operation operation, void
         return transport_stop_binding(SIRENA_LWM2M_TRANSPORT_BINDING_COAP);
     case SIRENA_LWM2M_ENGINE_OPERATION_STOP_DTLS:
         return transport_stop_binding(SIRENA_LWM2M_TRANSPORT_BINDING_DTLS);
+    case SIRENA_LWM2M_ENGINE_OPERATION_START_MQTT:
+        return transport_start_binding(SIRENA_LWM2M_TRANSPORT_BINDING_MQTT);
+    case SIRENA_LWM2M_ENGINE_OPERATION_STOP_MQTT:
+        return transport_stop_binding(SIRENA_LWM2M_TRANSPORT_BINDING_MQTT);
     case SIRENA_LWM2M_ENGINE_OPERATION_REGISTER:
         return transport_ops != NULL ? transport_ops->register_client() : -ENOTSUP;
     case SIRENA_LWM2M_ENGINE_OPERATION_UPDATE:

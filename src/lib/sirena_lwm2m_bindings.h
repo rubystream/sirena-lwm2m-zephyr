@@ -8,6 +8,7 @@ enum sirena_lwm2m_transport_binding {
     SIRENA_LWM2M_TRANSPORT_BINDING_NONE,
     SIRENA_LWM2M_TRANSPORT_BINDING_COAP,
     SIRENA_LWM2M_TRANSPORT_BINDING_DTLS,
+    SIRENA_LWM2M_TRANSPORT_BINDING_MQTT,
 };
 
 #if IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_COAP)
@@ -20,6 +21,12 @@ int sirena_lwm2m_coap_stop_engine(void);
 extern const struct sirena_lwm2m_transport_ops sirena_lwm2m_dtls_transport_ops;
 int sirena_lwm2m_dtls_start_engine(void);
 int sirena_lwm2m_dtls_stop_engine(void);
+#endif
+
+#if IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_MQTT)
+extern const struct sirena_lwm2m_transport_ops sirena_lwm2m_mqtt_transport_ops;
+int sirena_lwm2m_mqtt_start_engine(void);
+int sirena_lwm2m_mqtt_stop_engine(void);
 #endif
 
 int sirena_lwm2m_transport_engine_ensure(void);

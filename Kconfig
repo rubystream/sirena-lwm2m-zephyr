@@ -92,14 +92,14 @@ config SIRENA_LWM2M_SERVER_URI_MAX
 
 config SIRENA_LWM2M_CREDENTIAL_MAX
 	int "Maximum size of a credential (identity, public key, secret key)"
-	default 128 if SIRENA_LWM2M_TRANSPORT_DTLS
+	default 128 if SIRENA_LWM2M_TRANSPORT_DTLS || SIRENA_LWM2M_TRANSPORT_MQTT
 	default 32
 	range 8 1024
 	help
 	  The Security object stores the identity, the public key and the
-	  secret key in buffers of this size. The DTLS binding needs room
-	  for the PSK identity and the PSK key, so the size is raised when
-	  the DTLS binding is enabled.
+	  secret key in buffers of this size. The DTLS and the MQTT bindings
+	  need room for the PSK identity and the PSK key, so the size is
+	  raised when one of them is enabled.
 
 config SIRENA_LWM2M_SERVER_STRING_MAX
 	int "Maximum length of a server side string (binding, optional strings)"
@@ -193,6 +193,84 @@ config SIRENA_LWM2M_TRANSPORT_DTLS
 	  enabled. An application that enables the mbed TLS heap instead
 	  does not need them for the key slot size.
 
+config SIRENA_LWM2M_TRANSPORT_MQTT
+	bool "Enable the MQTT transport binding"
+	default n
+	depends on NET_SOCKETS && NET_TCP && MBEDTLS && NET_SOCKETS_SOCKOPT_TLS
+	depends on MQTT_LIB
+	select MQTT_LIB_TLS
+	select MBEDTLS_SSL_PROTO_TLS1_2
+	select MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
+	select PSA_WANT_ALG_CCM
+	select PSA_WANT_ALG_HMAC
+	select PSA_WANT_ALG_SHA_256
+	select PSA_WANT_ALG_SHA_384
+	select PSA_WANT_ALG_TLS12_PRF
+	select PSA_WANT_ALG_TLS12_PSK_TO_MS
+	select PSA_WANT_KEY_TYPE_AES
+	select PSA_WANT_KEY_TYPE_DERIVE
+	help
+	  Enables the MQTT transport binding of OMA LwM2M 1.2. The binding
+	  connects to the MQTT broker of the Security object, subscribes to
+	  the topic of the endpoint and publishes the registration, the
+	  answers and the notifications on it. The payloads are CBOR maps,
+	  as the specification defines them.
+
+	  The binding needs the MQTT library of Zephyr, which needs the
+	  socket API and TCP, and the TLS socket of Zephyr, which needs
+	  mbed TLS with the PSK key exchange. The application has to enable
+	  CONFIG_MQTT_LIB, CONFIG_MBEDTLS and CONFIG_NET_SOCKETS_SOCKOPT_TLS.
+	  The "mqtt://" scheme talks to the broker in the clear and needs
+	  the noSec development gate, the "mqtts://" scheme protects the
+	  connection with the pre-shared key of the Security object.
+
+config SIRENA_LWM2M_MQTT_TOPIC_MAX
+	int "Maximum length of the MQTT topic of the endpoint"
+	default 128
+	range 32 512
+	depends on SIRENA_LWM2M_TRANSPORT_MQTT
+	help
+	  The topic of the endpoint is the prefix, the "lwm2m/rd/" root and
+	  the endpoint name. The buffer has to hold all of them.
+
+config SIRENA_LWM2M_MQTT_CLIENT_ID_MAX
+	int "Maximum length of the MQTT client identifier"
+	default 23
+	range 1 23
+	depends on SIRENA_LWM2M_TRANSPORT_MQTT
+	help
+	  MQTT 3.1.1 limits the client identifier to 23 bytes. The endpoint
+	  name is used as the client identifier when the application does not
+	  set one, and it is cut to this length.
+
+config SIRENA_LWM2M_MQTT_TOPIC_PREFIX_MAX
+	int "Maximum length of the MQTT topic prefix"
+	default 32
+	range 0 SIRENA_LWM2M_MQTT_TOPIC_MAX
+	depends on SIRENA_LWM2M_TRANSPORT_MQTT
+	help
+	  The prefix is the tenant name the specification defines. It is
+	  optional and empty by default. It is part of the topic of the
+	  endpoint, so it cannot be longer than the topic itself.
+
+config SIRENA_LWM2M_MQTT_BUFFER_SIZE
+	int "Size of the MQTT receive and transmit buffers"
+	default 512
+	range 128 2048
+	depends on SIRENA_LWM2M_TRANSPORT_MQTT
+	help
+	  The buffers hold a whole MQTT packet, so they have to hold the
+	  topic, the CBOR payload and the value it carries.
+
+config SIRENA_LWM2M_MQTT_RESPONSE_TIMEOUT_MS
+	int "Time the binding waits for a server response in milliseconds"
+	default 10000
+	range 100 60000
+	depends on SIRENA_LWM2M_TRANSPORT_MQTT
+	help
+	  The binding waits for the answer of the server to the Register,
+	  the Update and the Deregister request for this time.
+
 config SIRENA_LWM2M_TRANSPORT_NOSEC
 	bool "Allow the NoSec security mode"
 	default n
@@ -204,19 +282,19 @@ config SIRENA_LWM2M_TRANSPORT_NOSEC
 	  testing only and it has no effect on the DTLS binding.
 
 config SIRENA_LWM2M_PSK_IDENTITY_MAX
-	int "Maximum size of the DTLS PSK identity"
+	int "Maximum size of the PSK identity"
 	default 128
 	range 1 128
-	depends on SIRENA_LWM2M_TRANSPORT_DTLS
+	depends on SIRENA_LWM2M_TRANSPORT_DTLS || SIRENA_LWM2M_TRANSPORT_MQTT
 	help
 	  The OMA LwM2M 1.2 Transport Bindings specification requires support
 	  for PSK identities of up to 128 bytes.
 
 config SIRENA_LWM2M_PSK_KEY_MAX
-	int "Maximum size of the DTLS PSK key"
+	int "Maximum size of the PSK key"
 	default 64
 	range 1 64
-	depends on SIRENA_LWM2M_TRANSPORT_DTLS
+	depends on SIRENA_LWM2M_TRANSPORT_DTLS || SIRENA_LWM2M_TRANSPORT_MQTT
 	help
 	  The OMA LwM2M 1.2 Transport Bindings specification requires support
 	  for PSK keys of up to 64 bytes. mbed TLS limits the key size with
@@ -230,6 +308,17 @@ config SIRENA_LWM2M_DTLS_SEC_TAG
 	depends on SIRENA_LWM2M_TRANSPORT_DTLS
 	help
 	  The secure tag under which the DTLS binding registers the
+	  pre-shared key identity and the pre-shared key with the TLS
+	  credential subsystem. A secure tag identifies one set of
+	  credentials, so the value has to be unique in the application.
+
+config SIRENA_LWM2M_MQTT_SEC_TAG
+	int "Secure tag of the MQTT credentials"
+	default 2
+	range 1 65535
+	depends on SIRENA_LWM2M_TRANSPORT_MQTT
+	help
+	  The secure tag under which the MQTT binding registers the
 	  pre-shared key identity and the pre-shared key with the TLS
 	  credential subsystem. A secure tag identifies one set of
 	  credentials, so the value has to be unique in the application.

@@ -11,8 +11,8 @@ intent; detailed documentation lives here to avoid bloating the root.
 - `objects.md` - built-in Security, Server and Device objects, the typed
   application API, provisioning, and the Kconfig symbols.
 - `transport.md` - the transport interface, the engine thread and the
-  CoAP/UDP and CoAP/DTLS bindings, with the registration lifecycle, the
-  credentials and the error codes.
+  CoAP/UDP, CoAP/DTLS and MQTT bindings, with the registration lifecycle,
+  the topics, the credentials and the error codes.
 - `protocol.md` - the server initiated read, write and execute operations, the
   content format negotiation, the observations and the notifications.
 
