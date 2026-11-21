@@ -90,6 +90,9 @@ A successful run prints `sirena zephyr smoke ok`.
 | Build and run DTLS transport tests with the noSec development gate open | `npm run test:dtls-nosec` |
 | Build and run protocol tests | `npm run test:protocol` |
 | Build and run MQTT transport tests | `npm run test:mqtt` |
+| Build the native simulator sample | `npm run build:sample` |
+| Run the native simulator sample | `npm run run:sample` |
+| Build and run the end-to-end sample tests | `npm run test:sample` |
 | Remove build output | `npm run clean` |
 | Full smoke workflow | `npm run smoke` |
 | Flash firmware (opt-in) | `npm run flash` |
@@ -236,6 +239,7 @@ Flashing requires host access to USB programming/debugging hardware.
 - [Built-in LwM2M objects](objects.md)
 - [Transport bindings](transport.md)
 - [Protocol core](protocol.md)
+- [Native simulator sample](sample.md)
 - [Compose services](../compose.yml)
 - [Docker build](../Dockerfile)
 - [Project entry point](../README.md)
