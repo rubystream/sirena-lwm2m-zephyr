@@ -122,6 +122,7 @@ npm run clean    # rm -rf /workspace/build
 npm run flash    # west flash (opt-in profile; requires host USB device permissions)
 npm run deploy   # same as npm run flash (opt-in profile)
 npm run smoke    # init, update, and build the smoke target
+npm run build:sample  # build the native simulator sample
 npm run run:sample   # build and run the native simulator sample
 npm run test:sample  # build and run the end-to-end sample tests
 ```
