@@ -85,6 +85,14 @@ config SIRENA_LWM2M_OBJECT_DEVICE_OPTIONAL
 	bool "Enable optional Device object (3) resources"
 	default n
 
+config SIRENA_LWM2M_LWM2M_VERSION
+	string "LwM2M version the client announces in the registration"
+	default "1.2"
+	help
+	  The version the client announces in the "lwm2m" parameter of its
+	  registration. It has to be a version the server supports: Leshan
+	  knows 1.0 and 1.1 only, the Sirena server knows 1.0, 1.1 and 1.2.
+
 config SIRENA_LWM2M_SERVER_URI_MAX
 	int "Maximum length of the LwM2M server URI"
 	default 64
