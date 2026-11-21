@@ -241,6 +241,11 @@ static int dtls_deregister(void)
 
 static int dtls_poll(int timeout_ms)
 {
+    if (!session_active) {
+        k_msleep(timeout_ms);
+        return 0;
+    }
+
     return sirena_lwm2m_coap_endpoint_poll(timeout_ms);
 }
 
