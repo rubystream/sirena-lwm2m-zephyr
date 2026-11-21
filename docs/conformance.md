@@ -14,8 +14,8 @@ wire format.
 
 | Part | Path |
 | --- | --- |
-| Leshan server image | `src/tests/leshan/leshan.Dockerfile` |
-| Sirena server image | `src/tests/sirena/sirena-lwm2m2.Dockerfile` |
+| Leshan server image | `src/tests/conformance/leshan.Dockerfile` |
+| Sirena server image | `src/tests/conformance/sirena-lwm2m2.Dockerfile` |
 | Client under test | `src/tests/conformance/src/test_conformance.c` |
 | Orchestration of the run | `src/tests/conformance/harness.py` |
 | The adapter of a server | `src/tests/conformance/servers/` |
@@ -56,8 +56,8 @@ client. Only the tiers choose another value.
 
 The image runs the self contained `leshan-demo-server` artifact of Maven
 Central, so it needs no other artifact and the host needs no Java. The
-`src/tests/leshan/leshan.Dockerfile` keeps `2.0.0-M18` as the default of its
-own build argument and checks the SHA-256 sum of the jar. The sum is the
+`src/tests/conformance/leshan.Dockerfile` keeps `2.0.0-M18` as the default of
+its own build argument and checks the SHA-256 sum of the jar. The sum is the
 guard: a jar that does not match the pinned sum stops the build instead of
 changing the server silently.
 
@@ -72,13 +72,16 @@ package `@sirena-lwm2m/server` `0.5.0`, which ships the compiled `dist/` in
 its tarball, so a runtime-only image from the tarball is the same server the
 upstream project builds from its private source repository.
 
-The `src/tests/sirena/sirena-lwm2m2.Dockerfile` downloads the tarball of that
-exact version from the npm registry and checks it twice before it installs it:
+The `src/tests/conformance/sirena-lwm2m2.Dockerfile` downloads the tarball of
+that exact version from the npm registry and checks it twice before it installs it:
 against the `shasum` of the registry and against its `integrity` value, which
 is the SHA-512 sum of the tarball. A tarball that does not match stops the
-build. The image runs the server with its in-memory store on the CoAP port
-`5683` and on the HTTP port `8080`, which is the default of the upstream
-Dockerfile.
+build. The dependency of the server, `@sirena-lwm2m/core`, is installed with
+its exact version `0.7.0`, so the image is built from fixed inputs. The image
+is built on `node:24.22.0-slim`, the Node.js version the repository pins for
+the host toolchain. The image runs the server with its in-memory store on the
+CoAP port `5683` and on the HTTP port `8080`, which is the default of the
+upstream Dockerfile.
 
 The server prints a warning on its standard error when it binds to a
 non-loopback address with the in-memory store. The warning is expected and
@@ -95,8 +98,9 @@ view of the server:
    and `3` the client registers.
 2. **Telemetry.** The server observes the Device 9 Battery Level resource of
    the client and receives the notifications of it with the value the client
-   publishes. The harness checks the type of the value as well, so a server
-   that could not decode it fails the run.
+   publishes. The harness checks the type of the value as well and fails the
+   run when the server reports no type, so a server that could not decode the
+   value fails the run.
 3. **Read.** The server reads the Device 9 resource and gets the value the
    client published.
 4. **Write.** The server writes the Device 14 UTC offset resource and the
@@ -222,3 +226,9 @@ was built with and the client and the harness cannot drift apart.
 The version the client announces is the module symbol
 `CONFIG_SIRENA_LWM2M_LWM2M_VERSION`, which the file of the tier overrides:
 `prj-leshan.conf` sets it to `1.1` and `prj-sirena.conf` sets it to `1.2`.
+The expected version is a property of the tier, not of the build: the
+harness holds it in the table of the tiers and checks two things against it.
+It checks the version the client announced, read from the resolved
+configuration of the build, so a file of the tier that names another version
+fails the run instead of weakening the tier. It checks the version the server
+reports, so a server that shows another version fails the run as well.

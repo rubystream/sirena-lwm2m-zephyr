@@ -275,7 +275,7 @@ transport, so calling `sirena_lwm2m_coap_start()` directly is safe as well.
 | Server address | Security object resource 0, the LwM2M Server URI, for example `coap://192.0.2.10:5683` |
 | Lifetime | Server object instance 0, resource 1 |
 | Binding mode | `U`, hard-coded for this binding |
-| LwM2M version | `1.2`, hard-coded for this binding |
+| LwM2M version | `CONFIG_SIRENA_LWM2M_LWM2M_VERSION`, the version the client announces |
 | Endpoint name | The application, through `sirena_lwm2m_transport_set_endpoint_name()` |
 | Objects and instances | The object registry, at the time of the registration |
 
@@ -289,9 +289,15 @@ no port. Host names and IPv6 addresses are not supported by this binding.
 
 | Operation | Method | URI |
 | --- | --- | --- |
-| Register | POST | `/rd?ep={endpoint}&lt={lifetime}&lwm2m=1.2&b=U` |
+| Register | POST | `/rd?ep={endpoint}&lt={lifetime}&lwm2m={version}&b=U` |
 | Update | POST | `/{location}?lt={lifetime}&b=U` |
 | Deregister | DELETE | `/{location}` |
+
+The version of the Register URI is the value of
+`CONFIG_SIRENA_LWM2M_LWM2M_VERSION`, `1.2` by default. A server that does
+not support the announced version refuses the registration, so an
+application that talks to a server that knows LwM2M 1.1 only configures
+`1.1`.
 
 The Register payload is `application/link-format` and lists the objects and
 object instances the client holds, for example `</1/0>,</3/0>`. The list is
@@ -630,10 +636,14 @@ structure.
 | De-register | 8 | `operation`, `token` |
 
 The registration carries the endpoint name, the lifetime of the Server
-object, the LwM2M version `1.2`, the binding mode `M` and the object list
-of the registry, as the CoAP binding does. The binding mode `M` is the
-MQTT value of the binding modes of the LwM2M Core specification, section
-6.2.1.2, the same way the CoAP binding uses `U` for UDP.
+object, the LwM2M version `CONFIG_SIRENA_LWM2M_LWM2M_VERSION`, the binding
+mode `M` and the object list of the registry, as the CoAP binding does. The
+binding mode `M` is the MQTT value of the binding modes of the LwM2M Core
+specification, section 6.2.1.2, the same way the CoAP binding uses `U` for
+UDP. A client announces one LwM2M version, so the `version` member of the
+registration carries the same value as the `lwm2m` parameter of the CoAP
+registration. The member holds 64 characters, so a version that does not fit
+is refused with `-EINVAL`.
 
 The `ct` member of the registration carries the content format of the
 `payload` member, which is the CoRE link format of the object list, so
@@ -685,7 +695,7 @@ and the negotiated content format.
 | Topic prefix | The value of `sirena_lwm2m_mqtt_set_topic_prefix()`, empty by default |
 | Lifetime | Server object instance 0, resource 1 |
 | Binding mode | `M`, hard-coded for this binding |
-| LwM2M version | `1.2`, hard-coded for this binding |
+| LwM2M version | `CONFIG_SIRENA_LWM2M_LWM2M_VERSION`, the version the client announces |
 | Endpoint name | The application, through `sirena_lwm2m_transport_set_endpoint_name()` |
 
 The host of the server URI must be a numeric IPv4 address. Host names and
@@ -775,6 +785,7 @@ can match it.
 
 | Kconfig symbol | Purpose | Default |
 | --- | --- | --- |
+| `CONFIG_SIRENA_LWM2M_LWM2M_VERSION` | The LwM2M version the client announces in the registration. The CoAP binding sends it in the `lwm2m` parameter of the registration URI and the MQTT binding sends it in the `version` member of the registration payload. | `1.2` |
 | `CONFIG_SIRENA_LWM2M_TRANSPORT_COAP` | Enables the CoAP/UDP binding. It depends on `CONFIG_COAP` and `CONFIG_COAP_CLIENT` and selects `CONFIG_COAP_EXTENDED_OPTIONS_LEN`. | `y` |
 | `CONFIG_SIRENA_LWM2M_TRANSPORT_DTLS` | Enables the CoAP/DTLS binding. It depends on `CONFIG_COAP`, `CONFIG_COAP_CLIENT`, `CONFIG_NET_SOCKETS`, `CONFIG_MBEDTLS` and `CONFIG_NET_SOCKETS_SOCKOPT_TLS` and selects the mbed TLS PSK key exchange, the DTLS protocol and the CCM and SHA-256 algorithms. | `y` |
 | `CONFIG_SIRENA_LWM2M_TRANSPORT_NOSEC` | Allows a server that uses the NoSec security mode. It is for development and testing only. | `n` |

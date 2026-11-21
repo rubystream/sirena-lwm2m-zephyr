@@ -144,8 +144,10 @@ narrowing it.
 The codec reads the width of an incoming integer from the value itself and
 accepts 1, 2, 4 or 8 bytes, which are the widths the LwM2M 1.2
 specification allows and the widths the servers use. The type of the value
-comes from the object model, not from the width of the payload, because the
-Integer and the Float types are both 8 bytes wide.
+comes from the object model, not from the width of the payload. The client
+sends an Integer as 8 bytes and a Float as 8 bytes as well, a binary64, and
+it accepts a Float of 4 or 8 bytes on the way in, so the width of the
+payload cannot tell the two types apart.
 
 ### Two write paths
 
@@ -260,8 +262,8 @@ thread, and when the engine thread does not run yet.
 ## Storage
 
 All built-in values live in static storage; the module performs no heap
-allocation and has no heap use in steady state. The buffer capacities come from
-Kconfig:
+allocation and has no heap use in steady state. The buffer capacities and
+the announced LwM2M version come from Kconfig:
 
 | Kconfig symbol | Purpose | Default |
 | --- | --- | --- |
@@ -269,6 +271,7 @@ Kconfig:
 | `CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX` | Identity, server public key, secret key size. It is 128 when the DTLS binding is enabled. | 32 |
 | `CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX` | Server-side strings such as the binding | 32 |
 | `CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX` | Device metadata strings | 32 |
+| `CONFIG_SIRENA_LWM2M_LWM2M_VERSION` | The LwM2M version the client announces in the registration | 1.2 |
 
 `CONFIG_SIRENA_LWM2M_MAX_RESOURCES_PER_INSTANCE` defaults to 16 and rises to 25
 when `CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL` or

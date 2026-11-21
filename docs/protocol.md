@@ -200,6 +200,7 @@ error codes of the API are the negative `errno` values of the table.
 | `CONFIG_SIRENA_LWM2M_ACCEPTED_FORMATS_MAX` | Number of acceptable content formats the client reads from one request. | 4 |
 | `CONFIG_SIRENA_LWM2M_ENGINE_POLL_INTERVAL_MS` | Interval the engine thread polls the transport socket with. | 20 |
 | `CONFIG_SIRENA_LWM2M_COAP_MESSAGE_MAX` | Size of the buffer that holds a CoAP message. | 512 |
+| `CONFIG_SIRENA_LWM2M_LWM2M_VERSION` | The LwM2M version the client announces in the registration. | 1.2 |
 
 ## Not in this slice
 

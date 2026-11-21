@@ -17,7 +17,7 @@ intent; detailed documentation lives here to avoid bloating the root.
   content format negotiation, the observations and the notifications.
 - `sample.md` - the native simulator sample, its configuration, its bounded
   lifetime and the end-to-end proof of its flow.
-- `leshan.md` - the two-tier conformance harness: Leshan `2.0.0-M18` verifies the
+- `conformance.md` - the two-tier conformance harness: Leshan `2.0.0-M18` verifies the
   client up to LwM2M `1.1` and `sirena-lwm2m2-server` verifies LwM2M `1.2`,
   with the end-to-end proof of registration, telemetry and commands.
 

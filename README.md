@@ -145,7 +145,7 @@ See [the sample guide](docs/sample.md).
 asserts the registration, the telemetry and the commands from the point of view
 of the server. It runs in two tiers: Leshan `2.0.0-M18` verifies the client up
 to LwM2M `1.1`, the version Leshan implements, and `sirena-lwm2m2-server`
-verifies LwM2M `1.2`. See [the conformance guide](docs/leshan.md).
+verifies LwM2M `1.2`. See [the conformance guide](docs/conformance.md).
 
 ## Reference
 
