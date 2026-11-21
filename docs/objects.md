@@ -129,8 +129,9 @@ write directly when the caller runs in the engine thread, so it never
 deadlocks, and when the engine thread does not run yet, which is the case
 before the transport starts.
 
-The typed setters above stay engine-context-only. The client itself uses them
-from the engine thread.
+The typed setters above stay engine-context-only. The client reads the
+resources from the engine thread, so an application thread writes the values
+it owns through the thread-safe setter.
 
 The built-in integer resources use a byte width of 8 when read through the typed
 API: `sirena_lwm2m_get_integer()` fills an `int64_t` and the server path

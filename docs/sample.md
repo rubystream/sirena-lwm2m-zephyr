@@ -83,7 +83,9 @@ address is `NULL`.
 given: it provisions the client, starts the transport, registers, publishes
 the telemetry for the lifetime of the run, handles the commands of the server
 and deregisters. It returns `0` when the sample ran its lifetime and stopped,
-and a negative `errno` value when a step failed.
+and a negative `errno` value when it could not start, for example because the
+provisioning failed. A registration the server refuses is recorded in the
+state and does not stop the run.
 
 `sirena_lwm2m_sample_state_read()` copies the state of the sample into the
 structure it is given and returns `0`. It returns `-EINVAL` for a `NULL`
