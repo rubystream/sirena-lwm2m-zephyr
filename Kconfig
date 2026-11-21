@@ -351,6 +351,98 @@ config SIRENA_LWM2M_COAP_MESSAGE_MAX
 
 endif
 
+menu "Sirena LwM2M sample"
+
+config SIRENA_LWM2M_SAMPLE_SERVER_URI
+	string "LwM2M server URI the sample registers with"
+	default "coap://127.0.0.1:5683"
+	help
+	  The URI of the LwM2M server the sample registers with. The scheme
+	  selects the transport binding: "coap" for the plaintext binding,
+	  "coaps" for the DTLS binding, "mqtt" and "mqtts" for the MQTT
+	  binding.
+
+config SIRENA_LWM2M_SAMPLE_ENDPOINT_NAME
+	string "Endpoint name the sample registers with"
+	default "sirena-sample"
+	help
+	  The LwM2M Endpoint Client Name of the sample. The server shows it
+	  as the name of the registered endpoint.
+
+config SIRENA_LWM2M_SAMPLE_SECURITY_MODE
+	int "Security mode of the sample"
+	default 3
+	range 0 4
+	help
+	  The security mode of the Security object of the sample: 0 is the
+	  pre-shared key, 1 the public key, 2 the certificate, 3 the noSec
+	  mode and 4 the certificate with the EST server. Only the pre-shared
+	  key and the noSec mode are implemented by the bindings.
+
+config SIRENA_LWM2M_SAMPLE_IDENTITY
+	string "Pre-shared key identity of the sample"
+	default ""
+	help
+	  The identity of the pre-shared key of the sample. It is empty for
+	  the noSec mode.
+
+config SIRENA_LWM2M_SAMPLE_SECRET_KEY
+	string "Pre-shared key of the sample"
+	default ""
+	help
+	  The pre-shared key of the sample. It is empty for the noSec mode.
+
+config SIRENA_LWM2M_SAMPLE_SHORT_SERVER_ID
+	int "Short server id of the sample"
+	default 1
+	range 0 65535
+
+config SIRENA_LWM2M_SAMPLE_LIFETIME
+	int "Registration lifetime of the sample in seconds"
+	default 300
+	range 1 86400
+
+config SIRENA_LWM2M_SAMPLE_BINDING
+	string "Binding mode of the sample"
+	default "U"
+	help
+	  The binding mode the sample registers with: "U" for UDP, "T" for TCP
+	  and "UQ" for UDP and TCP.
+
+config SIRENA_LWM2M_SAMPLE_MANUFACTURER
+	string "Manufacturer of the sample device"
+	default "Sirena"
+
+config SIRENA_LWM2M_SAMPLE_MODEL_NUMBER
+	string "Model number of the sample device"
+	default "sirena-sample"
+
+config SIRENA_LWM2M_SAMPLE_SERIAL_NUMBER
+	string "Serial number of the sample device"
+	default "sirena-sample-0001"
+
+config SIRENA_LWM2M_SAMPLE_FIRMWARE_VERSION
+	string "Firmware version of the sample device"
+	default "1.0.0"
+
+config SIRENA_LWM2M_SAMPLE_RUN_SECONDS
+	int "Lifetime of the sample run in seconds"
+	default 10
+	range 1 3600
+	help
+	  The sample stops after this many seconds, deregisters and exits. It
+	  never runs forever, so that it terminates on its own in a test run.
+
+config SIRENA_LWM2M_SAMPLE_TELEMETRY_INTERVAL_MS
+	int "Interval between the telemetry reports of the sample in milliseconds"
+	default 1000
+	range 100 60000
+	help
+	  The interval between the telemetry reports of the sample. The first
+	  report is sent after one interval.
+
+endmenu
+
 endif
 
 endmenu
