@@ -17,6 +17,8 @@ intent; detailed documentation lives here to avoid bloating the root.
   content format negotiation, the observations and the notifications.
 - `sample.md` - the native simulator sample, its configuration, its bounded
   lifetime and the end-to-end proof of its flow.
+- `leshan.md` - the Leshan conformance harness, the version constraint of the
+  server and the end-to-end proof of registration, telemetry and commands.
 
 Generated documentation output and build artifacts are ignored and never
 committed.

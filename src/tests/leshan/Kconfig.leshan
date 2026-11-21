@@ -1,0 +1,72 @@
+menu "Sirena LwM2M Leshan harness"
+
+config SIRENA_LWM2M_LESHAN_SERVER_URI
+	string "LwM2M server URI the harness registers with"
+	default "coap://192.168.0.1:5683"
+	help
+	  The URI of the Leshan server the harness registers with. The
+	  address is the one the harness gives to the Linux side of the
+	  TAP device the native_sim build creates.
+
+config SIRENA_LWM2M_LESHAN_ENDPOINT_NAME
+	string "Endpoint name the harness registers with"
+	default "sirena-leshan"
+	help
+	  The LwM2M Endpoint Client Name of the harness. The Leshan server
+	  shows it as the name of the registered endpoint.
+
+config SIRENA_LWM2M_LESHAN_LIFETIME
+	int "Registration lifetime of the harness in seconds"
+	default 300
+	range 1 86400
+
+config SIRENA_LWM2M_LESHAN_LWM2M_VERSION
+	string "LwM2M version the harness expects in the registration"
+	default "1.2"
+	help
+	  The version the client sends in the registration. The harness
+	  checks that the Leshan server accepted it. Leshan 2.0.0-M17 is the
+	  newest release that accepts a LwM2M 1.2 client.
+
+config SIRENA_LWM2M_LESHAN_BINDING
+	string "Binding mode the harness registers with"
+	default "U"
+	help
+	  The binding mode the client sends in the registration. The harness
+	  checks that the Leshan server shows it.
+
+config SIRENA_LWM2M_LESHAN_TELEMETRY_VALUE
+	int "Value the harness reports in the telemetry resource"
+	default 42
+
+config SIRENA_LWM2M_LESHAN_WRITE_VALUE
+	string "Value the harness expects the Leshan server to write"
+	default "+02:00"
+	help
+	  The harness writes this value in the UTC offset resource of the
+	  device object and checks that the client kept it.
+
+config SIRENA_LWM2M_LESHAN_REGISTRATION_TIMEOUT_MS
+	int "Time the harness waits for the registration in milliseconds"
+	default 30000
+	range 1000 300000
+	help
+	  The harness retries the registration until the Leshan server
+	  accepts it. The TAP device only carries traffic once the harness
+	  has given its Linux side an address, so the first attempts can
+	  fail.
+
+config SIRENA_LWM2M_LESHAN_TELEMETRY_INTERVAL_MS
+	int "Interval between the telemetry reports of the harness in milliseconds"
+	default 500
+	range 100 60000
+
+config SIRENA_LWM2M_LESHAN_COMMAND_TIMEOUT_MS
+	int "Time the harness waits for the command of the server in milliseconds"
+	default 60000
+	range 1000 600000
+	help
+	  The harness publishes telemetry and waits for the Leshan server
+	  to observe it, to write a resource and to execute a resource.
+
+endmenu
