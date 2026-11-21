@@ -47,6 +47,6 @@ struct sirena_lwm2m_sample_state {
 
 void sirena_lwm2m_sample_config_from_kconfig(struct sirena_lwm2m_sample_config *config);
 int sirena_lwm2m_sample_run(const struct sirena_lwm2m_sample_config *config);
-const struct sirena_lwm2m_sample_state *sirena_lwm2m_sample_state(void);
+int sirena_lwm2m_sample_state_read(struct sirena_lwm2m_sample_state *state);
 
 #endif

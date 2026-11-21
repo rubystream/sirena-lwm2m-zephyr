@@ -50,7 +50,6 @@ struct peer_capture {
 
 static struct peer_capture peer_capture;
 static struct net_sockaddr_storage peer_client_address;
-static net_socklen_t peer_client_address_length;
 static bool peer_registered;
 static bool peer_deregistered;
 static char peer_registration_payload[PEER_PAYLOAD_MAX];
@@ -133,7 +132,6 @@ static int peer_register_post(struct coap_resource *resource, struct coap_packet
 
 	peer_registered = true;
 	memcpy(&peer_client_address, addr, sizeof(peer_client_address));
-	peer_client_address_length = addr_len;
 
 	k_sem_give(&peer_registration_semaphore);
 
@@ -371,7 +369,9 @@ ZTEST_SUITE(sirena_lwm2m_sample, NULL, suite_setup, test_before, NULL, NULL);
 
 ZTEST(sirena_lwm2m_sample, test_the_sample_registers_publishes_telemetry_and_handles_a_command)
 {
-	const struct sirena_lwm2m_sample_state *state;
+	struct sirena_lwm2m_sample_state state;
+	uint8_t token[COAP_TOKEN_MAX_LEN];
+	uint8_t token_length;
 	uint8_t payload[PEER_PAYLOAD_MAX];
 	int64_t observed;
 	int64_t notified;
@@ -401,6 +401,9 @@ ZTEST(sirena_lwm2m_sample, test_the_sample_registers_publishes_telemetry_and_han
 	zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CONTENT, "unexpected response code");
 	zassert_true(peer_capture.observe >= 0, "the response must carry the observe option");
 
+	token_length = peer_capture.token_length;
+	memcpy(token, peer_capture.token, token_length);
+
 	observed = peer_decode_integer();
 	zassert_true(observed >= 0 && observed <= SAMPLE_BATTERY_START,
 		     "the observed value is out of range: %lld", (long long)observed);
@@ -411,6 +414,9 @@ ZTEST(sirena_lwm2m_sample, test_the_sample_registers_publishes_telemetry_and_han
 	zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CONTENT, "unexpected notification code");
 	zassert_equal(peer_capture.type, COAP_TYPE_CON,
 		      "the notification must be a confirmable message");
+	zassert_equal(peer_capture.token_length, token_length, "the notification token length differs");
+	zassert_equal(memcmp(peer_capture.token, token, token_length), 0,
+		      "the notification must reuse the observation token");
 
 	notified = peer_decode_integer();
 	zassert_true(notified >= 0 && notified <= SAMPLE_BATTERY_START,
@@ -418,20 +424,22 @@ ZTEST(sirena_lwm2m_sample, test_the_sample_registers_publishes_telemetry_and_han
 	zassert_equal(notified % SAMPLE_BATTERY_STEP, 0,
 		      "the notified value is not one the sample publishes");
 
-	state = sirena_lwm2m_sample_state();
-	zassert_true(state->telemetry_reports > 0, "the sample published no telemetry");
-	zassert_true(state->last_telemetry_value <= notified,
+	rc = sirena_lwm2m_sample_state_read(&state);
+	zassert_equal(rc, 0, "the state of the sample is not readable");
+	zassert_true(state.telemetry_reports > 0, "the sample published no telemetry");
+	zassert_true(state.last_telemetry_value <= notified,
 		     "the sample published a value the peer did not receive");
 
 	rc = peer_request(COAP_METHOD_POST, "/3/0/4", 0U, NULL, 0U, -1);
 	zassert_equal(rc, 0, "the execute request failed: %d", rc);
 	zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED, "unexpected response code");
 
-	state = sirena_lwm2m_sample_state();
-	zassert_true(state->command_handled, "the execute handler of the sample did not run");
-	zassert_equal(state->command_object_id, PEER_DEVICE_OBJECT_ID, "unexpected object id");
-	zassert_equal(state->command_instance_id, PEER_INSTANCE_ID, "unexpected instance id");
-	zassert_equal(state->command_resource_id, PEER_DEVICE_REBOOT_RESOURCE,
+	rc = sirena_lwm2m_sample_state_read(&state);
+	zassert_equal(rc, 0, "the state of the sample is not readable");
+	zassert_true(state.command_handled, "the execute handler of the sample did not run");
+	zassert_equal(state.command_object_id, PEER_DEVICE_OBJECT_ID, "unexpected object id");
+	zassert_equal(state.command_instance_id, PEER_INSTANCE_ID, "unexpected instance id");
+	zassert_equal(state.command_resource_id, PEER_DEVICE_REBOOT_RESOURCE,
 		      "unexpected resource id");
 
 	rc = peer_request(COAP_METHOD_GET, "/3/0/0", 0U, NULL, 0U, -1);
@@ -460,7 +468,8 @@ ZTEST(sirena_lwm2m_sample, test_the_sample_registers_publishes_telemetry_and_han
 
 	zassert_true(peer_deregistered, "the peer received no deregistration");
 
-	state = sirena_lwm2m_sample_state();
-	zassert_true(state->registered, "the sample was not registered");
-	zassert_equal(state->last_error, 0, "the sample reported an error");
+	rc = sirena_lwm2m_sample_state_read(&state);
+	zassert_equal(rc, 0, "the state of the sample is not readable");
+	zassert_true(state.registered, "the sample was not registered");
+	zassert_equal(state.last_error, 0, "the sample reported an error");
 }

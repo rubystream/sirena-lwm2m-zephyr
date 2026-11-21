@@ -14,6 +14,29 @@
 static K_MUTEX_DEFINE(sample_lock);
 static struct sirena_lwm2m_sample_state sample_state;
 
+static void sample_state_error(int error)
+{
+	k_mutex_lock(&sample_lock, K_FOREVER);
+	sample_state.last_error = error;
+	k_mutex_unlock(&sample_lock);
+}
+
+static void sample_state_registered(void)
+{
+	k_mutex_lock(&sample_lock, K_FOREVER);
+	sample_state.registered = true;
+	k_mutex_unlock(&sample_lock);
+}
+
+static void sample_state_telemetry(int64_t value, uint32_t observers)
+{
+	k_mutex_lock(&sample_lock, K_FOREVER);
+	sample_state.telemetry_reports++;
+	sample_state.notifications_sent += observers;
+	sample_state.last_telemetry_value = value;
+	k_mutex_unlock(&sample_lock);
+}
+
 static void sample_execute_handler(uint16_t object_id, uint16_t instance_id,
                                    uint16_t resource_id, void *user_data)
 {
@@ -156,11 +179,7 @@ static void sample_run_telemetry(const struct sirena_lwm2m_sample_config *config
 			continue;
 		}
 
-		k_mutex_lock(&sample_lock, K_FOREVER);
-		sample_state.telemetry_reports++;
-		sample_state.notifications_sent += (uint32_t)rc;
-		sample_state.last_telemetry_value = value;
-		k_mutex_unlock(&sample_lock);
+		sample_state_telemetry(value, (uint32_t)rc);
 
 		printk("sirena lwm2m sample: telemetry %lld published to %d observers\n",
 		       (long long)value, rc);
@@ -193,9 +212,17 @@ void sirena_lwm2m_sample_config_from_kconfig(struct sirena_lwm2m_sample_config *
 	config->telemetry_interval_ms = (uint32_t)CONFIG_SIRENA_LWM2M_SAMPLE_TELEMETRY_INTERVAL_MS;
 }
 
-const struct sirena_lwm2m_sample_state *sirena_lwm2m_sample_state(void)
+int sirena_lwm2m_sample_state_read(struct sirena_lwm2m_sample_state *state)
 {
-	return &sample_state;
+	if (state == NULL) {
+		return -EINVAL;
+	}
+
+	k_mutex_lock(&sample_lock, K_FOREVER);
+	*state = sample_state;
+	k_mutex_unlock(&sample_lock);
+
+	return 0;
 }
 
 int sirena_lwm2m_sample_run(const struct sirena_lwm2m_sample_config *config)
@@ -210,7 +237,7 @@ int sirena_lwm2m_sample_run(const struct sirena_lwm2m_sample_config *config)
 
 	rc = sample_prepare(config);
 	if (rc != 0) {
-		sample_state.last_error = rc;
+		sample_state_error(rc);
 		return rc;
 	}
 
@@ -220,16 +247,16 @@ int sirena_lwm2m_sample_run(const struct sirena_lwm2m_sample_config *config)
 	rc = sirena_lwm2m_transport_start();
 	if (rc != 0) {
 		printk("sirena lwm2m sample: the transport failed: %d\n", rc);
-		sample_state.last_error = rc;
+		sample_state_error(rc);
 		return rc;
 	}
 
 	rc = sirena_lwm2m_transport_register();
 	if (rc != 0) {
 		printk("sirena lwm2m sample: the registration failed: %d\n", rc);
-		sample_state.last_error = rc;
+		sample_state_error(rc);
 	} else {
-		sample_state.registered = true;
+		sample_state_registered();
 		printk("sirena lwm2m sample: registered\n");
 	}
 
@@ -238,7 +265,7 @@ int sirena_lwm2m_sample_run(const struct sirena_lwm2m_sample_config *config)
 	rc = sirena_lwm2m_transport_deregister();
 	if (rc != 0) {
 		printk("sirena lwm2m sample: the deregistration failed: %d\n", rc);
-		sample_state.last_error = rc;
+		sample_state_error(rc);
 	} else {
 		printk("sirena lwm2m sample: deregistered\n");
 	}
