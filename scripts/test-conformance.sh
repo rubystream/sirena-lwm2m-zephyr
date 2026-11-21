@@ -9,6 +9,15 @@ LESHAN_CLIENT=leshan-client
 SIRENA_SERVER=sirena-lwm2m2
 SIRENA_CLIENT=sirena-client
 
+remove_services() {
+    server="$1"
+    client="$2"
+
+    docker compose --profile "$PROFILE" stop "$server" "$client" || true
+    docker compose --profile "$PROFILE" rm -f "$server" "$client" || true
+    docker compose --profile "$PROFILE" down || true
+}
+
 run_tier() {
     server="$1"
     client="$2"
@@ -16,10 +25,10 @@ run_tier() {
     status=0
 
     echo "conformance: the $label tier starts"
-    docker compose --profile "$PROFILE" down "$server" "$client"
+    remove_services "$server" "$client"
     docker compose --profile "$PROFILE" up --detach "$server"
     docker compose --profile "$PROFILE" run --rm "$client" || status=$?
-    docker compose --profile "$PROFILE" down "$server" "$client"
+    remove_services "$server" "$client"
 
     if [ "$status" -ne 0 ]; then
         echo "conformance: the $label tier failed"
