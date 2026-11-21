@@ -1124,7 +1124,11 @@ ZTEST(sirena_lwm2m_mqtt, test_an_observe_notifies_the_new_value)
                       "unexpected notification topic");
     zassert_equal(notification.token, request.token, "unexpected notification token");
     zassert_true(notification.has_content_format, "the notification carries no content format");
+    zassert_equal(notification.content_format, CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT,
+                  "unexpected content format");
     zassert_true(notification.has_payload, "the notification carries no value");
+    zassert_equal(peer_decode_integer(&notification), PEER_LIFETIME_NOTIFIED,
+                  "the notification carries a stale value");
 }
 
 ZTEST(sirena_lwm2m_mqtt, test_a_cancelled_observation_stops_the_notifications)
