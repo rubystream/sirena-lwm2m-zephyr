@@ -811,7 +811,8 @@ static int64_t peer_decode_integer(const struct sirena_lwm2m_mqtt_message *messa
     size_t count = ARRAY_SIZE(values);
     int rc;
 
-    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV, message->payload, message->payload_length,
+    rc = sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_TLV, SIRENA_LWM2M_VALUE_INTEGER,
+                                   message->payload, message->payload_length,
                                    values, &count);
     zassert_equal(rc, 0, "the cbor decoding failed: %d", rc);
     zassert_equal(count, 1U, "unexpected value count");

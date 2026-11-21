@@ -137,8 +137,15 @@ the values it owns through the thread-safe setter.
 The built-in integer resources use a byte width of 8 when read through the typed
 API: `sirena_lwm2m_get_integer()` fills an `int64_t` and the server path
 returns the same 8 bytes for an integer resource. The LwM2M codec encodes
-integers as 4 bytes, so the transport binding narrows the value when it encodes
-it.
+integers as 8 bytes, which is the width the LwM2M 1.1 and 1.2 specifications
+give the Integer type, so the transport binding carries the value without
+narrowing it.
+
+The codec reads the width of an incoming integer from the value itself and
+accepts 1, 2, 4 or 8 bytes, which are the widths the LwM2M 1.2
+specification allows and the widths the servers use. The type of the value
+comes from the object model, not from the width of the payload, because the
+Integer and the Float types are both 8 bytes wide.
 
 ### Two write paths
 
