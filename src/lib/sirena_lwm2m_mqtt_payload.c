@@ -21,6 +21,8 @@
 #define SIRENA_LWM2M_CBOR_KEY_RESULT 18U
 #define SIRENA_LWM2M_CBOR_KEY_CONTENT_FORMAT 19U
 
+#define SIRENA_LWM2M_CBOR_MAX_DEPTH 8U
+
 struct sirena_lwm2m_cbor_writer {
     uint8_t *buffer;
     size_t capacity;
@@ -226,7 +228,8 @@ static int cbor_read_head(struct sirena_lwm2m_cbor_reader *reader, uint8_t *majo
     return -EINVAL;
 }
 
-static int cbor_skip(struct sirena_lwm2m_cbor_reader *reader, uint8_t major, uint64_t value)
+static int cbor_skip(struct sirena_lwm2m_cbor_reader *reader, uint8_t major, uint64_t value,
+                      unsigned int depth)
 {
     uint64_t count;
     uint64_t i;
@@ -240,7 +243,7 @@ static int cbor_skip(struct sirena_lwm2m_cbor_reader *reader, uint8_t major, uin
         return 0;
     case SIRENA_LWM2M_CBOR_MAJOR_BYTES:
     case SIRENA_LWM2M_CBOR_MAJOR_TEXT:
-        if (reader->offset + value > reader->length) {
+        if (value > reader->length - reader->offset) {
             return -EINVAL;
         }
 
@@ -248,6 +251,10 @@ static int cbor_skip(struct sirena_lwm2m_cbor_reader *reader, uint8_t major, uin
         return 0;
     case SIRENA_LWM2M_CBOR_MAJOR_ARRAY:
     case SIRENA_LWM2M_CBOR_MAJOR_MAP:
+        if (depth >= SIRENA_LWM2M_CBOR_MAX_DEPTH) {
+            return -EINVAL;
+        }
+
         count = value;
         if (major == SIRENA_LWM2M_CBOR_MAJOR_MAP) {
             count *= 2U;
@@ -259,7 +266,7 @@ static int cbor_skip(struct sirena_lwm2m_cbor_reader *reader, uint8_t major, uin
                 return rc;
             }
 
-            rc = cbor_skip(reader, nested_major, nested_value);
+            rc = cbor_skip(reader, nested_major, nested_value, depth + 1U);
             if (rc != 0) {
                 return rc;
             }
@@ -267,12 +274,16 @@ static int cbor_skip(struct sirena_lwm2m_cbor_reader *reader, uint8_t major, uin
 
         return 0;
     case SIRENA_LWM2M_CBOR_MAJOR_TAG:
+        if (depth >= SIRENA_LWM2M_CBOR_MAX_DEPTH) {
+            return -EINVAL;
+        }
+
         rc = cbor_read_head(reader, &nested_major, &nested_value);
         if (rc != 0) {
             return rc;
         }
 
-        return cbor_skip(reader, nested_major, nested_value);
+        return cbor_skip(reader, nested_major, nested_value, depth + 1U);
     default:
         return -EINVAL;
     }
@@ -294,7 +305,7 @@ static int cbor_read_text(struct sirena_lwm2m_cbor_reader *reader, char *text, s
         return -EINVAL;
     }
 
-    if (value > SIRENA_LWM2M_MQTT_TEXT_MAX || reader->offset + value > reader->length) {
+    if (value > SIRENA_LWM2M_MQTT_TEXT_MAX || value > reader->length - reader->offset) {
         return -EINVAL;
     }
 
@@ -322,7 +333,7 @@ static int cbor_read_bytes(struct sirena_lwm2m_cbor_reader *reader, const uint8_
         return -EINVAL;
     }
 
-    if (reader->offset + value > reader->length) {
+    if (value > reader->length - reader->offset) {
         return -EINVAL;
     }
 
@@ -604,7 +615,7 @@ int sirena_lwm2m_mqtt_message_decode(const void *data, size_t length,
         default:
             rc = cbor_read_head(&reader, &value_major, &value);
             if (rc == 0) {
-                rc = cbor_skip(&reader, value_major, value);
+                rc = cbor_skip(&reader, value_major, value, 0U);
             }
             break;
         }
