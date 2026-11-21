@@ -219,9 +219,9 @@ config SIRENA_LWM2M_TRANSPORT_MQTT
 	  The binding needs the MQTT library of Zephyr, which needs the
 	  socket API and TCP, and the TLS socket of Zephyr, which needs
 	  mbed TLS with the PSK key exchange. The application has to enable
-	  CONFIG_MBEDTLS and CONFIG_NET_SOCKETS_SOCKOPT_TLS. The
-	  "mqtt://" scheme talks to the broker in the clear and needs the
-	  noSec development gate, the "mqtts://" scheme protects the
+	  CONFIG_MQTT_LIB, CONFIG_MBEDTLS and CONFIG_NET_SOCKETS_SOCKOPT_TLS.
+	  The "mqtt://" scheme talks to the broker in the clear and needs
+	  the noSec development gate, the "mqtts://" scheme protects the
 	  connection with the pre-shared key of the Security object.
 
 config SIRENA_LWM2M_MQTT_TOPIC_MAX
@@ -282,7 +282,7 @@ config SIRENA_LWM2M_TRANSPORT_NOSEC
 	  testing only and it has no effect on the DTLS binding.
 
 config SIRENA_LWM2M_PSK_IDENTITY_MAX
-	int "Maximum size of the DTLS PSK identity"
+	int "Maximum size of the PSK identity"
 	default 128
 	range 1 128
 	depends on SIRENA_LWM2M_TRANSPORT_DTLS || SIRENA_LWM2M_TRANSPORT_MQTT
@@ -291,7 +291,7 @@ config SIRENA_LWM2M_PSK_IDENTITY_MAX
 	  for PSK identities of up to 128 bytes.
 
 config SIRENA_LWM2M_PSK_KEY_MAX
-	int "Maximum size of the DTLS PSK key"
+	int "Maximum size of the PSK key"
 	default 64
 	range 1 64
 	depends on SIRENA_LWM2M_TRANSPORT_DTLS || SIRENA_LWM2M_TRANSPORT_MQTT
