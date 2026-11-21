@@ -1,6 +1,8 @@
 #include "sirena_lwm2m_bindings.h"
+#include "sirena_lwm2m_credentials.h"
 #include "sirena_lwm2m_link_format.h"
 #include "sirena_lwm2m_mqtt_payload.h"
+#include "sirena_lwm2m_uri.h"
 #include <sirena/lwm2m/engine.h>
 #include <sirena/lwm2m/mqtt.h>
 #include <sirena/lwm2m/objects.h>
@@ -11,6 +13,7 @@
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/util.h>
+#include <mbedtls/ssl_ciphersuites.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,13 +25,16 @@
 #define SIRENA_LWM2M_SECURITY_MODE_RESOURCE 2U
 #define SIRENA_LWM2M_SERVER_LIFETIME_RESOURCE 1U
 
-#define SIRENA_LWM2M_MQTT_SCHEME "mqtt://"
-#define SIRENA_LWM2M_MQTTS_SCHEME "mqtts://"
-#define SIRENA_LWM2M_MQTT_DEFAULT_PORT 1883
 #define SIRENA_LWM2M_MQTT_LWM2M_VERSION "1.2"
 #define SIRENA_LWM2M_MQTT_BINDING_MODE "M"
 #define SIRENA_LWM2M_MQTT_TOPIC_ROOT "lwm2m/rd/"
 #define SIRENA_LWM2M_MQTT_WAIT_INTERVAL_MS 5
+#define SIRENA_LWM2M_MQTT_TOKEN_BASE 0x80000000U
+#define SIRENA_LWM2M_MQTT_LINK_FORMAT_CONTENT_FORMAT 40U
+
+#define SIRENA_LWM2M_MQTT_TOPIC_CAPACITY                                       \
+    (CONFIG_SIRENA_LWM2M_MQTT_TOPIC_PREFIX_MAX + sizeof(SIRENA_LWM2M_MQTT_TOPIC_ROOT) + \
+     CONFIG_SIRENA_LWM2M_ENDPOINT_NAME_MAX + 1U)
 
 struct sirena_lwm2m_mqtt_observation {
     bool used;
@@ -39,28 +45,56 @@ struct sirena_lwm2m_mqtt_observation {
     uint16_t content_format;
 };
 
-static bool transport_started;
+static atomic_t transport_started;
 static struct mqtt_client client;
 static uint8_t rx_buffer[CONFIG_SIRENA_LWM2M_MQTT_BUFFER_SIZE];
 static uint8_t tx_buffer[CONFIG_SIRENA_LWM2M_MQTT_BUFFER_SIZE];
-static char topic[CONFIG_SIRENA_LWM2M_MQTT_TOPIC_MAX + 1U];
+static char topic[MAX(CONFIG_SIRENA_LWM2M_MQTT_TOPIC_MAX + 1U,
+                      SIRENA_LWM2M_MQTT_TOPIC_CAPACITY)];
 static char client_id[CONFIG_SIRENA_LWM2M_MQTT_CLIENT_ID_MAX + 1U];
 static char topic_prefix[CONFIG_SIRENA_LWM2M_MQTT_TOPIC_PREFIX_MAX + 1U];
+static char registration_payload[CONFIG_SIRENA_LWM2M_REGISTRATION_PAYLOAD_MAX + 1U];
 static struct net_sockaddr_storage broker_address;
 static struct sirena_lwm2m_mqtt_observation observations[CONFIG_SIRENA_LWM2M_MAX_OBSERVATIONS];
 static uint8_t message_buffer[CONFIG_SIRENA_LWM2M_MQTT_BUFFER_SIZE];
 static uint8_t value_buffer[CONFIG_SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX];
-static uint32_t next_token = 1U;
+static uint32_t next_token = SIRENA_LWM2M_MQTT_TOKEN_BASE;
 static bool connack_received;
 static uint8_t connack_code;
 static bool response_received;
-static uint32_t response_token;
+static uint32_t pending_token;
 static uint32_t response_result;
+static sec_tag_t tls_sec_tags[] = { CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG };
+static const int tls_ciphersuites[] = { MBEDTLS_TLS_PSK_WITH_AES_128_CCM_8 };
 
 static int mqtt_publish_payload(const void *data, size_t length);
 static void mqtt_handle_message(const struct sirena_lwm2m_mqtt_message *message);
 
-static int mqtt_security_mode_check(void)
+static int mqtt_transport_scheme(enum sirena_lwm2m_uri_scheme *scheme)
+{
+    char uri[CONFIG_SIRENA_LWM2M_SERVER_URI_MAX + 1U];
+    size_t length = sizeof(uri);
+    int rc;
+
+    rc = sirena_lwm2m_get_string(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                 SIRENA_LWM2M_SECURITY_URI_RESOURCE, uri, &length);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = sirena_lwm2m_uri_scheme(uri, scheme);
+    if (rc != 0) {
+        return rc;
+    }
+
+    if (*scheme != SIRENA_LWM2M_URI_SCHEME_MQTT && *scheme != SIRENA_LWM2M_URI_SCHEME_MQTTS) {
+        return -EINVAL;
+    }
+
+    return 0;
+}
+
+static int mqtt_security_mode_check(enum sirena_lwm2m_uri_scheme scheme)
 {
     int64_t mode;
     int rc;
@@ -71,60 +105,53 @@ static int mqtt_security_mode_check(void)
         return rc;
     }
 
-    if (mode != SIRENA_LWM2M_SECURITY_MODE_NOSEC) {
+    switch (mode) {
+    case SIRENA_LWM2M_SECURITY_MODE_PSK:
+        if (scheme != SIRENA_LWM2M_URI_SCHEME_MQTTS) {
+            return -EINVAL;
+        }
+
+        return 0;
+    case SIRENA_LWM2M_SECURITY_MODE_NOSEC:
+        if (scheme != SIRENA_LWM2M_URI_SCHEME_MQTT) {
+            return -EINVAL;
+        }
+
+        if (!IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_NOSEC)) {
+            return -EPERM;
+        }
+
+        return 0;
+    default:
+        return -ENOTSUP;
+    }
+}
+
+static int mqtt_transport_setup(enum sirena_lwm2m_uri_scheme scheme)
+{
+    int rc;
+
+    if (scheme == SIRENA_LWM2M_URI_SCHEME_MQTT) {
+        client.transport.type = MQTT_TRANSPORT_NON_SECURE;
+
+        return 0;
+    }
+
+    if (scheme != SIRENA_LWM2M_URI_SCHEME_MQTTS) {
         return -EINVAL;
     }
 
-    if (!IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_NOSEC)) {
-        return -EPERM;
-    }
-
-    return 0;
-}
-
-static int mqtt_server_address(void)
-{
-    struct net_sockaddr_in *address = (struct net_sockaddr_in *)&broker_address;
-    char uri[CONFIG_SIRENA_LWM2M_SERVER_URI_MAX + 1U];
-    size_t length = sizeof(uri);
-    char *host;
-    char *separator;
-    unsigned long port;
-    int rc;
-
-    rc = sirena_lwm2m_get_string(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
-                                 SIRENA_LWM2M_SECURITY_URI_RESOURCE, uri, &length);
+    rc = sirena_lwm2m_credentials_register(CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG);
     if (rc != 0) {
         return rc;
     }
 
-    if (strncmp(uri, SIRENA_LWM2M_MQTTS_SCHEME, strlen(SIRENA_LWM2M_MQTTS_SCHEME)) == 0) {
-        return -ENOTSUP;
-    }
-
-    if (strncmp(uri, SIRENA_LWM2M_MQTT_SCHEME, strlen(SIRENA_LWM2M_MQTT_SCHEME)) != 0) {
-        return -EINVAL;
-    }
-
-    host = uri + strlen(SIRENA_LWM2M_MQTT_SCHEME);
-    port = SIRENA_LWM2M_MQTT_DEFAULT_PORT;
-
-    separator = strrchr(host, ':');
-    if (separator != NULL) {
-        *separator = '\0';
-        port = strtoul(separator + 1, NULL, 10);
-        if (port == 0UL || port > 65535UL) {
-            return -EINVAL;
-        }
-    }
-
-    memset(&broker_address, 0, sizeof(broker_address));
-    address->sin_family = NET_AF_INET;
-    address->sin_port = net_htons((uint16_t)port);
-
-    if (zsock_inet_pton(NET_AF_INET, host, &address->sin_addr) != 1) {
-        return -ENOTSUP;
-    }
+    client.transport.type = MQTT_TRANSPORT_SECURE;
+    client.transport.tls.config.peer_verify = ZSOCK_TLS_PEER_VERIFY_NONE;
+    client.transport.tls.config.cipher_list = tls_ciphersuites;
+    client.transport.tls.config.cipher_count = ARRAY_SIZE(tls_ciphersuites);
+    client.transport.tls.config.sec_tag_list = tls_sec_tags;
+    client.transport.tls.config.sec_tag_count = ARRAY_SIZE(tls_sec_tags);
 
     return 0;
 }
@@ -526,9 +553,11 @@ static void mqtt_handle_cancel_observe(const struct sirena_lwm2m_mqtt_message *m
 static void mqtt_handle_message(const struct sirena_lwm2m_mqtt_message *message)
 {
     if (message->has_result) {
-        response_received = true;
-        response_token = message->token;
-        response_result = message->result;
+        if (pending_token != 0U && message->token == pending_token) {
+            response_received = true;
+            response_result = message->result;
+        }
+
         return;
     }
 
@@ -537,6 +566,11 @@ static void mqtt_handle_message(const struct sirena_lwm2m_mqtt_message *message)
     }
 
     switch (message->operation) {
+    case SIRENA_LWM2M_MQTT_OPERATION_REGISTER:
+    case SIRENA_LWM2M_MQTT_OPERATION_UPDATE:
+    case SIRENA_LWM2M_MQTT_OPERATION_DEREGISTER:
+    case SIRENA_LWM2M_MQTT_OPERATION_NOTIFY:
+        return;
     case SIRENA_LWM2M_MQTT_OPERATION_READ:
         mqtt_handle_read(message);
         break;
@@ -553,8 +587,29 @@ static void mqtt_handle_message(const struct sirena_lwm2m_mqtt_message *message)
         mqtt_handle_cancel_observe(message);
         break;
     default:
+        (void)mqtt_send_response(message->token, SIRENA_LWM2M_MQTT_RESULT_NOT_IMPLEMENTED, false,
+                                  0U, NULL, 0U);
         break;
     }
+}
+
+static int mqtt_discard_payload(struct mqtt_client *mqtt, size_t length)
+{
+    uint8_t scratch[32];
+    size_t received = 0U;
+
+    while (received < length) {
+        size_t chunk = MIN(sizeof(scratch), length - received);
+        int rc = mqtt_read_publish_payload_blocking(mqtt, scratch, chunk);
+
+        if (rc <= 0) {
+            return rc;
+        }
+
+        received += (size_t)rc;
+    }
+
+    return 0;
 }
 
 static int mqtt_read_payload(struct mqtt_client *mqtt, uint8_t *buffer, size_t capacity,
@@ -562,26 +617,19 @@ static int mqtt_read_payload(struct mqtt_client *mqtt, uint8_t *buffer, size_t c
 {
     size_t received = 0U;
 
+    if (length > capacity) {
+        int rc = mqtt_discard_payload(mqtt, length);
+
+        if (rc != 0) {
+            return rc;
+        }
+
+        return -EMSGSIZE;
+    }
+
     while (received < length) {
         size_t chunk = length - received;
         int rc;
-
-        if (chunk > capacity - *stored) {
-            chunk = capacity - *stored;
-        }
-
-        if (chunk == 0U) {
-            uint8_t scratch[32];
-
-            chunk = MIN(sizeof(scratch), length - received);
-            rc = mqtt_read_publish_payload_blocking(mqtt, scratch, chunk);
-            if (rc <= 0) {
-                return rc;
-            }
-
-            received += (size_t)rc;
-            continue;
-        }
 
         rc = mqtt_read_publish_payload_blocking(mqtt, buffer + *stored, chunk);
         if (rc <= 0) {
@@ -609,9 +657,11 @@ static void mqtt_event_handler(struct mqtt_client *mqtt, const struct mqtt_evt *
     case MQTT_EVT_PUBLISH: {
         const struct mqtt_utf8 *incoming = &event->param.publish.message.topic.topic;
         size_t length = 0U;
+        int rc;
 
-        if (mqtt_read_payload(&client, message_buffer, sizeof(message_buffer),
-                              event->param.publish.message.payload.len, &length) != 0) {
+        rc = mqtt_read_payload(&client, message_buffer, sizeof(message_buffer),
+                               event->param.publish.message.payload.len, &length);
+        if (rc != 0) {
             return;
         }
 
@@ -666,21 +716,23 @@ static int mqtt_wait_response(uint32_t token, uint32_t *result)
     while (true) {
         int64_t now = k_uptime_get();
 
+        if (response_received) {
+            response_received = false;
+            pending_token = 0U;
+            *result = response_result;
+
+            return 0;
+        }
+
         if (now >= deadline) {
+            pending_token = 0U;
+
             return -ETIMEDOUT;
         }
 
-        if (response_received) {
-            if (response_token == token) {
-                response_received = false;
-                *result = response_result;
-                return 0;
-            }
-
-            response_received = false;
-        }
-
         if (mqtt_input(&client) < 0) {
+            pending_token = 0U;
+
             return -EIO;
         }
 
@@ -720,6 +772,42 @@ static uint32_t mqtt_next_token(void)
     return token;
 }
 
+static int mqtt_request(struct sirena_lwm2m_mqtt_message *message, uint32_t expected_result,
+                         uint32_t *result)
+{
+    size_t length = sizeof(message_buffer);
+    uint32_t token = mqtt_next_token();
+    int rc;
+
+    message->token = token;
+    pending_token = token;
+
+    rc = sirena_lwm2m_mqtt_message_encode(message, message_buffer, &length);
+    if (rc != 0) {
+        pending_token = 0U;
+
+        return rc;
+    }
+
+    rc = mqtt_publish_payload(message_buffer, length);
+    if (rc != 0) {
+        pending_token = 0U;
+
+        return rc;
+    }
+
+    rc = mqtt_wait_response(token, result);
+    if (rc != 0) {
+        return rc;
+    }
+
+    if (*result != expected_result) {
+        return mqtt_result_to_error(*result);
+    }
+
+    return 0;
+}
+
 static int mqtt_register(void)
 {
     struct sirena_lwm2m_mqtt_message message = {
@@ -730,15 +818,14 @@ static int mqtt_register(void)
         .has_lifetime = true,
         .has_version = true,
         .has_binding = true,
+        .has_content_format = true,
+        .content_format = SIRENA_LWM2M_MQTT_LINK_FORMAT_CONTENT_FORMAT,
         .has_payload = true,
     };
-    char link_format[CONFIG_SIRENA_LWM2M_REGISTRATION_PAYLOAD_MAX + 1U];
     const char *endpoint_name = sirena_lwm2m_transport_endpoint_name();
     size_t link_length = 0U;
-    size_t length = sizeof(message_buffer);
     int64_t lifetime;
     uint32_t result = 0U;
-    uint32_t token;
     int rc;
 
     if (endpoint_name[0] == '\0') {
@@ -751,7 +838,8 @@ static int mqtt_register(void)
         return rc;
     }
 
-    rc = sirena_lwm2m_link_format_objects(link_format, sizeof(link_format), &link_length);
+    rc = sirena_lwm2m_link_format_objects(registration_payload, sizeof(registration_payload),
+                                          &link_length);
     if (rc != 0) {
         return rc;
     }
@@ -760,8 +848,6 @@ static int mqtt_register(void)
         return -EINVAL;
     }
 
-    token = mqtt_next_token();
-    message.token = token;
     message.lifetime = (uint32_t)lifetime;
 
     rc = mqtt_set_text(message.endpoint, sizeof(message.endpoint), endpoint_name);
@@ -779,29 +865,10 @@ static int mqtt_register(void)
         return rc;
     }
 
-    message.payload = (const uint8_t *)link_format;
+    message.payload = (const uint8_t *)registration_payload;
     message.payload_length = link_length;
 
-    rc = sirena_lwm2m_mqtt_message_encode(&message, message_buffer, &length);
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = mqtt_publish_payload(message_buffer, length);
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = mqtt_wait_response(token, &result);
-    if (rc != 0) {
-        return rc;
-    }
-
-    if (result != SIRENA_LWM2M_MQTT_RESULT_REGISTERED) {
-        return mqtt_result_to_error(result);
-    }
-
-    return 0;
+    return mqtt_request(&message, SIRENA_LWM2M_MQTT_RESULT_REGISTERED, &result);
 }
 
 static int mqtt_update(void)
@@ -813,10 +880,8 @@ static int mqtt_update(void)
         .has_lifetime = true,
         .has_binding = true,
     };
-    size_t length = sizeof(message_buffer);
     int64_t lifetime;
     uint32_t result = 0U;
-    uint32_t token;
     int rc;
 
     rc = sirena_lwm2m_get_integer(SIRENA_LWM2M_SERVER_OBJECT_ID, 0U,
@@ -829,8 +894,6 @@ static int mqtt_update(void)
         return -EINVAL;
     }
 
-    token = mqtt_next_token();
-    message.token = token;
     message.lifetime = (uint32_t)lifetime;
 
     rc = mqtt_set_text(message.binding, sizeof(message.binding), SIRENA_LWM2M_MQTT_BINDING_MODE);
@@ -838,26 +901,7 @@ static int mqtt_update(void)
         return rc;
     }
 
-    rc = sirena_lwm2m_mqtt_message_encode(&message, message_buffer, &length);
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = mqtt_publish_payload(message_buffer, length);
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = mqtt_wait_response(token, &result);
-    if (rc != 0) {
-        return rc;
-    }
-
-    if (result != SIRENA_LWM2M_MQTT_RESULT_CHANGED) {
-        return mqtt_result_to_error(result);
-    }
-
-    return 0;
+    return mqtt_request(&message, SIRENA_LWM2M_MQTT_RESULT_CHANGED, &result);
 }
 
 static int mqtt_deregister(void)
@@ -867,44 +911,22 @@ static int mqtt_deregister(void)
         .operation = SIRENA_LWM2M_MQTT_OPERATION_DEREGISTER,
         .token = 0U,
     };
-    size_t length = sizeof(message_buffer);
     uint32_t result = 0U;
-    uint32_t token;
-    int rc;
 
-    token = mqtt_next_token();
-    message.token = token;
-
-    rc = sirena_lwm2m_mqtt_message_encode(&message, message_buffer, &length);
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = mqtt_publish_payload(message_buffer, length);
-    if (rc != 0) {
-        return rc;
-    }
-
-    rc = mqtt_wait_response(token, &result);
-    if (rc != 0) {
-        return rc;
-    }
-
-    if (result != SIRENA_LWM2M_MQTT_RESULT_DEREGISTERED) {
-        return mqtt_result_to_error(result);
-    }
-
-    return 0;
+    return mqtt_request(&message, SIRENA_LWM2M_MQTT_RESULT_DEREGISTERED, &result);
 }
 
 static int mqtt_poll(int timeout_ms)
 {
-    if (!transport_started) {
+    int rc;
+
+    if (!atomic_get(&transport_started)) {
         return 0;
     }
 
-    if (mqtt_input(&client) != 0) {
-        return 0;
+    rc = mqtt_input(&client);
+    if (rc < 0) {
+        return -EIO;
     }
 
     (void)mqtt_live(&client);
@@ -980,6 +1002,10 @@ int sirena_lwm2m_mqtt_set_client_id(const char *id)
         return -EINVAL;
     }
 
+    if (atomic_get(&transport_started)) {
+        return -EBUSY;
+    }
+
     length = strlen(id);
     if (length > CONFIG_SIRENA_LWM2M_MQTT_CLIENT_ID_MAX) {
         return -EINVAL;
@@ -996,6 +1022,10 @@ int sirena_lwm2m_mqtt_set_topic_prefix(const char *prefix)
 
     if (prefix == NULL) {
         return -EINVAL;
+    }
+
+    if (atomic_get(&transport_started)) {
+        return -EBUSY;
     }
 
     length = strlen(prefix);
@@ -1017,13 +1047,19 @@ int sirena_lwm2m_mqtt_start_engine(void)
     struct mqtt_topic subscription_topic = {
         .qos = MQTT_QOS_0_AT_MOST_ONCE,
     };
+    enum sirena_lwm2m_uri_scheme scheme;
     int rc;
 
-    if (transport_started) {
+    if (atomic_get(&transport_started)) {
         return 0;
     }
 
-    rc = mqtt_security_mode_check();
+    rc = mqtt_transport_scheme(&scheme);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = mqtt_security_mode_check(scheme);
     if (rc != 0) {
         return rc;
     }
@@ -1043,7 +1079,7 @@ int sirena_lwm2m_mqtt_start_engine(void)
         return rc;
     }
 
-    rc = mqtt_server_address();
+    rc = sirena_lwm2m_uri_server_address(&broker_address, scheme);
     if (rc != 0) {
         return rc;
     }
@@ -1052,6 +1088,7 @@ int sirena_lwm2m_mqtt_start_engine(void)
     connack_received = false;
     connack_code = 0U;
     response_received = false;
+    pending_token = 0U;
 
     mqtt_client_init(&client);
     client.client_id.utf8 = (const uint8_t *)client_id;
@@ -1064,14 +1101,23 @@ int sirena_lwm2m_mqtt_start_engine(void)
     client.tx_buf_size = sizeof(tx_buffer);
     client.evt_cb = mqtt_event_handler;
 
+    rc = mqtt_transport_setup(scheme);
+    if (rc != 0) {
+        return rc;
+    }
+
     rc = mqtt_connect(&client);
     if (rc != 0) {
+        sirena_lwm2m_credentials_release(CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG);
+
         return rc;
     }
 
     rc = mqtt_wait_connack();
     if (rc != 0) {
         (void)mqtt_abort(&client);
+        sirena_lwm2m_credentials_release(CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG);
+
         return rc;
     }
 
@@ -1082,23 +1128,28 @@ int sirena_lwm2m_mqtt_start_engine(void)
     rc = mqtt_subscribe(&client, &subscription);
     if (rc != 0) {
         (void)mqtt_abort(&client);
+        sirena_lwm2m_credentials_release(CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG);
+
         return rc;
     }
 
-    transport_started = true;
+    atomic_set(&transport_started, 1);
 
     return 0;
 }
 
 int sirena_lwm2m_mqtt_stop_engine(void)
 {
-    if (transport_started) {
+    if (atomic_get(&transport_started)) {
         (void)mqtt_disconnect(&client, NULL);
     }
 
-    transport_started = false;
+    sirena_lwm2m_credentials_release(CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG);
+    atomic_clear(&transport_started);
     memset(observations, 0, sizeof(observations));
     topic[0] = '\0';
+    response_received = false;
+    pending_token = 0U;
 
     return 0;
 }
