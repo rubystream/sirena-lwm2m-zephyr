@@ -10,7 +10,7 @@
 
 static K_MUTEX_DEFINE(sample_lock);
 static struct sirena_lwm2m_sample_state sample_state;
-static bool sample_telemetry_reset;
+static bool sample_reset_pending;
 
 static void sample_state_error(int error)
 {
@@ -48,7 +48,7 @@ static void sample_execute_handler(uint16_t object_id, uint16_t instance_id,
 	if (object_id == SIRENA_LWM2M_SAMPLE_DEVICE_OBJECT_ID &&
 	    instance_id == SIRENA_LWM2M_SAMPLE_INSTANCE_ID &&
 	    resource_id == SIRENA_LWM2M_SAMPLE_REBOOT_RESOURCE_ID) {
-		sample_telemetry_reset = true;
+		sample_reset_pending = true;
 	}
 	k_mutex_unlock(&sample_lock);
 
@@ -56,13 +56,13 @@ static void sample_execute_handler(uint16_t object_id, uint16_t instance_id,
 	       resource_id);
 }
 
-static bool sample_telemetry_reset_take(void)
+static bool sample_reset_take(void)
 {
 	bool reset;
 
 	k_mutex_lock(&sample_lock, K_FOREVER);
-	reset = sample_telemetry_reset;
-	sample_telemetry_reset = false;
+	reset = sample_reset_pending;
+	sample_reset_pending = false;
 	k_mutex_unlock(&sample_lock);
 
 	return reset;
@@ -185,7 +185,7 @@ static void sample_run_telemetry(const struct sirena_lwm2m_sample_config *config
 
 		k_sleep(K_MSEC(config->telemetry_interval_ms));
 
-		if (sample_telemetry_reset_take()) {
+		if (sample_reset_take()) {
 			value = SIRENA_LWM2M_SAMPLE_BATTERY_START;
 		} else if (value > 0) {
 			value -= SIRENA_LWM2M_SAMPLE_BATTERY_STEP;
