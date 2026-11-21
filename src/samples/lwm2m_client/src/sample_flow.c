@@ -55,12 +55,20 @@ static void sample_execute_handler(uint16_t object_id, uint16_t instance_id,
 
 static int sample_set_device_string(uint16_t resource_id, const char *value)
 {
+	struct sirena_lwm2m_value device_value = {
+		.type = SIRENA_LWM2M_VALUE_STRING,
+	};
+
 	if (value == NULL) {
 		return 0;
 	}
 
-	return sirena_lwm2m_set_string(SIRENA_LWM2M_SAMPLE_DEVICE_OBJECT_ID,
-				       SIRENA_LWM2M_SAMPLE_INSTANCE_ID, resource_id, value);
+	device_value.data.string.value = value;
+	device_value.data.string.length = strlen(value);
+
+	return sirena_lwm2m_set_value(SIRENA_LWM2M_SAMPLE_DEVICE_OBJECT_ID,
+				      SIRENA_LWM2M_SAMPLE_INSTANCE_ID, resource_id,
+				      &device_value);
 }
 
 static int sample_prepare(const struct sirena_lwm2m_sample_config *config)
@@ -155,6 +163,9 @@ static void sample_run_telemetry(const struct sirena_lwm2m_sample_config *config
 	int64_t value = SIRENA_LWM2M_SAMPLE_BATTERY_START;
 
 	while (k_uptime_get() < deadline) {
+		struct sirena_lwm2m_value telemetry_value = {
+			.type = SIRENA_LWM2M_VALUE_INTEGER,
+		};
 		int rc;
 
 		k_sleep(K_MSEC(config->telemetry_interval_ms));
@@ -163,9 +174,12 @@ static void sample_run_telemetry(const struct sirena_lwm2m_sample_config *config
 			value -= SIRENA_LWM2M_SAMPLE_BATTERY_STEP;
 		}
 
-		rc = sirena_lwm2m_set_integer(SIRENA_LWM2M_SAMPLE_DEVICE_OBJECT_ID,
-					      SIRENA_LWM2M_SAMPLE_INSTANCE_ID,
-					      SIRENA_LWM2M_SAMPLE_BATTERY_RESOURCE_ID, value);
+		telemetry_value.data.integer = value;
+
+		rc = sirena_lwm2m_set_value(SIRENA_LWM2M_SAMPLE_DEVICE_OBJECT_ID,
+					    SIRENA_LWM2M_SAMPLE_INSTANCE_ID,
+					    SIRENA_LWM2M_SAMPLE_BATTERY_RESOURCE_ID,
+					    &telemetry_value);
 		if (rc != 0) {
 			printk("sirena lwm2m sample: the telemetry value failed: %d\n", rc);
 			continue;

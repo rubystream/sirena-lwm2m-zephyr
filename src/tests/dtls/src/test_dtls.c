@@ -18,6 +18,7 @@
 
 #define SECURITY_OBJECT_ID 0U
 #define SECURITY_MODE_RESOURCE 2U
+#define SECURITY_WRITTEN_RESOURCE 20U
 
 #define PEER_LIFETIME 300U
 #define PEER_LOCATION "rd"
@@ -54,6 +55,7 @@ static char plain_uri[64];
 static char custom_server_uri[64];
 static int64_t custom_security_mode;
 static k_tid_t security_read_thread;
+static k_tid_t value_write_thread;
 static int dtls_peer_socket = -1;
 static uint16_t peer_port;
 static uint16_t dtls_peer_port;
@@ -367,6 +369,22 @@ static int custom_read_integer(uint16_t object_id, uint16_t instance_id, uint16_
 	return 0;
 }
 
+static int custom_write_integer(uint16_t object_id, uint16_t instance_id,
+			       uint16_t resource_id, void *user_data, const void *buffer,
+			       size_t length)
+{
+	(void)object_id;
+	(void)instance_id;
+	(void)resource_id;
+	(void)user_data;
+	(void)buffer;
+	(void)length;
+
+	value_write_thread = k_current_get();
+
+	return 0;
+}
+
 static void custom_security_object(const char *uri, int64_t mode)
 {
 	int rc;
@@ -394,6 +412,12 @@ static void custom_security_object(const char *uri, int64_t mode)
 				       SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ, false,
 				       custom_read_integer, NULL, NULL, NULL);
 	zassert_equal(rc, 0, "security mode resource registration failed");
+
+	rc = sirena_lwm2m_add_resource(SECURITY_OBJECT_ID, 0U, SECURITY_WRITTEN_RESOURCE,
+				       SIRENA_LWM2M_VALUE_INTEGER,
+				       SIRENA_LWM2M_OP_READ | SIRENA_LWM2M_OP_WRITE, false, NULL,
+				       custom_write_integer, NULL, NULL);
+	zassert_equal(rc, 0, "the writable resource registration failed: %d", rc);
 }
 
 static void *suite_setup(void)
@@ -527,6 +551,36 @@ ZTEST(sirena_lwm2m_dtls, test_the_security_object_is_read_in_the_engine_thread)
 		      "the security object must be read in the engine thread");
 	zassert_not_equal(security_read_thread, application_thread,
 			  "the security object must not be read in the application thread");
+}
+
+ZTEST(sirena_lwm2m_dtls, test_the_value_is_written_in_the_engine_thread)
+{
+	struct sirena_lwm2m_value value = {
+		.type = SIRENA_LWM2M_VALUE_INTEGER,
+	};
+	k_tid_t application_thread = k_current_get();
+	k_tid_t engine_thread;
+	int rc;
+
+	custom_security_object(dtls_uri, SIRENA_LWM2M_SECURITY_MODE_PSK);
+
+	value_write_thread = NULL;
+
+	rc = sirena_lwm2m_transport_start();
+	zassert_equal(rc, 0, "transport start failed: %d", rc);
+
+	engine_thread = sirena_lwm2m_engine_thread_id();
+	zassert_not_null(engine_thread, "the engine thread is not running");
+
+	value.data.integer = 42;
+
+	rc = sirena_lwm2m_set_value(SECURITY_OBJECT_ID, 0U, SECURITY_WRITTEN_RESOURCE, &value);
+	zassert_equal(rc, 0, "the thread safe setter failed: %d", rc);
+
+	zassert_equal(value_write_thread, engine_thread,
+		      "the value must be written in the engine thread");
+	zassert_not_equal(value_write_thread, application_thread,
+			  "the value must not be written in the application thread");
 }
 
 ZTEST(sirena_lwm2m_dtls, test_dtls_binding_uses_the_secure_port)

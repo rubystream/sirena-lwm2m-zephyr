@@ -14,6 +14,7 @@ struct sirena_lwm2m_engine_request {
 K_MSGQ_DEFINE(engine_queue, sizeof(struct sirena_lwm2m_engine_request *),
 	      CONFIG_SIRENA_LWM2M_ENGINE_QUEUE_SIZE, 4);
 K_THREAD_STACK_DEFINE(engine_stack, CONFIG_SIRENA_LWM2M_ENGINE_STACK_SIZE);
+K_SEM_DEFINE(engine_ready, 0, 1);
 
 static struct sirena_lwm2m_engine_request requests[CONFIG_SIRENA_LWM2M_ENGINE_QUEUE_SIZE];
 static struct k_mutex engine_lock;
@@ -22,6 +23,7 @@ static sirena_lwm2m_engine_handler_t engine_handler;
 static sirena_lwm2m_engine_poll_fn engine_poll_fn;
 static k_tid_t engine_tid;
 static bool engine_running;
+static bool engine_starting;
 
 static void engine_complete(struct sirena_lwm2m_engine_request *request)
 {
@@ -41,6 +43,8 @@ static void engine_entry(void *first, void *second, void *third)
     k_mutex_lock(&engine_lock, K_FOREVER);
     engine_tid = k_current_get();
     k_mutex_unlock(&engine_lock);
+
+    k_sem_give(&engine_ready);
 
     while (true) {
         if (k_msgq_get(&engine_queue, &request, K_NO_WAIT) == 0) {
@@ -69,18 +73,25 @@ int sirena_lwm2m_engine_start(sirena_lwm2m_engine_handler_t handler)
     }
 
     k_mutex_lock(&engine_lock, K_FOREVER);
-    if (engine_running) {
+    if (engine_running || engine_starting) {
         k_mutex_unlock(&engine_lock);
         return -EALREADY;
     }
 
     engine_handler = handler;
-    engine_running = true;
+    engine_starting = true;
     k_mutex_unlock(&engine_lock);
 
     k_thread_create(&engine_thread, engine_stack, CONFIG_SIRENA_LWM2M_ENGINE_STACK_SIZE,
                     engine_entry, NULL, NULL, NULL, CONFIG_SIRENA_LWM2M_ENGINE_PRIORITY, 0,
                     K_NO_WAIT);
+
+    k_sem_take(&engine_ready, K_FOREVER);
+
+    k_mutex_lock(&engine_lock, K_FOREVER);
+    engine_running = true;
+    engine_starting = false;
+    k_mutex_unlock(&engine_lock);
 
     return 0;
 }
