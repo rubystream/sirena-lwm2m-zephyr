@@ -64,6 +64,13 @@ typedef void (*sirena_lwm2m_execute_handler_t)(uint16_t object_id,
 
 int sirena_lwm2m_objects_init(void);
 
+int sirena_lwm2m_create_object_instance(uint16_t object_id, uint16_t instance_id);
+int sirena_lwm2m_object_create_instance(uint16_t object_id, uint16_t instance_id);
+int sirena_lwm2m_objects_create_instance(uint16_t object_id, uint16_t instance_id);
+int sirena_lwm2m_delete_object_instance(uint16_t object_id, uint16_t instance_id);
+int sirena_lwm2m_object_delete_instance(uint16_t object_id, uint16_t instance_id);
+int sirena_lwm2m_objects_delete_instance(uint16_t object_id, uint16_t instance_id);
+
 int sirena_lwm2m_set_string(uint16_t object_id, uint16_t instance_id,
                             uint16_t resource_id, const char *value);
 int sirena_lwm2m_set_value(uint16_t object_id, uint16_t instance_id,
