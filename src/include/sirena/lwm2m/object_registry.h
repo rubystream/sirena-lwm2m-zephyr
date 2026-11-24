@@ -37,6 +37,19 @@ typedef int (*sirena_lwm2m_execute_fn)(uint16_t object_id, uint16_t instance_id,
 typedef int (*sirena_lwm2m_instance_visitor_t)(uint16_t object_id, uint16_t instance_id,
 					       void *user_data);
 
+struct sirena_lwm2m_resource_attributes {
+    bool has_pmin;
+    bool has_pmax;
+    bool has_gt;
+    bool has_lt;
+    bool has_st;
+    uint32_t pmin;
+    uint32_t pmax;
+    double gt;
+    double lt;
+    double st;
+};
+
 struct sirena_lwm2m_resource {
     uint16_t id;
     enum sirena_lwm2m_value_type type;
@@ -46,6 +59,7 @@ struct sirena_lwm2m_resource {
     sirena_lwm2m_read_fn read;
     sirena_lwm2m_write_fn write;
     sirena_lwm2m_execute_fn execute;
+    struct sirena_lwm2m_resource_attributes attributes;
 };
 
 struct sirena_lwm2m_instance {
@@ -88,6 +102,12 @@ int sirena_lwm2m_find_resource(uint16_t object_id, uint16_t instance_id,
 			       struct sirena_lwm2m_resource **resource);
 int sirena_lwm2m_foreach_instance(sirena_lwm2m_instance_visitor_t visitor,
 				  void *user_data);
+int sirena_lwm2m_get_resource_attributes(uint16_t object_id, uint16_t instance_id,
+				       uint16_t resource_id,
+				       struct sirena_lwm2m_resource_attributes *attrs);
+int sirena_lwm2m_set_resource_attributes(uint16_t object_id, uint16_t instance_id,
+				       uint16_t resource_id,
+				       const struct sirena_lwm2m_resource_attributes *attrs);
 bool sirena_lwm2m_object_enabled(uint16_t object_id);
 
 #endif

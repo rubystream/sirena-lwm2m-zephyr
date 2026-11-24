@@ -73,6 +73,7 @@ bool sirena_lwm2m_object_enabled(uint16_t object_id)
 int sirena_lwm2m_register_object(uint16_t object_id, bool optional)
 {
     size_t i;
+    int rc = -ENOMEM;
 
     if (find_object(object_id) != NULL) {
         return 0;
@@ -91,7 +92,7 @@ int sirena_lwm2m_register_object(uint16_t object_id, bool optional)
         }
     }
 
-    return -ENOMEM;
+    return rc;
 }
 
 int sirena_lwm2m_create_instance(uint16_t object_id, uint16_t instance_id,
@@ -132,7 +133,6 @@ int sirena_lwm2m_delete_instance(uint16_t object_id, uint16_t instance_id)
     if (inst == NULL) {
         return -ENOENT;
     }
-
     memset(inst, 0, sizeof(*inst));
     return 0;
 }
@@ -177,7 +177,6 @@ int sirena_lwm2m_add_resource(uint16_t object_id, uint16_t instance_id,
     res->write = write;
     res->execute = execute;
     inst->resource_count += 1U;
-
     return 0;
 }
 
@@ -190,11 +189,9 @@ int sirena_lwm2m_find_instance(uint16_t object_id, uint16_t instance_id,
     if (inst == NULL) {
         return -ENOENT;
     }
-
     if (instance != NULL) {
         *instance = inst;
     }
-
     return 0;
 }
 
@@ -209,16 +206,13 @@ int sirena_lwm2m_find_resource(uint16_t object_id, uint16_t instance_id,
     if (inst == NULL) {
         return -ENOENT;
     }
-
     res = find_resource(inst, resource_id);
     if (res == NULL) {
         return -ENOENT;
     }
-
     if (resource != NULL) {
         *resource = res;
     }
-
     return 0;
 }
 
@@ -226,25 +220,22 @@ int sirena_lwm2m_foreach_instance(sirena_lwm2m_instance_visitor_t visitor,
 				  void *user_data)
 {
     size_t i;
+    int rc = 0;
 
     if (visitor == NULL) {
         return -EINVAL;
     }
 
     for (i = 0U; i < CONFIG_SIRENA_LWM2M_MAX_INSTANCES; ++i) {
-        int rc;
-
         if (!instances[i].created) {
             continue;
         }
-
         rc = visitor(instances[i].object_id, instances[i].instance_id, user_data);
         if (rc != 0) {
-            return rc;
+            break;
         }
     }
-
-    return 0;
+    return rc;
 }
 
 int sirena_lwm2m_get(uint16_t object_id, uint16_t instance_id,
@@ -252,34 +243,35 @@ int sirena_lwm2m_get(uint16_t object_id, uint16_t instance_id,
 {
     struct sirena_lwm2m_instance *inst;
     struct sirena_lwm2m_resource *res;
+    int rc = -ENOENT;
+    int call_rc;
+    size_t len;
 
     inst = find_instance_storage(object_id, instance_id);
     if (inst == NULL) {
-        return -ENOENT;
+        return rc;
     }
-
     res = find_resource(inst, resource_id);
     if (res == NULL) {
-        return -ENOENT;
+        return rc;
     }
-
-    size_t len = (length != NULL) ? *length : 0U;
-    int rc = 0;
-
     if (!(res->operations & SIRENA_LWM2M_OP_READ) || res->read == NULL) {
         return -ENOTSUP;
     }
 
-    rc = res->read(object_id, instance_id, resource_id, res->user_data,
-		     buffer, &len);
-    if (rc == 0 && length != NULL) {
+    len = (length != NULL) ? *length : 0U;
+    call_rc = res->read(object_id, instance_id, resource_id, res->user_data,
+			buffer, &len);
+    if (call_rc != 0) {
+        return call_rc;
+    }
+    if (length != NULL) {
         if (len > *length) {
             return -EOVERFLOW;
         }
         *length = len;
     }
-
-    return rc;
+    return 0;
 }
 
 int sirena_lwm2m_set(uint16_t object_id, uint16_t instance_id,
@@ -292,18 +284,15 @@ int sirena_lwm2m_set(uint16_t object_id, uint16_t instance_id,
     if (inst == NULL) {
         return -ENOENT;
     }
-
     res = find_resource(inst, resource_id);
     if (res == NULL) {
         return -ENOENT;
     }
-
     if (!(res->operations & SIRENA_LWM2M_OP_WRITE) || res->write == NULL) {
         return -ENOTSUP;
     }
-
     return res->write(object_id, instance_id, resource_id, res->user_data,
-		      buffer, length);
+		    buffer, length);
 }
 
 int sirena_lwm2m_execute(uint16_t object_id, uint16_t instance_id,
@@ -317,16 +306,63 @@ int sirena_lwm2m_execute(uint16_t object_id, uint16_t instance_id,
     if (inst == NULL) {
         return -ENOENT;
     }
-
     res = find_resource(inst, resource_id);
     if (res == NULL) {
         return -ENOENT;
     }
-
     if (!(res->operations & SIRENA_LWM2M_OP_EXEC) || res->execute == NULL) {
         return -ENOTSUP;
     }
-
     return res->execute(object_id, instance_id, resource_id, res->user_data,
-			args, args_length);
+		      args, args_length);
+}
+
+int sirena_lwm2m_get_resource_attributes(uint16_t object_id, uint16_t instance_id,
+				       uint16_t resource_id,
+				       struct sirena_lwm2m_resource_attributes *attrs)
+{
+    struct sirena_lwm2m_instance *inst;
+    struct sirena_lwm2m_resource *res;
+
+    if (attrs == NULL) {
+        return -EINVAL;
+    }
+
+    inst = find_instance_storage(object_id, instance_id);
+    if (inst == NULL) {
+        return -ENOENT;
+    }
+    res = find_resource(inst, resource_id);
+    if (res == NULL) {
+        return -ENOENT;
+    }
+    *attrs = res->attributes;
+    return 0;
+}
+
+int sirena_lwm2m_set_resource_attributes(uint16_t object_id, uint16_t instance_id,
+				       uint16_t resource_id,
+				       const struct sirena_lwm2m_resource_attributes *attrs)
+{
+    struct sirena_lwm2m_instance *inst;
+    struct sirena_lwm2m_resource *res;
+
+    if (attrs == NULL) {
+        return -EINVAL;
+    }
+
+    if (attrs->has_pmin && attrs->has_pmax && attrs->pmin > attrs->pmax) {
+        return -EINVAL;
+    }
+
+    inst = find_instance_storage(object_id, instance_id);
+    if (inst == NULL) {
+        return -ENOENT;
+    }
+    res = find_resource(inst, resource_id);
+    if (res == NULL) {
+        return -ENOENT;
+    }
+    res->attributes = *attrs;
+    return 0;
 }
