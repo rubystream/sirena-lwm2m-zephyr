@@ -93,8 +93,6 @@ ZTEST(sirena_lwm2m_registry, test_paths)
     zassert_equal(rc, -ENOENT, "missing object expected");
 }
 
-ZTEST_SUITE(sirena_lwm2m_registry, NULL, NULL, NULL, NULL, NULL);
-
 ZTEST(sirena_lwm2m_registry, test_resource_attributes)
 {
     struct sirena_lwm2m_resource_attributes in = {0};
@@ -112,7 +110,6 @@ ZTEST(sirena_lwm2m_registry, test_resource_attributes)
                                     NULL, NULL);
     zassert_equal(rc, 0, "resource failed");
 
-    memset(&in, 0, sizeof(in));
     in.has_pmin = true;
     in.pmin = 10;
     in.has_pmax = true;
@@ -153,12 +150,9 @@ ZTEST(sirena_lwm2m_registry, test_resource_attributes)
     zassert_equal(rc, -EINVAL, "null set should fail");
     rc = sirena_lwm2m_get_resource_attributes(0, 0, 7, NULL);
     zassert_equal(rc, -EINVAL, "null get should fail");
-
-    stored_value = 0;
-    (void)stored_value;
 }
 
-ZTEST(sirena_lwm2m_registry, test_resource_attributes_persist)
+ZTEST(sirena_lwm2m_registry, test_resource_attributes_cleared_on_instance_delete)
 {
     struct sirena_lwm2m_resource_attributes in = {0};
     struct sirena_lwm2m_resource_attributes out = {0};
@@ -192,3 +186,5 @@ ZTEST(sirena_lwm2m_registry, test_resource_attributes_persist)
     zassert_equal(rc, 0, "get after re-register failed");
     zassert_false(out.has_pmin, "attrs persisted incorrectly");
 }
+
+ZTEST_SUITE(sirena_lwm2m_registry, NULL, NULL, NULL, NULL, NULL);
