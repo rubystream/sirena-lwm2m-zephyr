@@ -770,7 +770,7 @@ static int peer_request_attr(const char *path, const char *query)
     struct coap_client_request req = {0};
     int rc;
 
-    req.method = COAP_METHOD_POST;
+    req.method = COAP_METHOD_PUT;
     req.confirmable = true;
     req.cb = peer_response_handler;
     req.user_data = NULL;
