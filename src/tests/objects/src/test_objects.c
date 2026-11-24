@@ -64,6 +64,8 @@ static const struct resource_expectation security_optional[] = {
     { 28U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
     { 29U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
     { 30U, SIRENA_LWM2M_VALUE_STRING, SIRENA_LWM2M_OP_READ },
+    { 17U, SIRENA_LWM2M_VALUE_OBJECT_LINK, SIRENA_LWM2M_OP_READ },
+    { 26U, SIRENA_LWM2M_VALUE_OBJECT_LINK, SIRENA_LWM2M_OP_READ },
 };
 
 static const struct resource_expectation server_optional[] = {
@@ -85,8 +87,8 @@ static const struct resource_expectation device_optional[] = {
     { 21U, SIRENA_LWM2M_VALUE_INTEGER, SIRENA_LWM2M_OP_READ },
 };
 
-static const uint16_t security_unimplemented[] = { 16U, 17U, 18U, 19U, 20U, 21U,
-                                                    25U, 26U, 27U };
+static const uint16_t security_unimplemented[] = { 16U, 18U, 19U, 20U, 21U,
+                                                    25U, 27U };
 static const uint16_t device_unimplemented[] = { 6U, 7U, 8U, 22U };
 
 static int execute_calls;

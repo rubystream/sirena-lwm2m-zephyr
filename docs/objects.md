@@ -43,17 +43,16 @@ Resources registered only when the matching Kconfig symbol is enabled:
 
 | Kconfig symbol | Object | Resources |
 | --- | --- | --- |
-| `CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL` | Security (0) | 6, 7, 8, 9, 11, 12, 13, 14, 15, 22, 23, 24, 28, 29, 30 |
+| `CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL` | Security (0) | 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 22, 23, 24, 26, 28, 29, 30 |
 | `CONFIG_SIRENA_LWM2M_OBJECT_SERVER_OPTIONAL` | Server (1) | 2, 3, 4, 5 |
 | `CONFIG_SIRENA_LWM2M_OBJECT_DEVICE_OPTIONAL` | Device (3) | 5, 9, 10, 12, 13, 14, 15, 20, 21 |
 
 Device 13 Current Time is stored as `SIRENA_LWM2M_VALUE_INTEGER` holding seconds
 since the Unix epoch.
 
-ObjLnk-typed resources are not implemented in this version: Security 17 OSCORE
-Security Mode and Security 26 MQTT Server are not registered, because the value
-type enum and the codec have no object link representation and both resources
-point at object types that do not exist in v1. Multi-instance resources and
+Security 17 (OSCORE Security Mode) and Security 26 (MQTT Server) are
+registered as read-only Object Link resources under
+`CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL`. Multi-instance resources and
 Device 22 ExtDevInfo are not implemented either.
 
 ## Application API
@@ -79,12 +78,23 @@ int sirena_lwm2m_get_opaque(uint16_t object_id, uint16_t instance_id,
                             uint16_t resource_id, void *buffer, size_t *length);
 int sirena_lwm2m_get_opaque_ref(uint16_t object_id, uint16_t instance_id,
                                 uint16_t resource_id, const void **data, size_t *length);
+int sirena_lwm2m_set_object_link(uint16_t object_id, uint16_t instance_id,
+                            uint16_t resource_id, uint16_t linked_object_id,
+                            uint16_t linked_instance_id);
+int sirena_lwm2m_get_object_link(uint16_t object_id, uint16_t instance_id,
+                            uint16_t resource_id, uint16_t *linked_object_id,
+                            uint16_t *linked_instance_id);
 ```
 
 `sirena_lwm2m_get_string()` takes the buffer capacity in `*length` on entry and
 returns the character count without the terminating NUL on success. The buffer
 always receives a NUL terminator. `sirena_lwm2m_get_opaque()` takes the buffer
 capacity in `*length` on entry and returns the stored byte count on success.
+
+`sirena_lwm2m_get_object_link()` reads a two-field link as object and
+instance id. An Object Link is four bytes on the wire: two bytes object
+id followed by two bytes instance id, big-endian. In text formats it is
+written as `ObjID:InstID`.
 
 `sirena_lwm2m_get_opaque_ref()` returns a reference to the storage of an
 opaque resource instead of a copy of it. The pointer stays valid until the
@@ -110,6 +120,10 @@ struct sirena_lwm2m_value {
             const void *value;
             size_t length;
         } opaque;
+        struct {
+            uint16_t object_id;
+            uint16_t instance_id;
+        } object_link;
     } data;
 };
 

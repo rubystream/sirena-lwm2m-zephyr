@@ -27,6 +27,8 @@ struct sirena_lwm2m_resource_entry {
     int64_t integer;
     uint64_t unsigned_integer;
     bool boolean;
+    uint16_t object_link_object_id;
+    uint16_t object_link_instance_id;
 };
 
 struct sirena_lwm2m_object_definition {
@@ -131,6 +133,10 @@ static struct sirena_lwm2m_resource_entry security_resources[] = {
       .type = SIRENA_LWM2M_VALUE_STRING, .kind = SIRENA_LWM2M_RESOURCE_VALUE,
       .data = security_instance.rds_application_id,
       .capacity = CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX },
+    { .id = 17U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_OBJECT_LINK, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
+    { .id = 26U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
+      .type = SIRENA_LWM2M_VALUE_OBJECT_LINK, .kind = SIRENA_LWM2M_RESOURCE_VALUE },
 #endif
 };
 
@@ -291,6 +297,18 @@ static int value_read(uint16_t object_id, uint16_t instance_id, uint16_t resourc
             *length = entry->length;
         }
         return 0;
+    case SIRENA_LWM2M_VALUE_OBJECT_LINK:
+        if (buffer == NULL || capacity < 4U) {
+            return -ENOMEM;
+        }
+        ((uint8_t *)buffer)[0] = (uint8_t)(entry->object_link_object_id >> 8);
+        ((uint8_t *)buffer)[1] = (uint8_t)(entry->object_link_object_id & 0xFF);
+        ((uint8_t *)buffer)[2] = (uint8_t)(entry->object_link_instance_id >> 8);
+        ((uint8_t *)buffer)[3] = (uint8_t)(entry->object_link_instance_id & 0xFF);
+        if (length != NULL) {
+            *length = 4U;
+        }
+        return 0;
     default:
         return -ENOTSUP;
     }
@@ -364,6 +382,15 @@ static int value_write(uint16_t object_id, uint16_t instance_id, uint16_t resour
             memcpy(entry->data, buffer, length);
         }
         entry->length = (uint16_t)length;
+        return 0;
+    case SIRENA_LWM2M_VALUE_OBJECT_LINK:
+        if (buffer == NULL || length != 4U) {
+            return -EINVAL;
+        }
+        entry->object_link_object_id = ((uint16_t)((const uint8_t *)buffer)[0] << 8) |
+                                      ((const uint8_t *)buffer)[1];
+        entry->object_link_instance_id = ((uint16_t)((const uint8_t *)buffer)[2] << 8) |
+                                         ((const uint8_t *)buffer)[3];
         return 0;
     default:
         return -ENOTSUP;
@@ -530,6 +557,15 @@ static int value_write_typed(uint16_t object_id, uint16_t instance_id,
         return resource_write(object_id, instance_id, resource_id,
                               SIRENA_LWM2M_VALUE_OPAQUE, value->data.opaque.value,
                               value->data.opaque.length);
+    case SIRENA_LWM2M_VALUE_OBJECT_LINK: {
+        uint8_t buf[4];
+        buf[0] = (uint8_t)(value->data.object_link.object_id >> 8);
+        buf[1] = (uint8_t)(value->data.object_link.object_id & 0xFF);
+        buf[2] = (uint8_t)(value->data.object_link.instance_id >> 8);
+        buf[3] = (uint8_t)(value->data.object_link.instance_id & 0xFF);
+        return resource_write(object_id, instance_id, resource_id,
+                              SIRENA_LWM2M_VALUE_OBJECT_LINK, buf, 4U);
+    }
     default:
         return -ENOTSUP;
     }
@@ -700,6 +736,49 @@ int sirena_lwm2m_get_opaque_ref(uint16_t object_id, uint16_t instance_id,
 
     *data = entry->data;
     *length = entry->length;
+
+    return 0;
+}
+
+int sirena_lwm2m_set_object_link(uint16_t object_id, uint16_t instance_id,
+                            uint16_t resource_id, uint16_t linked_object_id,
+                            uint16_t linked_instance_id)
+{
+    uint8_t buffer[4];
+
+    buffer[0] = (uint8_t)(linked_object_id >> 8);
+    buffer[1] = (uint8_t)(linked_object_id & 0xFF);
+    buffer[2] = (uint8_t)(linked_instance_id >> 8);
+    buffer[3] = (uint8_t)(linked_instance_id & 0xFF);
+
+    return resource_write(object_id, instance_id, resource_id,
+                          SIRENA_LWM2M_VALUE_OBJECT_LINK, buffer, 4U);
+}
+
+int sirena_lwm2m_get_object_link(uint16_t object_id, uint16_t instance_id,
+                            uint16_t resource_id, uint16_t *linked_object_id,
+                            uint16_t *linked_instance_id)
+{
+    uint8_t buffer[4];
+    size_t length = sizeof(buffer);
+    int rc;
+
+    if (linked_object_id == NULL || linked_instance_id == NULL) {
+        return -EINVAL;
+    }
+
+    rc = resource_read(object_id, instance_id, resource_id,
+                       SIRENA_LWM2M_VALUE_OBJECT_LINK, buffer, &length);
+    if (rc != 0) {
+        return rc;
+    }
+
+    if (length != 4U) {
+        return -EINVAL;
+    }
+
+    *linked_object_id = ((uint16_t)buffer[0] << 8) | buffer[1];
+    *linked_instance_id = ((uint16_t)buffer[2] << 8) | buffer[3];
 
     return 0;
 }

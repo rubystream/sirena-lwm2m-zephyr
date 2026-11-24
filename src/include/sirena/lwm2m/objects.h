@@ -43,6 +43,10 @@ struct sirena_lwm2m_value {
             const void *value;
             size_t length;
         } opaque;
+        struct {
+            uint16_t object_id;
+            uint16_t instance_id;
+        } object_link;
     } data;
 };
 
@@ -80,6 +84,13 @@ int sirena_lwm2m_get_opaque(uint16_t object_id, uint16_t instance_id,
                             uint16_t resource_id, void *buffer, size_t *length);
 int sirena_lwm2m_get_opaque_ref(uint16_t object_id, uint16_t instance_id,
                                 uint16_t resource_id, const void **data, size_t *length);
+
+int sirena_lwm2m_set_object_link(uint16_t object_id, uint16_t instance_id,
+                            uint16_t resource_id, uint16_t linked_object_id,
+                            uint16_t linked_instance_id);
+int sirena_lwm2m_get_object_link(uint16_t object_id, uint16_t instance_id,
+                            uint16_t resource_id, uint16_t *linked_object_id,
+                            uint16_t *linked_instance_id);
 
 int sirena_lwm2m_set_execute_handler(sirena_lwm2m_execute_handler_t handler,
                                      void *user_data);

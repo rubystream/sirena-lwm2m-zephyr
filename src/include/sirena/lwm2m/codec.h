@@ -35,6 +35,10 @@ struct sirena_lwm2m_codec_value {
             const void *value;
             size_t length;
         } opaque;
+        struct {
+            uint16_t object_id;
+            uint16_t instance_id;
+        } object_link;
     } data;
 };
 
