@@ -16,6 +16,23 @@
     "clean": "docker compose run --rm -T zephyr rm -rf /workspace/build",
     "smoke": "npm run init && npm run update && npm run build",
     "flash": "docker compose --profile flash run --rm -w /opt/zephyr-workspace flash west flash -d /workspace/build",
-    "deploy": "docker compose --profile flash run --rm -w /opt/zephyr-workspace flash west flash -d /workspace/build"
+    "deploy": "docker compose --profile flash run --rm -w /opt/zephyr-workspace flash west flash -d /workspace/build",
+    "test:registry": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/registry -d /workspace/build/registry",
+    "test:codec": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/codec -d /workspace/build/codec",
+    "test:objects": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/objects -d /workspace/build/objects",
+    "test:objects-optional": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/objects -d /workspace/build/objects-optional --extra-conf /workspace/src/tests/objects/prj-optional.conf",
+    "test:coap": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/coap -d /workspace/build/coap",
+    "test:coap-override": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/coap -d /workspace/build/coap-override --extra-conf /workspace/src/tests/coap/prj-override.conf",
+    "test:dtls": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/dtls -d /workspace/build/dtls",
+    "test:dtls-nosec": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/dtls -d /workspace/build/dtls-nosec --extra-conf /workspace/src/tests/dtls/prj-nosec.conf",
+    "test:protocol": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/protocol -d /workspace/build/protocol",
+    "test:mqtt": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/mqtt -d /workspace/build/mqtt",
+    "build:sample": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -b native_sim /workspace/src/samples/lwm2m_client -d /workspace/build/sample",
+    "run:sample": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/samples/lwm2m_client -d /workspace/build/sample",
+    "test:sample": "docker compose run --rm -T -w /opt/zephyr-workspace zephyr west build -t run -b native_sim /workspace/src/tests/sample -d /workspace/build/sample-test",
+    "test:conformance": "sh scripts/test-conformance.sh all",
+    "test:conformance:leshan": "sh scripts/test-conformance.sh leshan",
+    "test:conformance:sirena": "sh scripts/test-conformance.sh sirena",
+    "test:leshan": "sh scripts/test-conformance.sh leshan"
   }
 }

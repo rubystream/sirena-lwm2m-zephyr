@@ -122,11 +122,30 @@ npm run clean    # rm -rf /workspace/build
 npm run flash    # west flash (opt-in profile; requires host USB device permissions)
 npm run deploy   # same as npm run flash (opt-in profile)
 npm run smoke    # init, update, and build the smoke target
+npm run build:sample  # build the native simulator sample
+npm run run:sample   # build and run the native simulator sample
+npm run test:sample  # build and run the end-to-end sample tests
+npm run test:conformance  # build and run the two-tier conformance harness
+npm run test:conformance:leshan  # run the Leshan tier of the conformance harness
+npm run test:conformance:sirena  # run the Sirena tier of the conformance harness
 ```
 
 `npm run smoke` performs a headless initialization, update, and build of the
 minimal `src/smoke` target, which prints `sirena zephyr smoke ok`. The chain
 exits non-zero on any failure so CI can report success or failure.
+
+`npm run run:sample` builds and runs the native simulator sample of
+`src/samples/lwm2m_client`, which provisions the client, registers, publishes
+telemetry, handles a command and deregisters. The sample has a bounded
+lifetime and ends the process on its own. `npm run test:sample` runs the same
+flow against a local in-process server and asserts the observable behavior.
+See [the sample guide](docs/sample.md).
+
+`npm run test:conformance` runs the real client against real LwM2M servers and
+asserts the registration, the telemetry and the commands from the point of view
+of the server. It runs in two tiers: Leshan `2.0.0-M18` verifies the client up
+to LwM2M `1.1`, the version Leshan implements, and `sirena-lwm2m2-server`
+verifies LwM2M `1.2`. See [the conformance guide](docs/conformance.md).
 
 ## Reference
 

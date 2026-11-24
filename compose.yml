@@ -32,6 +32,83 @@ services:
     stdin_open: true
     command: bash
 
+  leshan:
+    image: sirena-lwm2m-zephyr-leshan:v2.0.0-M18
+    build:
+      context: .
+      dockerfile: src/tests/conformance/leshan.Dockerfile
+      args:
+        LESHAN_VERSION: 2.0.0-M18
+    profiles:
+      - conformance
+    command:
+      - "-lp"
+      - "5683"
+      - "-wp"
+      - "8080"
+
+  sirena-lwm2m2:
+    image: sirena-lwm2m2-server:0.5.0
+    build:
+      context: .
+      dockerfile: src/tests/conformance/sirena-lwm2m2.Dockerfile
+      args:
+        SIRENA_SERVER_VERSION: 0.5.0
+        SIRENA_CORE_VERSION: 0.7.0
+    profiles:
+      - conformance
+
+  leshan-client:
+    image: sirena-lwm2m-zephyr-dev:v0.30.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - conformance
+    depends_on:
+      - leshan
+    network_mode: "service:leshan"
+    environment:
+      SIRENA_CONFORMANCE_TIER: leshan
+    user: root
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+      - zephyr-workspace:/opt/zephyr-workspace
+      - conformance-build:/opt/conformance-build
+      - ccache:/opt/ccache
+    command: python3 /workspace/src/tests/conformance/harness.py
+
+  sirena-client:
+    image: sirena-lwm2m-zephyr-dev:v0.30.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - conformance
+    depends_on:
+      - sirena-lwm2m2
+    network_mode: "service:sirena-lwm2m2"
+    environment:
+      SIRENA_CONFORMANCE_TIER: sirena
+    user: root
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+      - zephyr-workspace:/opt/zephyr-workspace
+      - conformance-build:/opt/conformance-build
+      - ccache:/opt/ccache
+    command: python3 /workspace/src/tests/conformance/harness.py
+
 volumes:
   ccache:
   zephyr-workspace:
+  conformance-build:

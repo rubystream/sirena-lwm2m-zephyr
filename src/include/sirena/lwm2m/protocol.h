@@ -1,0 +1,60 @@
+#ifndef SIRENA_LWM2M_PROTOCOL_H
+#define SIRENA_LWM2M_PROTOCOL_H
+
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+
+enum sirena_lwm2m_status {
+    SIRENA_LWM2M_STATUS_CHANGED = 0,
+    SIRENA_LWM2M_STATUS_CONTENT,
+    SIRENA_LWM2M_STATUS_BAD_REQUEST,
+    SIRENA_LWM2M_STATUS_NOT_FOUND,
+    SIRENA_LWM2M_STATUS_METHOD_NOT_ALLOWED,
+    SIRENA_LWM2M_STATUS_NOT_ACCEPTABLE,
+    SIRENA_LWM2M_STATUS_UNSUPPORTED_CONTENT_FORMAT,
+    SIRENA_LWM2M_STATUS_INTERNAL_ERROR,
+};
+
+enum sirena_lwm2m_operation {
+    SIRENA_LWM2M_OPERATION_READ = 0,
+    SIRENA_LWM2M_OPERATION_WRITE,
+    SIRENA_LWM2M_OPERATION_EXECUTE,
+};
+
+struct sirena_lwm2m_protocol_request {
+    enum sirena_lwm2m_operation operation;
+    uint16_t object_id;
+    uint16_t instance_id;
+    uint16_t resource_id;
+    const void *payload;
+    size_t payload_length;
+    bool content_format_present;
+    uint16_t content_format;
+    const uint16_t *accepted_formats;
+    size_t accepted_format_count;
+};
+
+struct sirena_lwm2m_protocol_response {
+    enum sirena_lwm2m_status status;
+    uint16_t content_format;
+    void *payload;
+    size_t payload_capacity;
+    size_t payload_length;
+};
+
+struct sirena_lwm2m_notify_request {
+    uint16_t object_id;
+    uint16_t instance_id;
+    uint16_t resource_id;
+};
+
+int sirena_lwm2m_protocol_init(void);
+int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *request,
+                                  struct sirena_lwm2m_protocol_response *response);
+int sirena_lwm2m_protocol_read(uint16_t object_id, uint16_t instance_id, uint16_t resource_id,
+                               uint16_t content_format, void *buffer, size_t *length);
+int sirena_lwm2m_notify_resource(uint16_t object_id, uint16_t instance_id,
+                                 uint16_t resource_id);
+
+#endif

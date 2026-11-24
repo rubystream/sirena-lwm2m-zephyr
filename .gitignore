@@ -167,3 +167,7 @@ outputs/
 # Docker caches and volumes
 .docker/
 docker-compose.override.yml
+
+# Python bytecode of the harness
+__pycache__/
+*.pyc
