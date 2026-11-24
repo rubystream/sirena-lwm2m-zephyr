@@ -43,17 +43,16 @@ Resources registered only when the matching Kconfig symbol is enabled:
 
 | Kconfig symbol | Object | Resources |
 | --- | --- | --- |
-| `CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL` | Security (0) | 6, 7, 8, 9, 11, 12, 13, 14, 15, 22, 23, 24, 28, 29, 30 |
+| `CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL` | Security (0) | 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 22, 23, 24, 26, 28, 29, 30 |
 | `CONFIG_SIRENA_LWM2M_OBJECT_SERVER_OPTIONAL` | Server (1) | 2, 3, 4, 5 |
 | `CONFIG_SIRENA_LWM2M_OBJECT_DEVICE_OPTIONAL` | Device (3) | 5, 9, 10, 12, 13, 14, 15, 20, 21 |
 
 Device 13 Current Time is stored as `SIRENA_LWM2M_VALUE_INTEGER` holding seconds
 since the Unix epoch.
 
-ObjLnk-typed resources are not implemented in this version: Security 17 OSCORE
-Security Mode and Security 26 MQTT Server are not registered, because the value
-type enum and the codec have no object link representation and both resources
-point at object types that do not exist in v1. Multi-instance resources and
+Security 17 (OSCORE Security Mode) and Security 26 (MQTT Server) are
+registered as read-only Object Link resources under
+`CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL`. Multi-instance resources and
 Device 22 ExtDevInfo are not implemented either.
 
 ## Application API

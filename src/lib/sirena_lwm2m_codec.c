@@ -56,6 +56,7 @@ static bool encodable_type(enum sirena_lwm2m_value_type type)
     case SIRENA_LWM2M_VALUE_FLOAT:
     case SIRENA_LWM2M_VALUE_STRING:
     case SIRENA_LWM2M_VALUE_OPAQUE:
+    case SIRENA_LWM2M_VALUE_OBJECT_LINK:
         return true;
     default:
         return false;
@@ -241,6 +242,13 @@ static int encode_tlv_value(void *buffer, size_t capacity, size_t *used,
     case SIRENA_LWM2M_VALUE_OPAQUE:
         value_len = v->data.opaque.length;
         break;
+    case SIRENA_LWM2M_VALUE_OBJECT_LINK:
+        value_len = 4U;
+        tmp[0] = (uint8_t)(v->data.object_link.object_id >> 8);
+        tmp[1] = (uint8_t)(v->data.object_link.object_id & 0xFF);
+        tmp[2] = (uint8_t)(v->data.object_link.instance_id >> 8);
+        tmp[3] = (uint8_t)(v->data.object_link.instance_id & 0xFF);
+        break;
     default:
         return -EINVAL;
     }
@@ -383,6 +391,17 @@ static int encode_cbor_value(void *buffer, size_t capacity, size_t *used,
         if (rc != 0) return rc;
         return append(buffer, capacity, used, v->data.opaque.value,
                       v->data.opaque.length);
+    case SIRENA_LWM2M_VALUE_OBJECT_LINK: {
+        uint8_t bytes[4] = {
+            (uint8_t)(v->data.object_link.object_id >> 8),
+            (uint8_t)(v->data.object_link.object_id & 0xFF),
+            (uint8_t)(v->data.object_link.instance_id >> 8),
+            (uint8_t)(v->data.object_link.instance_id & 0xFF),
+        };
+        rc = cbor_length(buffer, capacity, used, 2, 4U);
+        if (rc != 0) return rc;
+        return append(buffer, capacity, used, bytes, 4U);
+    }
     default:
         return -EINVAL;
     }
@@ -626,6 +645,17 @@ int sirena_lwm2m_codec_encode(uint16_t content_format,
             case SIRENA_LWM2M_VALUE_OPAQUE:
                 if (append_escaped(buffer, cap, &used, (const char *)values[i].data.opaque.value, values[i].data.opaque.length) != 0) return -ENOMEM;
                 break;
+            case SIRENA_LWM2M_VALUE_OBJECT_LINK: {
+                char ol[32];
+                int ol_n = snprintf(ol, sizeof(ol), "%u:%u",
+                                    values[i].data.object_link.object_id,
+                                    values[i].data.object_link.instance_id);
+                if (ol_n < 0) return -ENOMEM;
+                if (append_byte(buffer, cap, &used, '"') != 0) return -ENOMEM;
+                if (append(buffer, cap, &used, ol, (size_t)ol_n) != 0) return -ENOMEM;
+                if (append_byte(buffer, cap, &used, '"') != 0) return -ENOMEM;
+                break;
+            }
             default:
                 return -EINVAL;
             }
@@ -671,6 +701,17 @@ int sirena_lwm2m_codec_encode(uint16_t content_format,
             case SIRENA_LWM2M_VALUE_OPAQUE:
                 if (append_escaped(buffer, cap, &used, (const char *)values[i].data.opaque.value, values[i].data.opaque.length) != 0) return -ENOMEM;
                 break;
+            case SIRENA_LWM2M_VALUE_OBJECT_LINK: {
+                char ol[32];
+                int ol_n = snprintf(ol, sizeof(ol), "%u:%u",
+                                    values[i].data.object_link.object_id,
+                                    values[i].data.object_link.instance_id);
+                if (ol_n < 0) return -ENOMEM;
+                if (append_byte(buffer, cap, &used, '"') != 0) return -ENOMEM;
+                if (append(buffer, cap, &used, ol, (size_t)ol_n) != 0) return -ENOMEM;
+                if (append_byte(buffer, cap, &used, '"') != 0) return -ENOMEM;
+                break;
+            }
             default:
                 return -EINVAL;
             }
@@ -717,6 +758,17 @@ int sirena_lwm2m_codec_encode(uint16_t content_format,
             case SIRENA_LWM2M_VALUE_OPAQUE:
                 if (append_escaped(buffer, cap, &used, (const char *)values[i].data.opaque.value, values[i].data.opaque.length) != 0) return -ENOMEM;
                 break;
+            case SIRENA_LWM2M_VALUE_OBJECT_LINK: {
+                char ol[32];
+                int ol_n = snprintf(ol, sizeof(ol), "%u:%u",
+                                    values[i].data.object_link.object_id,
+                                    values[i].data.object_link.instance_id);
+                if (ol_n < 0) return -ENOMEM;
+                if (append_byte(buffer, cap, &used, '"') != 0) return -ENOMEM;
+                if (append(buffer, cap, &used, ol, (size_t)ol_n) != 0) return -ENOMEM;
+                if (append_byte(buffer, cap, &used, '"') != 0) return -ENOMEM;
+                break;
+            }
             default:
                 return -EINVAL;
             }
@@ -858,6 +910,14 @@ static int decode_tlv_value(const uint8_t *buf, size_t len,
         v->type = SIRENA_LWM2M_VALUE_FLOAT;
         break;
     }
+    case SIRENA_LWM2M_VALUE_OBJECT_LINK:
+        if (value_len != 4U) {
+            return -EINVAL;
+        }
+        v->type = SIRENA_LWM2M_VALUE_OBJECT_LINK;
+        v->data.object_link.object_id = ((uint16_t)buf[value_start] << 8) | buf[value_start + 1];
+        v->data.object_link.instance_id = ((uint16_t)buf[value_start + 2] << 8) | buf[value_start + 3];
+        break;
     case SIRENA_LWM2M_VALUE_STRING:
         v->type = SIRENA_LWM2M_VALUE_STRING;
         v->data.string.value = (const char *)&buf[value_start];
