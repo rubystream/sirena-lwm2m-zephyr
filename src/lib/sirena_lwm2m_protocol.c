@@ -194,7 +194,6 @@ static struct {
     const struct sirena_lwm2m_resource_attributes *incoming;
     bool any;
     bool failed;
-    int last_rc;
 } wa_ctx;
 
 static int protocol_apply_attributes(uint16_t object_id, uint16_t instance_id, uint16_t resource_id,
@@ -253,12 +252,10 @@ static int wa_instance_visitor(uint16_t object_id, uint16_t instance_id, void *u
         rc = protocol_apply_attributes(object_id, instance_id, inst->resources[i].id,
                                       wa_ctx.incoming);
         if (rc == -ENOENT) {
-            wa_ctx.last_rc = rc;
             continue;
         }
         if (rc != 0) {
             wa_ctx.failed = true;
-            wa_ctx.last_rc = rc;
             return -1;
         }
         wa_ctx.any = true;
@@ -437,7 +434,6 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         wa_ctx.incoming = &incoming;
         wa_ctx.any = false;
         wa_ctx.failed = false;
-        wa_ctx.last_rc = 0;
 
         rc = sirena_lwm2m_foreach_instance(wa_instance_visitor, NULL);
 

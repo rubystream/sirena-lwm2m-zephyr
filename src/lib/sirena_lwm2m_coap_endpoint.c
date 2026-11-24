@@ -367,6 +367,27 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         return;
     }
 
+    if (path_count != SIRENA_LWM2M_COAP_PATH_SEGMENTS) {
+        bool is_write_attributes = false;
+
+        if (coap_header_get_code(packet) == COAP_METHOD_POST) {
+            struct coap_option short_path_query_options[SIRENA_LWM2M_COAP_OPTIONS];
+            int query_found = coap_find_options(packet, COAP_OPTION_URI_QUERY,
+                                               short_path_query_options,
+                                               ARRAY_SIZE(short_path_query_options));
+            if (query_found > 0) {
+                is_write_attributes = true;
+            }
+        }
+
+        if (!is_write_attributes) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_NOT_FOUND, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+    }
+
     for (size_t pad = path_count; pad < SIRENA_LWM2M_COAP_PATH_SEGMENTS; ++pad) {
         path[pad] = 0U;
     }
@@ -379,6 +400,12 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         struct coap_option query_options[SIRENA_LWM2M_COAP_OPTIONS];
         int found = coap_find_options(packet, COAP_OPTION_URI_QUERY, query_options,
                                      ARRAY_SIZE(query_options));
+        if (found < 0) {
+            found = 0;
+        }
+        if ((size_t)found > ARRAY_SIZE(query_options)) {
+            found = (int)ARRAY_SIZE(query_options);
+        }
         if (found > 0) {
             write_attributes = true;
             size_t qi;
@@ -416,7 +443,6 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
 
                     if (value_length == 0U || value[0] == '-') {
                         attr_rc = -EINVAL;
-                        write_attributes = true;
                     } else {
                         errno = 0;
                         unsigned long parsed = strtoul(value, &endptr, 10);
@@ -433,7 +459,6 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
                                 request_attributes.pmax = (uint32_t)parsed;
                             }
                         }
-                        write_attributes = true;
                     }
                 } else if (strcmp(key, "gt") == 0 || strcmp(key, "lt") == 0 ||
                            strcmp(key, "st") == 0) {
@@ -464,7 +489,6 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
                                 request_attributes.st = parsed;
                             }
                         }
-                        write_attributes = true;
                     }
                 } else {
                     unknown_query = true;
