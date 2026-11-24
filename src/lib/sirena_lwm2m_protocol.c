@@ -292,6 +292,55 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         protocol_set_status(response, SIRENA_LWM2M_STATUS_CHANGED);
         return 0;
     }
+    case SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES: {
+        struct sirena_lwm2m_resource_attributes attrs;
+
+        rc = sirena_lwm2m_get_resource_attributes(request->object_id, request->instance_id,
+                                                 request->resource_id, &attrs);
+        if (rc == -ENOENT) {
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+            return 0;
+        }
+        if (rc != 0) {
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
+            return 0;
+        }
+
+        if (request->attributes.has_pmin) {
+            attrs.has_pmin = true;
+            attrs.pmin = request->attributes.pmin;
+        }
+        if (request->attributes.has_pmax) {
+            attrs.has_pmax = true;
+            attrs.pmax = request->attributes.pmax;
+        }
+        if (request->attributes.has_gt) {
+            attrs.has_gt = true;
+            attrs.gt = request->attributes.gt;
+        }
+        if (request->attributes.has_lt) {
+            attrs.has_lt = true;
+            attrs.lt = request->attributes.lt;
+        }
+        if (request->attributes.has_st) {
+            attrs.has_st = true;
+            attrs.st = request->attributes.st;
+        }
+
+        rc = sirena_lwm2m_set_resource_attributes(request->object_id, request->instance_id,
+                                                 request->resource_id, &attrs);
+        if (rc == -ENOENT) {
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+            return 0;
+        }
+        if (rc != 0) {
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
+            return 0;
+        }
+
+        protocol_set_status(response, SIRENA_LWM2M_STATUS_CHANGED);
+        return 0;
+    }
     case SIRENA_LWM2M_OPERATION_CREATE: {
         uint16_t instance_id = 1U;
         int created_instance = -1;

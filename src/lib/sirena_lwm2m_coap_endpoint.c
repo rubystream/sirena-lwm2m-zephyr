@@ -6,6 +6,7 @@
 #include <zephyr/sys/util.h>
 #include <errno.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define SIRENA_LWM2M_COAP_PATH_SEGMENTS 3
 #define SIRENA_LWM2M_COAP_PATH_OPTIONS (SIRENA_LWM2M_COAP_PATH_SEGMENTS + 1)
@@ -346,6 +347,9 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     uint8_t request_type = coap_header_get_type(packet);
     uint8_t response_type;
     int content_format;
+    struct sirena_lwm2m_resource_attributes request_attributes = {0};
+    bool write_attributes = false;
+    int attr_rc = 0;
     int observe;
     int rc;
     uint8_t code;
@@ -354,23 +358,92 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     response_message_id = request_type == COAP_TYPE_CON ? message_id : coap_next_id();
 
     rc = sirena_lwm2m_coap_endpoint_parse_path(packet, path, ARRAY_SIZE(path), &path_count);
-    if (rc != 0 || path_count != SIRENA_LWM2M_COAP_PATH_SEGMENTS) {
+    if (rc != 0 || path_count == 0U || path_count > SIRENA_LWM2M_COAP_PATH_SEGMENTS) {
         (void)endpoint_send_message(response_type, response_message_id, token_length, token,
                                     COAP_RESPONSE_CODE_NOT_FOUND, false, 0U, -1, NULL, 0U, peer,
                                     peer_length);
         return;
     }
 
+    for (size_t pad = path_count; pad < SIRENA_LWM2M_COAP_PATH_SEGMENTS; ++pad) {
+        path[pad] = 0U;
+    }
+
     observe = coap_get_option_int(packet, COAP_OPTION_OBSERVE);
     content_format = coap_get_option_int(packet, COAP_OPTION_CONTENT_FORMAT);
     payload = coap_packet_get_payload(packet, &payload_length);
+
+    {
+        struct coap_option query_options[SIRENA_LWM2M_COAP_OPTIONS];
+        int found = coap_find_options(packet, COAP_OPTION_URI_QUERY, query_options,
+                                     ARRAY_SIZE(query_options));
+        if (found > 0) {
+            size_t qi;
+
+            for (qi = 0U; qi < (size_t)found; ++qi) {
+                char key[8];
+                char value[32];
+                size_t key_length = 0U;
+                size_t value_length = 0U;
+                size_t k;
+                const uint8_t *raw = query_options[qi].value;
+                uint16_t len = query_options[qi].len;
+
+                for (k = 0U; k < len && raw[k] != (uint8_t)'='; ++k) {
+                    if (k < sizeof(key) - 1U) {
+                        key[key_length++] = (char)raw[k];
+                    }
+                }
+                key[key_length] = '\0';
+
+                if (k < len) {
+                    size_t v;
+
+                    for (v = k + 1U; v < len; ++v) {
+                        if (value_length < sizeof(value) - 1U) {
+                            value[value_length++] = (char)raw[v];
+                        }
+                    }
+                }
+                value[value_length] = '\0';
+
+                if (strcmp(key, "pmin") == 0) {
+                    request_attributes.has_pmin = true;
+                    request_attributes.pmin = (uint32_t)strtoul(value, NULL, 10);
+                    write_attributes = true;
+                } else if (strcmp(key, "pmax") == 0) {
+                    request_attributes.has_pmax = true;
+                    request_attributes.pmax = (uint32_t)strtoul(value, NULL, 10);
+                    write_attributes = true;
+                } else if (strcmp(key, "gt") == 0) {
+                    request_attributes.has_gt = true;
+                    request_attributes.gt = strtod(value, NULL);
+                    write_attributes = true;
+                } else if (strcmp(key, "lt") == 0) {
+                    request_attributes.has_lt = true;
+                    request_attributes.lt = strtod(value, NULL);
+                    write_attributes = true;
+                } else if (strcmp(key, "st") == 0) {
+                    request_attributes.has_st = true;
+                    request_attributes.st = strtod(value, NULL);
+                    write_attributes = true;
+                } else {
+                    attr_rc = -EINVAL;
+                }
+            }
+        }
+    }
 
     switch (coap_header_get_code(packet)) {
     case COAP_METHOD_GET:
         protocol_request.operation = SIRENA_LWM2M_OPERATION_READ;
         break;
     case COAP_METHOD_PUT:
-        protocol_request.operation = SIRENA_LWM2M_OPERATION_WRITE;
+        if (write_attributes) {
+            protocol_request.operation = SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES;
+        } else {
+            protocol_request.operation = SIRENA_LWM2M_OPERATION_WRITE;
+        }
         break;
     case COAP_METHOD_POST:
         protocol_request.operation = SIRENA_LWM2M_OPERATION_EXECUTE;
@@ -409,6 +482,7 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     protocol_request.object_id = path[0];
     protocol_request.instance_id = path[1];
     protocol_request.resource_id = path[2];
+    protocol_request.attributes = request_attributes;
     protocol_request.payload = payload;
     protocol_request.payload_length = payload_length;
     protocol_request.content_format_present = content_format >= 0;
@@ -421,6 +495,13 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     protocol_response.payload_length = 0U;
     protocol_response.content_format = 0U;
     protocol_response.status = SIRENA_LWM2M_STATUS_INTERNAL_ERROR;
+
+    if (attr_rc != 0) {
+        (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                    COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U, peer,
+                                    peer_length);
+        return;
+    }
 
     (void)sirena_lwm2m_protocol_execute(&protocol_request, &protocol_response);
 
