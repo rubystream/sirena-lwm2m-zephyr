@@ -78,12 +78,23 @@ int sirena_lwm2m_get_opaque(uint16_t object_id, uint16_t instance_id,
                             uint16_t resource_id, void *buffer, size_t *length);
 int sirena_lwm2m_get_opaque_ref(uint16_t object_id, uint16_t instance_id,
                                 uint16_t resource_id, const void **data, size_t *length);
+int sirena_lwm2m_set_object_link(uint16_t object_id, uint16_t instance_id,
+                            uint16_t resource_id, uint16_t linked_object_id,
+                            uint16_t linked_instance_id);
+int sirena_lwm2m_get_object_link(uint16_t object_id, uint16_t instance_id,
+                            uint16_t resource_id, uint16_t *linked_object_id,
+                            uint16_t *linked_instance_id);
 ```
 
 `sirena_lwm2m_get_string()` takes the buffer capacity in `*length` on entry and
 returns the character count without the terminating NUL on success. The buffer
 always receives a NUL terminator. `sirena_lwm2m_get_opaque()` takes the buffer
 capacity in `*length` on entry and returns the stored byte count on success.
+
+`sirena_lwm2m_get_object_link()` reads a two-field link as object and
+instance id. An Object Link is four bytes on the wire: two bytes object
+id followed by two bytes instance id, big-endian. In text formats it is
+written as `ObjID:InstID`.
 
 `sirena_lwm2m_get_opaque_ref()` returns a reference to the storage of an
 opaque resource instead of a copy of it. The pointer stays valid until the
@@ -109,6 +120,10 @@ struct sirena_lwm2m_value {
             const void *value;
             size_t length;
         } opaque;
+        struct {
+            uint16_t object_id;
+            uint16_t instance_id;
+        } object_link;
     } data;
 };
 
