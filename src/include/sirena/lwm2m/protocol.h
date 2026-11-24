@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <sirena/lwm2m/object_registry.h>
 
 enum sirena_lwm2m_status {
     SIRENA_LWM2M_STATUS_CHANGED = 0,
@@ -24,6 +25,7 @@ enum sirena_lwm2m_operation {
     SIRENA_LWM2M_OPERATION_EXECUTE,
     SIRENA_LWM2M_OPERATION_CREATE,
     SIRENA_LWM2M_OPERATION_DELETE,
+    SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES,
 };
 
 struct sirena_lwm2m_protocol_request {
@@ -31,6 +33,8 @@ struct sirena_lwm2m_protocol_request {
     uint16_t object_id;
     uint16_t instance_id;
     uint16_t resource_id;
+    size_t path_count;
+    struct sirena_lwm2m_resource_attributes attributes;
     const void *payload;
     size_t payload_length;
     bool content_format_present;

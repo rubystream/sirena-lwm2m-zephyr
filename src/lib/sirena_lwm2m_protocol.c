@@ -189,6 +189,81 @@ static void protocol_set_status(struct sirena_lwm2m_protocol_response *response,
     response->payload_length = 0U;
 }
 
+static struct {
+    uint16_t object_id;
+    const struct sirena_lwm2m_resource_attributes *incoming;
+    bool any;
+    bool failed;
+} wa_ctx;
+
+static int protocol_apply_attributes(uint16_t object_id, uint16_t instance_id, uint16_t resource_id,
+                                     const struct sirena_lwm2m_resource_attributes *incoming)
+{
+    struct sirena_lwm2m_resource_attributes attrs;
+    int rc;
+
+    rc = sirena_lwm2m_get_resource_attributes(object_id, instance_id, resource_id, &attrs);
+    if (rc != 0) {
+        return rc;
+    }
+
+    if (incoming->has_pmin) {
+        attrs.has_pmin = true;
+        attrs.pmin = incoming->pmin;
+    }
+    if (incoming->has_pmax) {
+        attrs.has_pmax = true;
+        attrs.pmax = incoming->pmax;
+    }
+    if (incoming->has_gt) {
+        attrs.has_gt = true;
+        attrs.gt = incoming->gt;
+    }
+    if (incoming->has_lt) {
+        attrs.has_lt = true;
+        attrs.lt = incoming->lt;
+    }
+    if (incoming->has_st) {
+        attrs.has_st = true;
+        attrs.st = incoming->st;
+    }
+
+    return sirena_lwm2m_set_resource_attributes(object_id, instance_id, resource_id, &attrs);
+}
+
+static int wa_instance_visitor(uint16_t object_id, uint16_t instance_id, void *user_data)
+{
+    struct sirena_lwm2m_instance *inst;
+    size_t i;
+    int rc;
+
+    (void)user_data;
+
+    if (object_id != wa_ctx.object_id) {
+        return 0;
+    }
+
+    rc = sirena_lwm2m_find_instance(object_id, instance_id, &inst);
+    if (rc != 0) {
+        return 0;
+    }
+
+    for (i = 0U; i < inst->resource_count; ++i) {
+        rc = protocol_apply_attributes(object_id, instance_id, inst->resources[i].id,
+                                      wa_ctx.incoming);
+        if (rc == -ENOENT) {
+            continue;
+        }
+        if (rc != 0) {
+            wa_ctx.failed = true;
+            return -1;
+        }
+        wa_ctx.any = true;
+    }
+
+    return 0;
+}
+
 int sirena_lwm2m_protocol_init(void)
 {
     if (!sirena_lwm2m_content_format_supported(SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT)) {
@@ -216,7 +291,8 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
     rc = sirena_lwm2m_find_resource(request->object_id, request->instance_id,
                                      request->resource_id, &resource);
     if (rc != 0 && request->operation != SIRENA_LWM2M_OPERATION_CREATE &&
-        request->operation != SIRENA_LWM2M_OPERATION_DELETE) {
+        request->operation != SIRENA_LWM2M_OPERATION_DELETE &&
+        request->operation != SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES) {
         protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
         return 0;
     }
@@ -286,6 +362,88 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
 
         if (rc != 0) {
             protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
+            return 0;
+        }
+
+        protocol_set_status(response, SIRENA_LWM2M_STATUS_CHANGED);
+        return 0;
+    }
+    case SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES: {
+        struct sirena_lwm2m_resource_attributes incoming = request->attributes;
+        size_t pc = request->path_count == 0U ? 3U : request->path_count;
+        size_t i;
+        bool any = false;
+        int last_rc = 0;
+
+        if (pc >= 3U) {
+            rc = protocol_apply_attributes(request->object_id, request->instance_id,
+                                          request->resource_id, &incoming);
+            if (rc == -ENOENT) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+                return 0;
+            }
+            if (rc != 0) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
+                return 0;
+            }
+
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_CHANGED);
+            return 0;
+        }
+
+        if (pc == 2U) {
+            struct sirena_lwm2m_instance *inst;
+
+            rc = sirena_lwm2m_find_instance(request->object_id, request->instance_id,
+                                            &inst);
+            if (rc != 0) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+                return 0;
+            }
+
+            for (i = 0U; i < inst->resource_count; ++i) {
+                uint16_t rid = inst->resources[i].id;
+
+                rc = protocol_apply_attributes(request->object_id, request->instance_id, rid,
+                                             &incoming);
+                if (rc == -ENOENT) {
+                    last_rc = rc;
+                    continue;
+                }
+                if (rc != 0) {
+                    protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
+                    return 0;
+                }
+                any = true;
+            }
+
+            if (!any) {
+                if (last_rc == -ENOENT) {
+                    protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+                } else {
+                    protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
+                }
+                return 0;
+            }
+
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_CHANGED);
+            return 0;
+        }
+
+        wa_ctx.object_id = request->object_id;
+        wa_ctx.incoming = &incoming;
+        wa_ctx.any = false;
+        wa_ctx.failed = false;
+
+        rc = sirena_lwm2m_foreach_instance(wa_instance_visitor, NULL);
+
+        if (wa_ctx.failed) {
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
+            return 0;
+        }
+
+        if (!wa_ctx.any) {
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
             return 0;
         }
 
