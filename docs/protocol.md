@@ -23,7 +23,7 @@ for every request it receives.
 | Read | GET | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05, 4.06 |
 | Write | PUT | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.04 Changed | 4.00, 4.04, 4.05, 4.15 |
 | Execute | POST | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.04 Changed | 4.00, 4.04, 4.05 |
-| Write-Attributes | POST (with URI-Query) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.04 Changed | 4.00, 4.04, 4.05 |
+| Write-Attributes | PUT (with URI-Query) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.04 Changed | 4.00, 4.04 |
 | Observe | GET with Observe = 0 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 5.03 |
 | Cancel Observation | GET with Observe = 1 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05 |
 | Notify | notification | the observed resource | 2.05 Content | |

@@ -370,7 +370,7 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     if (path_count != SIRENA_LWM2M_COAP_PATH_SEGMENTS) {
         bool is_write_attributes = false;
 
-        if (coap_header_get_code(packet) == COAP_METHOD_POST) {
+        if (coap_header_get_code(packet) == COAP_METHOD_PUT) {
             struct coap_option short_path_query_options[SIRENA_LWM2M_COAP_OPTIONS];
             int query_found = coap_find_options(packet, COAP_OPTION_URI_QUERY,
                                                short_path_query_options,
@@ -406,7 +406,7 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         if ((size_t)found > ARRAY_SIZE(query_options)) {
             found = (int)ARRAY_SIZE(query_options);
         }
-        if (found > 0) {
+        if (found > 0 && coap_header_get_code(packet) == COAP_METHOD_PUT) {
             write_attributes = true;
             size_t qi;
 
@@ -502,14 +502,14 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         protocol_request.operation = SIRENA_LWM2M_OPERATION_READ;
         break;
     case COAP_METHOD_PUT:
-        protocol_request.operation = SIRENA_LWM2M_OPERATION_WRITE;
-        break;
-    case COAP_METHOD_POST:
         if (write_attributes) {
             protocol_request.operation = SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES;
         } else {
-            protocol_request.operation = SIRENA_LWM2M_OPERATION_EXECUTE;
+            protocol_request.operation = SIRENA_LWM2M_OPERATION_WRITE;
         }
+        break;
+    case COAP_METHOD_POST:
+        protocol_request.operation = SIRENA_LWM2M_OPERATION_EXECUTE;
         break;
     default:
         (void)endpoint_send_message(response_type, response_message_id, token_length, token,
