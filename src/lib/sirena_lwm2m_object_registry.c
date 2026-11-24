@@ -111,6 +111,7 @@ int sirena_lwm2m_create_instance(uint16_t object_id, uint16_t instance_id,
 
     for (i = 0U; i < CONFIG_SIRENA_LWM2M_MAX_INSTANCES; ++i) {
         if (!instances[i].created) {
+            memset(&instances[i], 0, sizeof(instances[i]));
             instances[i].object_id = object_id;
             instances[i].instance_id = instance_id;
             instances[i].created = true;
@@ -121,6 +122,19 @@ int sirena_lwm2m_create_instance(uint16_t object_id, uint16_t instance_id,
     }
 
     return -ENOMEM;
+}
+
+int sirena_lwm2m_delete_instance(uint16_t object_id, uint16_t instance_id)
+{
+    struct sirena_lwm2m_instance *inst;
+
+    inst = find_instance_storage(object_id, instance_id);
+    if (inst == NULL) {
+        return -ENOENT;
+    }
+
+    memset(inst, 0, sizeof(*inst));
+    return 0;
 }
 
 int sirena_lwm2m_add_resource(uint16_t object_id, uint16_t instance_id,

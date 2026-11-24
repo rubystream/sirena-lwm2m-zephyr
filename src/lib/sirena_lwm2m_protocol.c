@@ -2,6 +2,7 @@
 #include <sirena/lwm2m/codec.h>
 #include <sirena/lwm2m/engine.h>
 #include <sirena/lwm2m/object_registry.h>
+#include <sirena/lwm2m/objects.h>
 #include <zephyr/sys/util.h>
 #include <errno.h>
 #include <string.h>
@@ -214,7 +215,8 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
 
     rc = sirena_lwm2m_find_resource(request->object_id, request->instance_id,
                                      request->resource_id, &resource);
-    if (rc != 0) {
+    if (rc != 0 && request->operation != SIRENA_LWM2M_OPERATION_CREATE &&
+        request->operation != SIRENA_LWM2M_OPERATION_DELETE) {
         protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
         return 0;
     }
@@ -288,6 +290,85 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         }
 
         protocol_set_status(response, SIRENA_LWM2M_STATUS_CHANGED);
+        return 0;
+    }
+    case SIRENA_LWM2M_OPERATION_CREATE: {
+        uint16_t instance_id = 1U;
+        int created_instance = -1;
+        int applied = 0;
+
+        while (instance_id < CONFIG_SIRENA_LWM2M_MAX_INSTANCES + 1U) {
+            rc = sirena_lwm2m_create_object_instance(request->object_id, instance_id);
+            if (rc == 0) {
+                created_instance = instance_id;
+                break;
+            }
+            if (rc != -EEXIST) {
+                if (rc == -ENOMEM) {
+                    protocol_set_status(response, SIRENA_LWM2M_STATUS_INTERNAL_ERROR);
+                    return 0;
+                }
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+                return 0;
+            }
+            instance_id += 1U;
+        }
+
+        if (created_instance < 0) {
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_INTERNAL_ERROR);
+            return 0;
+        }
+
+        if (request->payload_length > 0U && request->resource_id != 0U) {
+            uint16_t write_format = request->content_format_present
+                                      ? request->content_format
+                                      : (uint16_t)SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
+            size_t value_count = ARRAY_SIZE(protocol_values);
+            struct sirena_lwm2m_resource *created_resource;
+
+            rc = sirena_lwm2m_find_resource(request->object_id, created_instance,
+                                             request->resource_id, &created_resource);
+            if (rc == 0) {
+                rc = sirena_lwm2m_codec_decode(write_format, created_resource->type,
+                                               request->payload, request->payload_length,
+                                               protocol_values, &value_count);
+                if (rc == 0 && value_count >= 1U) {
+                    rc = protocol_write_resource(request->object_id, created_instance,
+                                                 request->resource_id, created_resource,
+                                                 &protocol_values[0]);
+                    if (rc != 0) {
+                        sirena_lwm2m_delete_object_instance(request->object_id,
+                                                           (uint16_t)created_instance);
+                        protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
+                        return 0;
+                    }
+                    applied = 1;
+                } else {
+                    sirena_lwm2m_delete_object_instance(request->object_id,
+                                                       (uint16_t)created_instance);
+                    protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
+                    return 0;
+                }
+            }
+        }
+
+        (void)applied;
+        protocol_set_status(response, SIRENA_LWM2M_STATUS_CREATED);
+        return 0;
+    }
+    case SIRENA_LWM2M_OPERATION_DELETE: {
+        rc = sirena_lwm2m_delete_object_instance(request->object_id,
+                                                request->instance_id);
+        if (rc == -ENOENT) {
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+            return 0;
+        }
+        if (rc != 0) {
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_INTERNAL_ERROR);
+            return 0;
+        }
+
+        protocol_set_status(response, SIRENA_LWM2M_STATUS_DELETED);
         return 0;
     }
     case SIRENA_LWM2M_OPERATION_EXECUTE:

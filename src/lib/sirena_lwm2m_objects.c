@@ -480,6 +480,84 @@ int sirena_lwm2m_objects_init(void)
     return 0;
 }
 
+static const struct sirena_lwm2m_object_definition *find_object_definition(uint16_t object_id)
+{
+    size_t i;
+
+    for (i = 0U; i < ARRAY_SIZE(object_definitions); ++i) {
+        if (object_definitions[i].object_id == object_id) {
+            return &object_definitions[i];
+        }
+    }
+
+    return NULL;
+}
+
+static int create_object_instance(uint16_t object_id, uint16_t instance_id)
+{
+    const struct sirena_lwm2m_object_definition *definition;
+    int rc;
+
+    definition = find_object_definition(object_id);
+    if (definition == NULL) {
+        return -ENOENT;
+    }
+
+    rc = sirena_lwm2m_register_object(definition->object_id, false);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = sirena_lwm2m_create_instance(definition->object_id, instance_id, NULL);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = resources_add(definition->object_id, instance_id, definition->resources,
+                      definition->resource_count);
+    if (rc != 0) {
+        sirena_lwm2m_delete_instance(definition->object_id, instance_id);
+        return rc;
+    }
+
+    return 0;
+}
+
+static int delete_object_instance(uint16_t object_id, uint16_t instance_id)
+{
+    return sirena_lwm2m_delete_instance(object_id, instance_id);
+}
+
+int sirena_lwm2m_create_object_instance(uint16_t object_id, uint16_t instance_id)
+{
+    return create_object_instance(object_id, instance_id);
+}
+
+int sirena_lwm2m_object_create_instance(uint16_t object_id, uint16_t instance_id)
+{
+    return create_object_instance(object_id, instance_id);
+}
+
+int sirena_lwm2m_objects_create_instance(uint16_t object_id, uint16_t instance_id)
+{
+    return create_object_instance(object_id, instance_id);
+}
+
+int sirena_lwm2m_delete_object_instance(uint16_t object_id, uint16_t instance_id)
+{
+    return delete_object_instance(object_id, instance_id);
+}
+
+int sirena_lwm2m_object_delete_instance(uint16_t object_id, uint16_t instance_id)
+{
+    return delete_object_instance(object_id, instance_id);
+}
+
+int sirena_lwm2m_objects_delete_instance(uint16_t object_id, uint16_t instance_id)
+{
+    return delete_object_instance(object_id, instance_id);
+}
+
 static int resource_write(uint16_t object_id, uint16_t instance_id, uint16_t resource_id,
                           enum sirena_lwm2m_value_type type, const void *buffer,
                           size_t length)
