@@ -814,3 +814,154 @@ ZTEST(sirena_lwm2m_protocol, test_write_attributes_resource_path_returns_changed
     zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED,
                  "unexpected response code %d", peer_capture.code);
 }
+
+ZTEST(sirena_lwm2m_protocol, test_write_attributes_instance_path_returns_changed)
+{
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request_attr("/1/0", "pmin=5");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED,
+                 "unexpected response code %d", peer_capture.code);
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_attributes_object_path_returns_changed)
+{
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request_attr("/1", "pmin=5");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED,
+                 "unexpected response code %d", peer_capture.code);
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_attributes_invalid_numeric_returns_bad_request)
+{
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request_attr("/1/0/1", "gt=abc");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_BAD_REQUEST,
+                 "unexpected response code %d", peer_capture.code);
+
+    rc = peer_request_attr("/1/0/1", "gt=NaN");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_BAD_REQUEST,
+                 "unexpected response code %d", peer_capture.code);
+
+    rc = peer_request_attr("/1/0/1", "gt=Infinity");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_BAD_REQUEST,
+                 "unexpected response code %d", peer_capture.code);
+
+    rc = peer_request_attr("/1/0/1", "gt=0x10");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_BAD_REQUEST,
+                 "unexpected response code %d", peer_capture.code);
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_attributes_pmin_not_uint_returns_bad_request)
+{
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request_attr("/1/0/1", "pmin=-1");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_BAD_REQUEST,
+                 "unexpected response code %d", peer_capture.code);
+
+    rc = peer_request_attr("/1/0/1", "pmin=0x10");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_BAD_REQUEST,
+                 "unexpected response code %d", peer_capture.code);
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_attributes_invalid_range_returns_bad_request)
+{
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request_attr("/1/0/1", "pmin=10");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED,
+                 "unexpected response code %d", peer_capture.code);
+
+    rc = peer_request_attr("/1/0/1", "pmax=5");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_BAD_REQUEST,
+                 "unexpected response code %d", peer_capture.code);
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_attributes_unknown_path_returns_not_found)
+{
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request_attr("/999/0/1", "pmin=5");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_NOT_FOUND,
+                 "unexpected response code %d", peer_capture.code);
+
+    rc = peer_request_attr("/1/999/1", "pmin=5");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_NOT_FOUND,
+                 "unexpected response code %d", peer_capture.code);
+
+    rc = peer_request_attr("/999", "pmin=5");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_NOT_FOUND,
+                 "unexpected response code %d", peer_capture.code);
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_attributes_persists_attributes)
+{
+    struct sirena_lwm2m_resource_attributes attrs;
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = sirena_lwm2m_set_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, PEER_LIFETIME);
+    zassert_equal(rc, 0, "setup value rejected");
+
+    rc = peer_request_attr("/1/0/1", "pmin=7");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED,
+                 "unexpected response code %d", peer_capture.code);
+
+    rc = sirena_lwm2m_get_resource_attributes(PEER_SERVER_OBJECT_ID,
+                                             PEER_INSTANCE_ID,
+                                             PEER_SERVER_LIFETIME_RESOURCE, &attrs);
+    zassert_equal(rc, 0, "get attributes failed: %d", rc);
+    zassert_true(attrs.has_pmin, "pmin not persisted");
+    zassert_equal(attrs.pmin, 7U, "pmin value mismatch");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_post_with_query_unknown_key_returns_bad_request)
+{
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request_attr("/1/0/1", "foo=bar");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_BAD_REQUEST,
+                 "unexpected response code %d", peer_capture.code);
+}

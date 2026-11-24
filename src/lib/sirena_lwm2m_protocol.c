@@ -379,44 +379,8 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         int last_rc = 0;
 
         if (pc >= 3U) {
-            struct sirena_lwm2m_resource_attributes attrs;
-
-            rc = sirena_lwm2m_get_resource_attributes(request->object_id,
-                                                     request->instance_id,
-                                                     request->resource_id, &attrs);
-            if (rc == -ENOENT) {
-                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
-                return 0;
-            }
-            if (rc != 0) {
-                protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
-                return 0;
-            }
-
-            if (incoming.has_pmin) {
-                attrs.has_pmin = true;
-                attrs.pmin = incoming.pmin;
-            }
-            if (incoming.has_pmax) {
-                attrs.has_pmax = true;
-                attrs.pmax = incoming.pmax;
-            }
-            if (incoming.has_gt) {
-                attrs.has_gt = true;
-                attrs.gt = incoming.gt;
-            }
-            if (incoming.has_lt) {
-                attrs.has_lt = true;
-                attrs.lt = incoming.lt;
-            }
-            if (incoming.has_st) {
-                attrs.has_st = true;
-                attrs.st = incoming.st;
-            }
-
-            rc = sirena_lwm2m_set_resource_attributes(request->object_id,
-                                                     request->instance_id,
-                                                     request->resource_id, &attrs);
+            rc = protocol_apply_attributes(request->object_id, request->instance_id,
+                                          request->resource_id, &incoming);
             if (rc == -ENOENT) {
                 protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
                 return 0;
@@ -441,45 +405,10 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
             }
 
             for (i = 0U; i < inst->resource_count; ++i) {
-                struct sirena_lwm2m_resource_attributes attrs;
                 uint16_t rid = inst->resources[i].id;
 
-                rc = sirena_lwm2m_get_resource_attributes(request->object_id,
-                                                         request->instance_id, rid,
-                                                         &attrs);
-                if (rc == -ENOENT) {
-                    last_rc = rc;
-                    continue;
-                }
-                if (rc != 0) {
-                    protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
-                    return 0;
-                }
-
-                if (incoming.has_pmin) {
-                    attrs.has_pmin = true;
-                    attrs.pmin = incoming.pmin;
-                }
-                if (incoming.has_pmax) {
-                    attrs.has_pmax = true;
-                    attrs.pmax = incoming.pmax;
-                }
-                if (incoming.has_gt) {
-                    attrs.has_gt = true;
-                    attrs.gt = incoming.gt;
-                }
-                if (incoming.has_lt) {
-                    attrs.has_lt = true;
-                    attrs.lt = incoming.lt;
-                }
-                if (incoming.has_st) {
-                    attrs.has_st = true;
-                    attrs.st = incoming.st;
-                }
-
-                rc = sirena_lwm2m_set_resource_attributes(request->object_id,
-                                                         request->instance_id, rid,
-                                                         &attrs);
+                rc = protocol_apply_attributes(request->object_id, request->instance_id, rid,
+                                             &incoming);
                 if (rc == -ENOENT) {
                     last_rc = rc;
                     continue;
@@ -518,11 +447,7 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         }
 
         if (!wa_ctx.any) {
-            if (wa_ctx.last_rc == -ENOENT) {
-                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
-            } else {
-                protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
-            }
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
             return 0;
         }
 

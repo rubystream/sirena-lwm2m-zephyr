@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 
 #define SIRENA_LWM2M_COAP_PATH_SEGMENTS 3
 #define SIRENA_LWM2M_COAP_PATH_OPTIONS (SIRENA_LWM2M_COAP_PATH_SEGMENTS + 1)
@@ -379,6 +380,7 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         int found = coap_find_options(packet, COAP_OPTION_URI_QUERY, query_options,
                                      ARRAY_SIZE(query_options));
         if (found > 0) {
+            write_attributes = true;
             size_t qi;
 
             for (qi = 0U; qi < (size_t)found; ++qi) {
@@ -440,12 +442,15 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
 
                     if (value_length == 0U) {
                         attr_rc = -EINVAL;
-                        write_attributes = true;
+                    } else if (value_length >= 2U && value[0] == '0' &&
+                               (value[1] == 'x' || value[1] == 'X')) {
+                        attr_rc = -EINVAL;
                     } else {
                         errno = 0;
                         parsed = strtod(value, &endptr);
 
-                        if (endptr == value || *endptr != '\0' || errno == ERANGE) {
+                        if (endptr == value || *endptr != '\0' || errno == ERANGE ||
+                            !isfinite(parsed)) {
                             attr_rc = -EINVAL;
                         } else {
                             if (strcmp(key, "gt") == 0) {
