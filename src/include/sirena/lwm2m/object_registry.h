@@ -67,6 +67,7 @@ int sirena_lwm2m_registry_init(void);
 int sirena_lwm2m_register_object(uint16_t object_id, bool optional);
 int sirena_lwm2m_create_instance(uint16_t object_id, uint16_t instance_id,
 				 void *user_data);
+int sirena_lwm2m_delete_instance(uint16_t object_id, uint16_t instance_id);
 int sirena_lwm2m_add_resource(uint16_t object_id, uint16_t instance_id,
 			      uint16_t resource_id, enum sirena_lwm2m_value_type type,
 			      uint8_t operations, bool optional,
