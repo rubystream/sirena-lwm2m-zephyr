@@ -349,6 +349,7 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     int content_format;
     struct sirena_lwm2m_resource_attributes request_attributes = {0};
     bool write_attributes = false;
+    bool unknown_query = false;
     int attr_rc = 0;
     int observe;
     int rc;
@@ -407,28 +408,61 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
                 }
                 value[value_length] = '\0';
 
-                if (strcmp(key, "pmin") == 0) {
-                    request_attributes.has_pmin = true;
-                    request_attributes.pmin = (uint32_t)strtoul(value, NULL, 10);
-                    write_attributes = true;
-                } else if (strcmp(key, "pmax") == 0) {
-                    request_attributes.has_pmax = true;
-                    request_attributes.pmax = (uint32_t)strtoul(value, NULL, 10);
-                    write_attributes = true;
-                } else if (strcmp(key, "gt") == 0) {
-                    request_attributes.has_gt = true;
-                    request_attributes.gt = strtod(value, NULL);
-                    write_attributes = true;
-                } else if (strcmp(key, "lt") == 0) {
-                    request_attributes.has_lt = true;
-                    request_attributes.lt = strtod(value, NULL);
-                    write_attributes = true;
-                } else if (strcmp(key, "st") == 0) {
-                    request_attributes.has_st = true;
-                    request_attributes.st = strtod(value, NULL);
-                    write_attributes = true;
+                if (strcmp(key, "pmin") == 0 || strcmp(key, "pmax") == 0) {
+                    char *endptr = NULL;
+                    bool is_pmin = strcmp(key, "pmin") == 0;
+
+                    if (value_length == 0U || value[0] == '-') {
+                        attr_rc = -EINVAL;
+                        write_attributes = true;
+                    } else {
+                        errno = 0;
+                        unsigned long parsed = strtoul(value, &endptr, 10);
+
+                        if (endptr == value || *endptr != '\0' || errno == ERANGE ||
+                            parsed > UINT32_MAX) {
+                            attr_rc = -EINVAL;
+                        } else {
+                            if (is_pmin) {
+                                request_attributes.has_pmin = true;
+                                request_attributes.pmin = (uint32_t)parsed;
+                            } else {
+                                request_attributes.has_pmax = true;
+                                request_attributes.pmax = (uint32_t)parsed;
+                            }
+                        }
+                        write_attributes = true;
+                    }
+                } else if (strcmp(key, "gt") == 0 || strcmp(key, "lt") == 0 ||
+                           strcmp(key, "st") == 0) {
+                    char *endptr = NULL;
+                    double parsed;
+
+                    if (value_length == 0U) {
+                        attr_rc = -EINVAL;
+                        write_attributes = true;
+                    } else {
+                        errno = 0;
+                        parsed = strtod(value, &endptr);
+
+                        if (endptr == value || *endptr != '\0' || errno == ERANGE) {
+                            attr_rc = -EINVAL;
+                        } else {
+                            if (strcmp(key, "gt") == 0) {
+                                request_attributes.has_gt = true;
+                                request_attributes.gt = parsed;
+                            } else if (strcmp(key, "lt") == 0) {
+                                request_attributes.has_lt = true;
+                                request_attributes.lt = parsed;
+                            } else {
+                                request_attributes.has_st = true;
+                                request_attributes.st = parsed;
+                            }
+                        }
+                        write_attributes = true;
+                    }
                 } else {
-                    attr_rc = -EINVAL;
+                    unknown_query = true;
                 }
             }
         }
@@ -439,14 +473,14 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         protocol_request.operation = SIRENA_LWM2M_OPERATION_READ;
         break;
     case COAP_METHOD_PUT:
+        protocol_request.operation = SIRENA_LWM2M_OPERATION_WRITE;
+        break;
+    case COAP_METHOD_POST:
         if (write_attributes) {
             protocol_request.operation = SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES;
         } else {
-            protocol_request.operation = SIRENA_LWM2M_OPERATION_WRITE;
+            protocol_request.operation = SIRENA_LWM2M_OPERATION_EXECUTE;
         }
-        break;
-    case COAP_METHOD_POST:
-        protocol_request.operation = SIRENA_LWM2M_OPERATION_EXECUTE;
         break;
     default:
         (void)endpoint_send_message(response_type, response_message_id, token_length, token,
@@ -482,6 +516,7 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     protocol_request.object_id = path[0];
     protocol_request.instance_id = path[1];
     protocol_request.resource_id = path[2];
+    protocol_request.path_count = path_count;
     protocol_request.attributes = request_attributes;
     protocol_request.payload = payload;
     protocol_request.payload_length = payload_length;
@@ -496,7 +531,8 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     protocol_response.content_format = 0U;
     protocol_response.status = SIRENA_LWM2M_STATUS_INTERNAL_ERROR;
 
-    if (attr_rc != 0) {
+    if (protocol_request.operation == SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES &&
+        (attr_rc != 0 || unknown_query)) {
         (void)endpoint_send_message(response_type, response_message_id, token_length, token,
                                     COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U, peer,
                                     peer_length);

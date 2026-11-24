@@ -33,6 +33,7 @@ struct sirena_lwm2m_protocol_request {
     uint16_t object_id;
     uint16_t instance_id;
     uint16_t resource_id;
+    size_t path_count;
     struct sirena_lwm2m_resource_attributes attributes;
     const void *payload;
     size_t payload_length;

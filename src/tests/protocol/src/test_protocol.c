@@ -764,3 +764,53 @@ ZTEST(sirena_lwm2m_protocol, test_cancelled_observation_stops_the_notifications)
     rc = k_sem_take(&peer_semaphore, K_MSEC(500));
     zassert_not_equal(rc, 0, "a cancelled observation must not be notified");
 }
+
+static int peer_request_attr(const char *path, const char *query)
+{
+    struct coap_client_request req = {0};
+    int rc;
+
+    req.method = COAP_METHOD_POST;
+    req.confirmable = true;
+    req.cb = peer_response_handler;
+    req.user_data = NULL;
+
+    if (strlen(path) >= sizeof(req.path)) {
+        return -EINVAL;
+    }
+    strcpy(req.path, path);
+
+    req.options[req.num_options].code = COAP_OPTION_URI_QUERY;
+    req.options[req.num_options].len = (uint16_t)strlen(query);
+    memcpy(req.options[req.num_options].value, query, strlen(query));
+    req.num_options++;
+
+    rc = coap_client_req(&peer_client, peer_socket, net_sad(&peer_client_address), &req, NULL);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = k_sem_take(&peer_semaphore, K_SECONDS(10));
+    if (rc != 0) {
+        return -ETIMEDOUT;
+    }
+
+    return 0;
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_attributes_resource_path_returns_changed)
+{
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = sirena_lwm2m_set_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, PEER_LIFETIME);
+    zassert_equal(rc, 0, "setup value rejected");
+
+    rc = peer_request_attr("/1/0/1", "pmin=5");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED,
+                 "unexpected response code %d", peer_capture.code);
+}
