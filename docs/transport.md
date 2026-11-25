@@ -618,7 +618,7 @@ The operation codes of the specification are:
 | Read | 9 | Device management |
 | Discover | 11 | Device management |
 | Write Replace | 12 | Device management |
-| Write-Attributes | 13 | Device management |
+| Write-Attributes | 14 | Device management |
 | Execute | 16 | Device management |
 | Observe | 20 | Information reporting |
 | Cancel-Observe | 22 | Information reporting |
@@ -671,7 +671,7 @@ example `/3/0/0`.
 | Read | 9 | `operation`, `token`, `uri` | `result`, `token`, `ct`, `payload` |
 | Discover | 11 | `operation`, `token`, `uri` | `result`, `token`, `ct`, `payload` |
 | Write Replace | 12 | `operation`, `token`, `uri`, `ct`, `payload` | `result`, `token` |
-| Write-Attributes | 13 | `operation`, `token`, `uri` | `result`, `token` |
+| Write-Attributes | 14 | `operation`, `token`, `uri` | `result`, `token` |
 | Execute | 16 | `operation`, `token`, `uri`, `payload` | `result`, `token` |
 | Observe | 20 | `operation`, `token`, `uri` | `result`, `token` |
 | Cancel-Observe | 22 | `operation`, `token` | `result`, `token` |
