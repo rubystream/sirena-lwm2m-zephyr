@@ -273,6 +273,52 @@ int sirena_lwm2m_protocol_init(void)
     return 0;
 }
 
+struct discover_context {
+    uint16_t object_id;
+    char *buffer;
+    size_t capacity;
+    size_t length;
+    bool any;
+};
+
+static int discover_append_entry(struct discover_context *context, uint16_t object_id,
+                                 uint16_t instance_id, uint16_t resource_id, bool resource_path)
+{
+    int written;
+    const char *prefix = context->length > 0U ? "," : "";
+
+    if (resource_path) {
+        written = snprintf(context->buffer + context->length, context->capacity - context->length,
+                           "%s</%u/%u/%u>", prefix, object_id, instance_id, resource_id);
+    } else if (instance_id != UINT16_MAX) {
+        written = snprintf(context->buffer + context->length, context->capacity - context->length,
+                           "%s</%u/%u>", prefix, object_id, instance_id);
+    } else {
+        (void)resource_id;
+        written = -1;
+    }
+
+    if (written < 0 || (size_t)written >= context->capacity - context->length) {
+        return -ENOMEM;
+    }
+
+    context->length += (size_t)written;
+    context->any = true;
+
+    return 0;
+}
+
+static int discover_instance_visitor(uint16_t object_id, uint16_t instance_id, void *user_data)
+{
+    struct discover_context *context = user_data;
+
+    if (object_id != context->object_id) {
+        return 0;
+    }
+
+    return discover_append_entry(context, object_id, instance_id, 0U, false);
+}
+
 int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *request,
                                   struct sirena_lwm2m_protocol_response *response)
 {
@@ -292,7 +338,8 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
                                      request->resource_id, &resource);
     if (rc != 0 && request->operation != SIRENA_LWM2M_OPERATION_CREATE &&
         request->operation != SIRENA_LWM2M_OPERATION_DELETE &&
-        request->operation != SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES) {
+        request->operation != SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES &&
+        request->operation != SIRENA_LWM2M_OPERATION_DISCOVER) {
         protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
         return 0;
     }
@@ -527,6 +574,105 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         }
 
         protocol_set_status(response, SIRENA_LWM2M_STATUS_DELETED);
+        return 0;
+    }
+    case SIRENA_LWM2M_OPERATION_DISCOVER: {
+        struct discover_context context = {
+            .object_id = request->object_id,
+            .buffer = (char *)response->payload,
+            .capacity = response->payload_capacity,
+            .length = 0U,
+            .any = false,
+        };
+        size_t path_count = request->path_count == 0U ? 1U : request->path_count;
+        int negotiated;
+        uint16_t content_format;
+
+        if (request->accepted_format_count > 0U) {
+            size_t i;
+            bool found = false;
+
+            for (i = 0U; i < request->accepted_format_count; ++i) {
+                if (request->accepted_formats[i] == SIRENA_LWM2M_CF_LINK_FORMAT) {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_ACCEPTABLE);
+                return 0;
+            }
+
+            (void)i;
+            negotiated = (int)SIRENA_LWM2M_CF_LINK_FORMAT;
+        } else {
+            negotiated = (int)SIRENA_LWM2M_CF_LINK_FORMAT;
+        }
+
+        content_format = (uint16_t)negotiated;
+
+        if (path_count == 1U) {
+            int rc2;
+
+            rc2 = sirena_lwm2m_object_enabled(request->object_id) ? 0 : -ENOENT;
+            if (rc2 != 0) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+                return 0;
+            }
+
+            rc = sirena_lwm2m_foreach_instance(discover_instance_visitor, &context);
+            if (rc != 0 || !context.any) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+                return 0;
+            }
+        } else if (path_count == 2U) {
+            struct sirena_lwm2m_instance *inst;
+
+            rc = sirena_lwm2m_find_instance(request->object_id, request->instance_id, &inst);
+            if (rc != 0) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+                return 0;
+            }
+
+            for (size_t i = 0U; i < inst->resource_count; ++i) {
+                rc = discover_append_entry(&context, request->object_id, request->instance_id,
+                                          inst->resources[i].id, true);
+                if (rc != 0) {
+                    protocol_set_status(response, SIRENA_LWM2M_STATUS_INTERNAL_ERROR);
+                    return 0;
+                }
+            }
+        } else if (path_count == 3U) {
+            struct sirena_lwm2m_resource *res;
+
+            rc = sirena_lwm2m_find_resource(request->object_id, request->instance_id,
+                                            request->resource_id, &res);
+            if (rc != 0) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+                return 0;
+            }
+
+            rc = discover_append_entry(&context, request->object_id, request->instance_id,
+                                      request->resource_id, true);
+            if (rc != 0) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_INTERNAL_ERROR);
+                return 0;
+            }
+        } else {
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+            return 0;
+        }
+
+        if (context.length > 0U) {
+            response->payload_length = context.length;
+        } else {
+            response->payload_length = 0U;
+        }
+
+        /* null terminate? not needed */
+        response->status = SIRENA_LWM2M_STATUS_CONTENT;
+        response->content_format = content_format;
         return 0;
     }
     case SIRENA_LWM2M_OPERATION_EXECUTE:

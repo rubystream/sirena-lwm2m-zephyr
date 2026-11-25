@@ -26,6 +26,7 @@ enum sirena_lwm2m_operation {
     SIRENA_LWM2M_OPERATION_CREATE,
     SIRENA_LWM2M_OPERATION_DELETE,
     SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES,
+    SIRENA_LWM2M_OPERATION_DISCOVER,
 };
 
 struct sirena_lwm2m_protocol_request {
