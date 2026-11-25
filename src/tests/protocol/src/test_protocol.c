@@ -985,6 +985,75 @@ ZTEST(sirena_lwm2m_protocol, test_discover_base_returns_link_format)
     zassert_true(peer_capture.payload_length > 0U, "the response must carry a payload");
 }
 
+ZTEST(sirena_lwm2m_protocol, test_discover_with_attributes_includes_them)
+{
+    static const uint16_t accepted[] = { SIRENA_LWM2M_CF_LINK_FORMAT };
+    char payload[PEER_PAYLOAD_MAX + 1];
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = sirena_lwm2m_set_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, PEER_LIFETIME);
+    zassert_equal(rc, 0, "setup value rejected");
+
+    rc = peer_request_attr("/1/0/1", "pmin=5");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED,
+                 "unexpected response code %d", peer_capture.code);
+
+    rc = peer_request_attr("/1/0/1", "pmax=10");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+
+    rc = peer_request_attr("/1/0/1", "gt=2.5");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+
+    rc = peer_request_attr("/1/0/1", "lt=9.0");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+
+    rc = peer_request_attr("/1/0/1", "st=1");
+    zassert_equal(rc, 0, "write-attributes request failed: %d", rc);
+
+    rc = peer_request(COAP_METHOD_GET, "/1/0/1", 0U, NULL, 0U, accepted,
+                      ARRAY_SIZE(accepted), -1, NULL);
+    zassert_equal(rc, 0, "discover request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CONTENT,
+                  "unexpected response code");
+    zassert_equal(peer_capture.content_format, SIRENA_LWM2M_CF_LINK_FORMAT,
+                  "unexpected content format");
+
+    memcpy(payload, peer_capture.payload, peer_capture.payload_length);
+    payload[peer_capture.payload_length] = '\0';
+
+    zassert_not_null(strstr(payload, "</1/0/1>;pmin=5;pmax=10;gt=2.5;lt=9;st=1"),
+                      "attributes missing from link format: %s", payload);
+}
+
+ZTEST(sirena_lwm2m_protocol, test_discover_without_attributes_omits_them)
+{
+    static const uint16_t accepted[] = { SIRENA_LWM2M_CF_LINK_FORMAT };
+    char payload[PEER_PAYLOAD_MAX + 1];
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_GET, "/1/0/1", 0U, NULL, 0U, accepted,
+                      ARRAY_SIZE(accepted), -1, NULL);
+    zassert_equal(rc, 0, "discover request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CONTENT,
+                  "unexpected response code");
+
+    memcpy(payload, peer_capture.payload, peer_capture.payload_length);
+    payload[peer_capture.payload_length] = '\0';
+
+    zassert_is_null(strstr(payload, ";pmin="), "unexpected attributes: %s", payload);
+    zassert_not_null(strstr(payload, "</1/0/1>"), "resource missing: %s", payload);
+}
+
 ZTEST(sirena_lwm2m_protocol, test_read_mixed_accept_yields_value)
 {
     static const uint16_t accepted[] = { SIRENA_LWM2M_CF_TLV,

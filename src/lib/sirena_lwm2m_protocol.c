@@ -292,6 +292,7 @@ static int discover_append_entry(struct discover_context *context, uint16_t obje
         written = snprintf(context->buffer + context->length, context->capacity - context->length,
                            "%s</%u/%u/%u>", prefix, object_id, instance_id, resource_id);
     } else if (instance_id != UINT16_MAX) {
+        (void)resource_id;
         written = snprintf(context->buffer + context->length, context->capacity - context->length,
                            "%s</%u/%u>", prefix, object_id, instance_id);
     } else {
@@ -304,6 +305,55 @@ static int discover_append_entry(struct discover_context *context, uint16_t obje
     }
 
     context->length += (size_t)written;
+
+    if (resource_path) {
+        struct sirena_lwm2m_resource_attributes attrs;
+
+        if (sirena_lwm2m_get_resource_attributes(object_id, instance_id, resource_id,
+                                                 &attrs) == 0) {
+            if (attrs.has_pmin) {
+                written = snprintf(context->buffer + context->length,
+                                   context->capacity - context->length, ";pmin=%u", attrs.pmin);
+                if (written < 0 || (size_t)written >= context->capacity - context->length) {
+                    return -ENOMEM;
+                }
+                context->length += (size_t)written;
+            }
+            if (attrs.has_pmax) {
+                written = snprintf(context->buffer + context->length,
+                                   context->capacity - context->length, ";pmax=%u", attrs.pmax);
+                if (written < 0 || (size_t)written >= context->capacity - context->length) {
+                    return -ENOMEM;
+                }
+                context->length += (size_t)written;
+            }
+            if (attrs.has_gt) {
+                written = snprintf(context->buffer + context->length,
+                                   context->capacity - context->length, ";gt=%g", attrs.gt);
+                if (written < 0 || (size_t)written >= context->capacity - context->length) {
+                    return -ENOMEM;
+                }
+                context->length += (size_t)written;
+            }
+            if (attrs.has_lt) {
+                written = snprintf(context->buffer + context->length,
+                                   context->capacity - context->length, ";lt=%g", attrs.lt);
+                if (written < 0 || (size_t)written >= context->capacity - context->length) {
+                    return -ENOMEM;
+                }
+                context->length += (size_t)written;
+            }
+            if (attrs.has_st) {
+                written = snprintf(context->buffer + context->length,
+                                   context->capacity - context->length, ";st=%g", attrs.st);
+                if (written < 0 || (size_t)written >= context->capacity - context->length) {
+                    return -ENOMEM;
+                }
+                context->length += (size_t)written;
+            }
+        }
+    }
+
     context->any = true;
 
     return 0;
