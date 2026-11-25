@@ -616,7 +616,9 @@ The operation codes of the specification are:
 | Update | 7 | Registration |
 | De-register | 8 | Registration |
 | Read | 9 | Device management |
+| Discover | 11 | Device management |
 | Write Replace | 12 | Device management |
+| Write-Attributes | 14 | Device management |
 | Execute | 16 | Device management |
 | Observe | 20 | Information reporting |
 | Cancel-Observe | 22 | Information reporting |
@@ -667,7 +669,9 @@ example `/3/0/0`.
 | Operation | Code | Payload of the request | Answer |
 | --- | --- | --- | --- |
 | Read | 9 | `operation`, `token`, `uri` | `result`, `token`, `ct`, `payload` |
+| Discover | 11 | `operation`, `token`, `uri` | `result`, `token`, `ct`, `payload` |
 | Write Replace | 12 | `operation`, `token`, `uri`, `ct`, `payload` | `result`, `token` |
+| Write-Attributes | 14 | `operation`, `token`, `uri` | `result`, `token` |
 | Execute | 16 | `operation`, `token`, `uri`, `payload` | `result`, `token` |
 | Observe | 20 | `operation`, `token`, `uri` | `result`, `token` |
 | Cancel-Observe | 22 | `operation`, `token` | `result`, `token` |
@@ -748,7 +752,7 @@ The results the client sends are the results of the operation it
 answered: a read answers with 205, a write and an execute answer with
 204, an observe and a cancel-observe answer with 205, and a failure
 answers with the result of the failure. An operation the client does not
-implement, for example a composite operation, a Discover or a Delete, is
+implement, for example a composite operation, a Create or a Delete, is
 answered with 501, as the generic errors of the specification ask. The
 answer carries the token of the request it answers, so that the server
 can match it.
@@ -776,8 +780,7 @@ can match it.
 
 - The bootstrap interface, the `bs` topics.
 - The composite operations, the Create and the Delete operations, the
-  Discover and the Write-Attributes operations, the Send operation. The
-  client answers them with 501.
+  Send operation. The client answers them with 501.
 - The block-wise transfer of large payloads.
 - The MQTT Server object (id 24) and the COSE object (id 23).
 

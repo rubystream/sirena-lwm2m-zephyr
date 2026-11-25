@@ -15,6 +15,7 @@
 #include <zephyr/sys/util.h>
 #include <mbedtls/ssl_ciphersuites.h>
 #include <errno.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -288,25 +289,111 @@ static uint32_t mqtt_result_from_status(enum sirena_lwm2m_status status)
     }
 }
 
-static int mqtt_parse_uri(const char *uri, uint16_t *object_id, uint16_t *instance_id,
-                           uint16_t *resource_id)
+static int mqtt_parse_attribute_pair(const char *key, size_t key_length, const char *value,
+                                     size_t value_length,
+                                     struct sirena_lwm2m_resource_attributes *attributes,
+                                     bool *unknown)
 {
-    uint16_t values[3];
+    char key_buffer[8];
+    char value_buffer[32];
+
+    if (key_length >= sizeof(key_buffer)) {
+        *unknown = true;
+        return 0;
+    }
+    memcpy(key_buffer, key, key_length);
+    key_buffer[key_length] = '\0';
+
+    if (value_length >= sizeof(value_buffer)) {
+        return -EINVAL;
+    }
+    memcpy(value_buffer, value, value_length);
+    value_buffer[value_length] = '\0';
+
+    if (strcmp(key_buffer, "pmin") == 0 || strcmp(key_buffer, "pmax") == 0) {
+        char *endptr = NULL;
+        bool is_pmin = strcmp(key_buffer, "pmin") == 0;
+
+        if (value_length == 0U || value_buffer[0] == '-') {
+            return -EINVAL;
+        }
+
+        errno = 0;
+        unsigned long parsed = strtoul(value_buffer, &endptr, 10);
+
+        if (endptr == value_buffer || *endptr != '\0' || errno == ERANGE ||
+            parsed > UINT32_MAX) {
+            return -EINVAL;
+        }
+
+        if (is_pmin) {
+            attributes->has_pmin = true;
+            attributes->pmin = (uint32_t)parsed;
+        } else {
+            attributes->has_pmax = true;
+            attributes->pmax = (uint32_t)parsed;
+        }
+    } else if (strcmp(key_buffer, "gt") == 0 || strcmp(key_buffer, "lt") == 0 ||
+               strcmp(key_buffer, "st") == 0) {
+        char *endptr = NULL;
+        double parsed;
+
+        if (value_length == 0U) {
+            return -EINVAL;
+        }
+
+        if (value_length >= 2U && value_buffer[0] == '0' &&
+            (value_buffer[1] == 'x' || value_buffer[1] == 'X')) {
+            return -EINVAL;
+        }
+
+        errno = 0;
+        parsed = strtod(value_buffer, &endptr);
+
+        if (endptr == value_buffer || *endptr != '\0' || errno == ERANGE ||
+            !isfinite(parsed)) {
+            return -EINVAL;
+        }
+
+        if (strcmp(key_buffer, "gt") == 0) {
+            attributes->has_gt = true;
+            attributes->gt = parsed;
+        } else if (strcmp(key_buffer, "lt") == 0) {
+            attributes->has_lt = true;
+            attributes->lt = parsed;
+        } else {
+            attributes->has_st = true;
+            attributes->st = parsed;
+        }
+    } else {
+        *unknown = true;
+    }
+
+    return 0;
+}
+
+static int mqtt_parse_uri(const char *uri, uint16_t *object_id, uint16_t *instance_id,
+                           uint16_t *resource_id, size_t *path_count,
+                           struct sirena_lwm2m_resource_attributes *attributes)
+{
+    uint16_t values[3] = {0U, 0U, 0U};
     size_t count = 0U;
     const char *cursor;
+    bool unknown = false;
+    int attr_rc = 0;
 
     if (uri == NULL || uri[0] != '/') {
         return -EINVAL;
     }
 
+    if (attributes != NULL) {
+        memset(attributes, 0, sizeof(*attributes));
+    }
+
     cursor = uri + 1;
 
-    while (true) {
+    while (count < ARRAY_SIZE(values) && *cursor >= '0' && *cursor <= '9') {
         uint32_t value = 0U;
-
-        if (*cursor < '0' || *cursor > '9') {
-            return -EINVAL;
-        }
 
         while (*cursor >= '0' && *cursor <= '9') {
             value = value * 10U + (uint32_t)(*cursor - '0');
@@ -317,13 +404,9 @@ static int mqtt_parse_uri(const char *uri, uint16_t *object_id, uint16_t *instan
             cursor++;
         }
 
-        if (count >= ARRAY_SIZE(values)) {
-            return -EINVAL;
-        }
-
         values[count++] = (uint16_t)value;
 
-        if (*cursor == '\0') {
+        if (*cursor == '\0' || *cursor == '?') {
             break;
         }
 
@@ -333,18 +416,69 @@ static int mqtt_parse_uri(const char *uri, uint16_t *object_id, uint16_t *instan
 
         cursor++;
 
-        if (*cursor == '\0') {
+        if (*cursor == '\0' || *cursor == '?') {
             return -EINVAL;
         }
     }
 
-    if (count != ARRAY_SIZE(values)) {
+    if (count == 0U) {
+        return -EINVAL;
+    }
+
+    if (*cursor != '\0' && *cursor != '?') {
         return -EINVAL;
     }
 
     *object_id = values[0];
-    *instance_id = values[1];
-    *resource_id = values[2];
+    *instance_id = (count > 1U) ? values[1] : 0U;
+    *resource_id = (count > 2U) ? values[2] : 0U;
+
+    if (path_count != NULL) {
+        *path_count = count;
+    }
+
+    if (*cursor == '?') {
+        cursor++;
+        while (*cursor != '\0') {
+            const char *key = cursor;
+            const char *eq;
+            const char *end;
+
+            eq = strchr(cursor, '=');
+            end = strchr(cursor, '&');
+            if (end == NULL) {
+                end = cursor + strlen(cursor);
+            }
+
+            if (eq == NULL || eq >= end) {
+                unknown = true;
+                cursor = end;
+                if (*cursor == '&') {
+                    cursor++;
+                }
+                continue;
+            }
+
+            if (attributes == NULL) {
+                return -EINVAL;
+            }
+
+            attr_rc = mqtt_parse_attribute_pair(key, (size_t)(eq - key), eq + 1,
+                                               (size_t)(end - eq - 1), attributes, &unknown);
+            if (attr_rc != 0) {
+                return attr_rc;
+            }
+
+            cursor = end;
+            if (*cursor == '&') {
+                cursor++;
+            }
+        }
+    }
+
+    if (unknown) {
+        return -EINVAL;
+    }
 
     return 0;
 }
@@ -390,7 +524,7 @@ static int mqtt_read_resource(const struct sirena_lwm2m_mqtt_message *message,
     int rc;
 
     rc = mqtt_parse_uri(message->uri, &request.object_id, &request.instance_id,
-                        &request.resource_id);
+                        &request.resource_id, &request.path_count, &request.attributes);
     if (rc != 0) {
         return rc;
     }
@@ -425,6 +559,8 @@ static void mqtt_handle_read(const struct sirena_lwm2m_mqtt_message *message)
 
 static void mqtt_handle_write(const struct sirena_lwm2m_mqtt_message *message)
 {
+    bool write_attributes = message->has_uri && message->uri[0] != '\0' &&
+                            strchr(message->uri, '?') != NULL;
     struct sirena_lwm2m_protocol_response response = {
         .status = SIRENA_LWM2M_STATUS_INTERNAL_ERROR,
         .content_format = 0U,
@@ -443,8 +579,12 @@ static void mqtt_handle_write(const struct sirena_lwm2m_mqtt_message *message)
     };
     int rc;
 
+    if (write_attributes) {
+        request.operation = SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES;
+    }
+
     rc = mqtt_parse_uri(message->uri, &request.object_id, &request.instance_id,
-                        &request.resource_id);
+                        &request.resource_id, &request.path_count, &request.attributes);
     if (rc != 0) {
         (void)mqtt_send_response(message->token, SIRENA_LWM2M_MQTT_RESULT_BAD_REQUEST, false, 0U,
                                   NULL, 0U);
@@ -455,6 +595,88 @@ static void mqtt_handle_write(const struct sirena_lwm2m_mqtt_message *message)
 
     (void)mqtt_send_response(message->token, mqtt_result_from_status(response.status), false, 0U,
                               NULL, 0U);
+}
+
+static void mqtt_handle_write_attributes(const struct sirena_lwm2m_mqtt_message *message)
+{
+    struct sirena_lwm2m_protocol_response response = {
+        .status = SIRENA_LWM2M_STATUS_INTERNAL_ERROR,
+        .content_format = 0U,
+        .payload = NULL,
+        .payload_capacity = 0U,
+        .payload_length = 0U,
+    };
+    struct sirena_lwm2m_protocol_request request = {
+        .operation = SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES,
+        .payload = NULL,
+        .payload_length = 0U,
+        .content_format_present = false,
+        .content_format = 0U,
+        .accepted_formats = NULL,
+        .accepted_format_count = 0U,
+    };
+    int rc;
+
+    rc = mqtt_parse_uri(message->uri, &request.object_id, &request.instance_id,
+                        &request.resource_id, &request.path_count, &request.attributes);
+    if (rc != 0) {
+        (void)mqtt_send_response(message->token, SIRENA_LWM2M_MQTT_RESULT_BAD_REQUEST, false, 0U,
+                                  NULL, 0U);
+        return;
+    }
+
+    (void)sirena_lwm2m_protocol_execute(&request, &response);
+
+    (void)mqtt_send_response(message->token, mqtt_result_from_status(response.status), false, 0U,
+                              NULL, 0U);
+}
+
+static int mqtt_discover_resource(const struct sirena_lwm2m_mqtt_message *message,
+                                   struct sirena_lwm2m_protocol_response *response)
+{
+    struct sirena_lwm2m_protocol_request request = {
+        .operation = SIRENA_LWM2M_OPERATION_DISCOVER,
+        .payload = NULL,
+        .payload_length = 0U,
+        .content_format_present = false,
+        .content_format = 0U,
+        .accepted_formats = NULL,
+        .accepted_format_count = 0U,
+    };
+    int rc;
+
+    rc = mqtt_parse_uri(message->uri, &request.object_id, &request.instance_id,
+                        &request.resource_id, &request.path_count, &request.attributes);
+    if (rc != 0) {
+        return rc;
+    }
+
+    response->payload = value_buffer;
+    response->payload_capacity = sizeof(value_buffer);
+    response->payload_length = 0U;
+    response->content_format = 0U;
+    response->status = SIRENA_LWM2M_STATUS_INTERNAL_ERROR;
+
+    (void)sirena_lwm2m_protocol_execute(&request, response);
+
+    return 0;
+}
+
+static void mqtt_handle_discover(const struct sirena_lwm2m_mqtt_message *message)
+{
+    struct sirena_lwm2m_protocol_response response;
+    int rc;
+
+    rc = mqtt_discover_resource(message, &response);
+    if (rc != 0) {
+        (void)mqtt_send_response(message->token, SIRENA_LWM2M_MQTT_RESULT_BAD_REQUEST, false, 0U,
+                                  NULL, 0U);
+        return;
+    }
+
+    (void)mqtt_send_response(message->token, mqtt_result_from_status(response.status),
+                              response.status == SIRENA_LWM2M_STATUS_CONTENT,
+                              response.content_format, response.payload, response.payload_length);
 }
 
 static void mqtt_handle_execute(const struct sirena_lwm2m_mqtt_message *message)
@@ -478,7 +700,7 @@ static void mqtt_handle_execute(const struct sirena_lwm2m_mqtt_message *message)
     int rc;
 
     rc = mqtt_parse_uri(message->uri, &request.object_id, &request.instance_id,
-                        &request.resource_id);
+                        &request.resource_id, &request.path_count, &request.attributes);
     if (rc != 0) {
         (void)mqtt_send_response(message->token, SIRENA_LWM2M_MQTT_RESULT_BAD_REQUEST, false, 0U,
                                   NULL, 0U);
@@ -515,6 +737,9 @@ static void mqtt_handle_observe(const struct sirena_lwm2m_mqtt_message *message)
         observation = mqtt_observation_alloc();
     }
 
+    size_t observed_path_count = 0U;
+    struct sirena_lwm2m_resource_attributes ignored_attributes;
+
     if (observation == NULL) {
         (void)mqtt_send_response(message->token, SIRENA_LWM2M_MQTT_RESULT_UNAVAILABLE, false, 0U,
                                   NULL, 0U);
@@ -522,7 +747,7 @@ static void mqtt_handle_observe(const struct sirena_lwm2m_mqtt_message *message)
     }
 
     rc = mqtt_parse_uri(message->uri, &observation->object_id, &observation->instance_id,
-                        &observation->resource_id);
+                        &observation->resource_id, &observed_path_count, &ignored_attributes);
     if (rc != 0) {
         (void)mqtt_send_response(message->token, SIRENA_LWM2M_MQTT_RESULT_BAD_REQUEST, false, 0U,
                                   NULL, 0U);
@@ -575,6 +800,12 @@ static void mqtt_handle_message(const struct sirena_lwm2m_mqtt_message *message)
         break;
     case SIRENA_LWM2M_MQTT_OPERATION_WRITE:
         mqtt_handle_write(message);
+        break;
+    case SIRENA_LWM2M_MQTT_OPERATION_WRITE_ATTRIBUTES:
+        mqtt_handle_write_attributes(message);
+        break;
+    case SIRENA_LWM2M_MQTT_OPERATION_DISCOVER:
+        mqtt_handle_discover(message);
         break;
     case SIRENA_LWM2M_MQTT_OPERATION_EXECUTE:
         mqtt_handle_execute(message);
