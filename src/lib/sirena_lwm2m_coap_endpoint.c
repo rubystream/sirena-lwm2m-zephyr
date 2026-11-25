@@ -333,7 +333,7 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
                                     net_socklen_t peer_length)
 {
     struct sirena_lwm2m_protocol_response protocol_response;
-    struct sirena_lwm2m_protocol_request protocol_request;
+    struct sirena_lwm2m_protocol_request protocol_request = {0};
     struct sirena_lwm2m_coap_observer *observer = NULL;
     uint16_t accepted[CONFIG_SIRENA_LWM2M_ACCEPTED_FORMATS_MAX];
     uint16_t path[SIRENA_LWM2M_COAP_PATH_SEGMENTS];
@@ -367,24 +367,45 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         return;
     }
 
-    if (path_count != SIRENA_LWM2M_COAP_PATH_SEGMENTS) {
-        bool is_write_attributes = false;
+    if (coap_header_get_code(packet) == COAP_METHOD_GET) {
+        rc = endpoint_parse_accept(packet, accepted, ARRAY_SIZE(accepted), &accepted_count);
+    }
 
-        if (coap_header_get_code(packet) == COAP_METHOD_PUT) {
-            struct coap_option short_path_query_options[SIRENA_LWM2M_COAP_OPTIONS];
-            int query_found = coap_find_options(packet, COAP_OPTION_URI_QUERY,
-                                               short_path_query_options,
-                                               ARRAY_SIZE(short_path_query_options));
-            if (query_found > 0) {
-                is_write_attributes = true;
+    if (path_count != SIRENA_LWM2M_COAP_PATH_SEGMENTS) {
+        bool allowed = false;
+
+        if (coap_header_get_code(packet) == COAP_METHOD_GET) {
+            if (rc == 0 && accepted_count > 0U &&
+                accepted[0] == COAP_CONTENT_FORMAT_APP_LINK_FORMAT) {
+                allowed = true;
             }
         }
 
-        if (!is_write_attributes) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_NOT_FOUND, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
+        if (allowed && path_count >= 1U) {
+            allowed = true;
+        } else {
+            allowed = false;
+        }
+
+        if (!allowed) {
+            bool is_write_attributes = false;
+
+            if (coap_header_get_code(packet) == COAP_METHOD_PUT) {
+                struct coap_option short_path_query_options[SIRENA_LWM2M_COAP_OPTIONS];
+                int query_found = coap_find_options(packet, COAP_OPTION_URI_QUERY,
+                                                   short_path_query_options,
+                                                   ARRAY_SIZE(short_path_query_options));
+                if (query_found > 0) {
+                    is_write_attributes = true;
+                }
+            }
+
+            if (!is_write_attributes) {
+                (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                            COAP_RESPONSE_CODE_NOT_FOUND, false, 0U, -1, NULL, 0U,
+                                            peer, peer_length);
+                return;
+            }
         }
     }
 
@@ -497,9 +518,22 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         }
     }
 
+    if (coap_header_get_code(packet) == COAP_METHOD_GET) {
+        if (rc == 0 && accepted_count > 0U &&
+            accepted[0] == COAP_CONTENT_FORMAT_APP_LINK_FORMAT) {
+            protocol_request.operation = SIRENA_LWM2M_OPERATION_DISCOVER;
+        }
+
+        if (protocol_request.operation != SIRENA_LWM2M_OPERATION_DISCOVER) {
+            protocol_request.operation = SIRENA_LWM2M_OPERATION_READ;
+        }
+    }
+
     switch (coap_header_get_code(packet)) {
     case COAP_METHOD_GET:
-        protocol_request.operation = SIRENA_LWM2M_OPERATION_READ;
+        if (protocol_request.operation != SIRENA_LWM2M_OPERATION_DISCOVER) {
+            protocol_request.operation = SIRENA_LWM2M_OPERATION_READ;
+        }
         break;
     case COAP_METHOD_PUT:
         if (write_attributes) {
@@ -518,8 +552,8 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         return;
     }
 
-    if (protocol_request.operation == SIRENA_LWM2M_OPERATION_READ) {
-        rc = endpoint_parse_accept(packet, accepted, ARRAY_SIZE(accepted), &accepted_count);
+    if (protocol_request.operation == SIRENA_LWM2M_OPERATION_READ ||
+        protocol_request.operation == SIRENA_LWM2M_OPERATION_DISCOVER) {
         if (rc != 0) {
             (void)endpoint_send_message(response_type, response_message_id, token_length, token,
                                         COAP_RESPONSE_CODE_NOT_ACCEPTABLE, false, 0U, -1, NULL,

@@ -15,6 +15,7 @@
 #define SIRENA_LWM2M_CF_SENML_ETCH_JSON 11545
 #define SIRENA_LWM2M_CF_SENML_ETCH_CBOR 11546
 #define SIRENA_LWM2M_CF_OPAQUE 42
+#define SIRENA_LWM2M_CF_LINK_FORMAT 40
 
 struct sirena_lwm2m_codec_value {
     uint16_t object_id;

@@ -24,6 +24,7 @@ for every request it receives.
 | Write | PUT | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.04 Changed | 4.00, 4.04, 4.05, 4.15 |
 | Execute | POST | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.04 Changed | 4.00, 4.04, 4.05 |
 | Write-Attributes | PUT (with URI-Query) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.04 Changed | 4.00, 4.04 |
+| Discover | GET (Accept: application/link-format) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.05 Content | 4.04, 4.06, 5.00 |
 | Observe | GET with Observe = 0 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 5.03 |
 | Cancel Observation | GET with Observe = 1 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05 |
 | Notify | notification | the observed resource | 2.05 Content | |
@@ -208,7 +209,6 @@ error codes of the API are the negative `errno` values of the table.
 - The composite operations: Read-Composite, Write-Composite and
   Observe-Composite.
 - The creation and the deletion of object instances.
-- Discover.
 - The Send operation, as opposed to the Notify operation.
 - The block-wise transfer of large payloads.
 - The periodic re-registration timer and the pmin and pmax attributes of an
