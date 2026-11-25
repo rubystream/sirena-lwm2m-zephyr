@@ -984,3 +984,26 @@ ZTEST(sirena_lwm2m_protocol, test_discover_base_returns_link_format)
                   "unexpected content format");
     zassert_true(peer_capture.payload_length > 0U, "the response must carry a payload");
 }
+
+ZTEST(sirena_lwm2m_protocol, test_read_mixed_accept_yields_value)
+{
+    static const uint16_t accepted[] = { SIRENA_LWM2M_CF_TLV,
+                                         SIRENA_LWM2M_CF_LINK_FORMAT };
+    int64_t value;
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_GET, "/1/0/1", 0U, NULL, 0U, accepted,
+                      ARRAY_SIZE(accepted), -1, NULL);
+    zassert_equal(rc, 0, "read request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CONTENT,
+                  "unexpected response code");
+    zassert_equal(peer_capture.content_format, SIRENA_LWM2M_CF_TLV,
+                  "the response must use the preferred content format");
+
+    value = peer_decode_integer(PEER_SERVER_LIFETIME_RESOURCE, NULL);
+    zassert_equal(value, PEER_LIFETIME, "unexpected resource value");
+}
