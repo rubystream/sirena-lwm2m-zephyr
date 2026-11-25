@@ -298,7 +298,7 @@ static int mqtt_parse_attribute_pair(const char *key, size_t key_length, const c
     char value_buffer[32];
 
     if (key_length >= sizeof(key_buffer)) {
-*unknown = true;
+        *unknown = true;
         return 0;
     }
     memcpy(key_buffer, key, key_length);
@@ -342,6 +342,11 @@ static int mqtt_parse_attribute_pair(const char *key, size_t key_length, const c
             return -EINVAL;
         }
 
+        if (value_length >= 2U && value_buffer[0] == '0' &&
+            (value_buffer[1] == 'x' || value_buffer[1] == 'X')) {
+            return -EINVAL;
+        }
+
         errno = 0;
         parsed = strtod(value_buffer, &endptr);
 
@@ -361,7 +366,7 @@ static int mqtt_parse_attribute_pair(const char *key, size_t key_length, const c
             attributes->st = parsed;
         }
     } else {
-*unknown = true;
+        *unknown = true;
     }
 
     return 0;
@@ -728,14 +733,14 @@ static void mqtt_handle_observe(const struct sirena_lwm2m_mqtt_message *message)
         observation = mqtt_observation_alloc();
     }
 
+    size_t observed_path_count = 0U;
+    struct sirena_lwm2m_resource_attributes ignored_attributes;
+
     if (observation == NULL) {
         (void)mqtt_send_response(message->token, SIRENA_LWM2M_MQTT_RESULT_UNAVAILABLE, false, 0U,
                                   NULL, 0U);
         return;
     }
-
-    size_t observed_path_count = 0U;
-    struct sirena_lwm2m_resource_attributes ignored_attributes;
 
     rc = mqtt_parse_uri(message->uri, &observation->object_id, &observation->instance_id,
                         &observation->resource_id, &observed_path_count, &ignored_attributes);
