@@ -1,10 +1,18 @@
 #include "sirena_lwm2m_credentials.h"
+
+#ifdef sirena_lwm2m_credentials_register
+#undef sirena_lwm2m_credentials_register
+#endif
 #include <sirena/lwm2m/objects.h>
 #include <zephyr/sys/util.h>
 #include <mbedtls/ssl_ciphersuites.h>
 #include <errno.h>
 
 #define SIRENA_LWM2M_SECURITY_OBJECT_ID 0U
+#define SIRENA_LWM2M_SECURITY_MODE_RESOURCE 2U
+#define SIRENA_LWM2M_CLIENT_CERTIFICATE_RESOURCE 3U
+#define SIRENA_LWM2M_TRUST_ANCHOR_RESOURCE 4U
+#define SIRENA_LWM2M_PRIVATE_KEY_RESOURCE 5U
 #define SIRENA_LWM2M_IDENTITY_RESOURCE 3U
 #define SIRENA_LWM2M_SECRET_KEY_RESOURCE 5U
 
@@ -12,9 +20,12 @@ void sirena_lwm2m_credentials_release(sec_tag_t tag)
 {
     (void)tls_credential_delete(tag, TLS_CREDENTIAL_PSK);
     (void)tls_credential_delete(tag, TLS_CREDENTIAL_PSK_ID);
+    (void)tls_credential_delete(tag, TLS_CREDENTIAL_PUBLIC_CERTIFICATE);
+    (void)tls_credential_delete(tag, TLS_CREDENTIAL_PRIVATE_KEY);
+    (void)tls_credential_delete(tag, TLS_CREDENTIAL_CA_CERTIFICATE);
 }
 
-int sirena_lwm2m_credentials_register(sec_tag_t tag)
+static int psk_credentials_register(sec_tag_t tag)
 {
     const void *identity = NULL;
     const void *secret_key = NULL;
@@ -60,6 +71,8 @@ int sirena_lwm2m_credentials_register(sec_tag_t tag)
 
     rc = tls_credential_add(tag, TLS_CREDENTIAL_PSK, secret_key, secret_key_length);
     if (rc != 0) {
+        sirena_lwm2m_credentials_release(tag);
+
         return rc;
     }
 
@@ -71,4 +84,122 @@ int sirena_lwm2m_credentials_register(sec_tag_t tag)
     }
 
     return 0;
+}
+
+static int certificate_credentials_register(sec_tag_t tag)
+{
+    const void *client_certificate = NULL;
+    const void *trust_anchor = NULL;
+    const void *private_key = NULL;
+    size_t client_certificate_length = 0U;
+    size_t trust_anchor_length = 0U;
+    size_t private_key_length = 0U;
+    int rc;
+
+    rc = sirena_lwm2m_get_opaque_ref(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                      SIRENA_LWM2M_CLIENT_CERTIFICATE_RESOURCE,
+                                      &client_certificate, &client_certificate_length);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = sirena_lwm2m_get_opaque_ref(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                      SIRENA_LWM2M_TRUST_ANCHOR_RESOURCE,
+                                      &trust_anchor, &trust_anchor_length);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = sirena_lwm2m_get_opaque_ref(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                      SIRENA_LWM2M_PRIVATE_KEY_RESOURCE,
+                                      &private_key, &private_key_length);
+    if (rc != 0) {
+        return rc;
+    }
+
+    if (client_certificate_length == 0U) {
+        return -ENOENT;
+    }
+
+    if (trust_anchor_length == 0U) {
+        return -ENOENT;
+    }
+
+    if (private_key_length == 0U) {
+        return -ENOENT;
+    }
+
+    if (client_certificate_length > CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX) {
+        return -EINVAL;
+    }
+
+    if (trust_anchor_length > CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX) {
+        return -EINVAL;
+    }
+
+    if (private_key_length > CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX) {
+        return -EINVAL;
+    }
+
+    sirena_lwm2m_credentials_release(tag);
+
+    rc = tls_credential_add(tag, TLS_CREDENTIAL_PUBLIC_CERTIFICATE,
+                            client_certificate, client_certificate_length);
+    if (rc != 0) {
+        sirena_lwm2m_credentials_release(tag);
+
+        return rc;
+    }
+
+    rc = tls_credential_add(tag, TLS_CREDENTIAL_CA_CERTIFICATE, trust_anchor,
+                            trust_anchor_length);
+    if (rc != 0) {
+        sirena_lwm2m_credentials_release(tag);
+
+        return rc;
+    }
+
+    rc = tls_credential_add(tag, TLS_CREDENTIAL_PRIVATE_KEY, private_key,
+                            private_key_length);
+    if (rc != 0) {
+        sirena_lwm2m_credentials_release(tag);
+
+        return rc;
+    }
+
+    return 0;
+}
+
+int sirena_lwm2m_credentials_register_mode(sec_tag_t tag, int64_t mode)
+{
+    switch (mode) {
+    case SIRENA_LWM2M_SECURITY_MODE_PSK:
+        return psk_credentials_register(tag);
+
+    case SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE:
+        return certificate_credentials_register(tag);
+
+    case SIRENA_LWM2M_SECURITY_MODE_NOSEC:
+        sirena_lwm2m_credentials_release(tag);
+
+        return 0;
+
+    default:
+        return -ENOTSUP;
+    }
+}
+
+
+int sirena_lwm2m_credentials_register_one(sec_tag_t tag)
+{
+    int64_t mode;
+    int rc;
+
+    rc = sirena_lwm2m_get_integer(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                  SIRENA_LWM2M_SECURITY_MODE_RESOURCE, &mode);
+    if (rc != 0) {
+        return rc;
+    }
+
+    return sirena_lwm2m_credentials_register_mode(tag, mode);
 }
