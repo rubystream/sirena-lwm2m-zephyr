@@ -965,3 +965,22 @@ ZTEST(sirena_lwm2m_protocol, test_post_with_query_unknown_key_returns_bad_reques
     zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_BAD_REQUEST,
                  "unexpected response code %d", peer_capture.code);
 }
+
+ZTEST(sirena_lwm2m_protocol, test_discover_base_returns_link_format)
+{
+    static const uint16_t accepted[] = { SIRENA_LWM2M_CF_LINK_FORMAT };
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_GET, "/3/0", 0U, NULL, 0U, accepted,
+                      ARRAY_SIZE(accepted), -1, NULL);
+    zassert_equal(rc, 0, "discover request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CONTENT,
+                  "unexpected response code");
+    zassert_equal(peer_capture.content_format, SIRENA_LWM2M_CF_LINK_FORMAT,
+                  "unexpected content format");
+    zassert_true(peer_capture.payload_length > 0U, "the response must carry a payload");
+}

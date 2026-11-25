@@ -5,6 +5,7 @@
 #include <sirena/lwm2m/objects.h>
 #include <zephyr/sys/util.h>
 #include <errno.h>
+#include <stdio.h>
 #include <string.h>
 
 #define SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT
@@ -622,6 +623,10 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
             }
 
             rc = sirena_lwm2m_foreach_instance(discover_instance_visitor, &context);
+            if (rc == -ENOMEM) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_INTERNAL_ERROR);
+                return 0;
+            }
             if (rc != 0 || !context.any) {
                 protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
                 return 0;
@@ -670,7 +675,6 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
             response->payload_length = 0U;
         }
 
-        /* null terminate? not needed */
         response->status = SIRENA_LWM2M_STATUS_CONTENT;
         response->content_format = content_format;
         return 0;
