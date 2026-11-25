@@ -425,6 +425,10 @@ static int mqtt_parse_uri(const char *uri, uint16_t *object_id, uint16_t *instan
         return -EINVAL;
     }
 
+    if (*cursor != '\0' && *cursor != '?') {
+        return -EINVAL;
+    }
+
     *object_id = values[0];
     *instance_id = (count > 1U) ? values[1] : 0U;
     *resource_id = (count > 2U) ? values[2] : 0U;
