@@ -223,6 +223,14 @@ registered handler. Executing one with no handler registered returns `-ENOTSUP`.
 
 ### Direct provisioning
 
+The standard Security object resource slots are shared between security modes:
+resource 3 holds the PSK identity in PSK mode and the client certificate in
+certificate mode, resource 4 holds the server public key in RPK mode and the
+trust anchor (CA) in certificate mode, and resource 5 holds the PSK in PSK
+mode and the private key in certificate mode. No separate resource IDs are
+introduced for X.509 material.
+
+
 ```c
 enum sirena_lwm2m_security_mode {
     SIRENA_LWM2M_SECURITY_MODE_PSK = 0,
