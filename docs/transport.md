@@ -107,7 +107,9 @@ completion.
 | `coaps://` | 3, NoSec | none | `-EINVAL`, a noSec server has no secure transport. |
 | `mqtt://` | 0, Pre-Shared Key | none | `-EINVAL`, a pre-shared key server needs the secure scheme. |
 | `mqtts://` | 3, NoSec | none | `-EINVAL`, a noSec server has no secure transport. |
-| any | 1, 2, 4 | none | `-ENOTSUP`, the security mode is not implemented. |
+| `coaps://` | 2, Certificate | CoAP/DTLS | The DTLS binding starts. |
+| `mqtts://` | 2, Certificate | MQTT | The MQTT binding starts and protects the connection with TLS. |
+| any | 1, 4 | none | `-ENOTSUP`, the security mode is not implemented. |
 
 The selection never falls back: a server that needs DTLS or TLS is never
 contacted in the clear, and a noSec server is never contacted over DTLS
