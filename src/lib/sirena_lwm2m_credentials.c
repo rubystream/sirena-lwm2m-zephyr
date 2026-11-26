@@ -167,12 +167,25 @@ static int certificate_credentials_register(sec_tag_t tag)
         return rc;
     }
 
-    rc = tls_credential_add(tag, TLS_CREDENTIAL_PRIVATE_KEY, private_key,
-                            private_key_length);
-    if (rc != 0) {
-        sirena_lwm2m_credentials_release(tag);
+    {
+        uint8_t secure_private_key[CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX];
 
-        return rc;
+        if (private_key_length > sizeof(secure_private_key)) {
+            sirena_lwm2m_credentials_release(tag);
+
+            return -ENOMEM;
+        }
+
+        memcpy(secure_private_key, private_key, private_key_length);
+        rc = tls_credential_add(tag, TLS_CREDENTIAL_PRIVATE_KEY,
+                                secure_private_key, private_key_length);
+        memset(secure_private_key, 0, sizeof(secure_private_key));
+
+        if (rc != 0) {
+            sirena_lwm2m_credentials_release(tag);
+
+            return rc;
+        }
     }
 
     return 0;
