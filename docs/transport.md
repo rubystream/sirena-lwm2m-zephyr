@@ -109,6 +109,8 @@ completion.
 | `mqtts://` | 3, NoSec | none | `-EINVAL`, a noSec server has no secure transport. |
 | `coaps://` | 2, Certificate | CoAP/DTLS | The DTLS binding starts. |
 | `mqtts://` | 2, Certificate | MQTT | The MQTT binding starts and protects the connection with TLS. |
+| `coap://` | 2, Certificate | none | `-EINVAL`, a certificate server needs the secure scheme. |
+| `mqtt://` | 2, Certificate | none | `-EINVAL`, a certificate server needs the secure scheme. |
 | any | 1, 4 | none | `-ENOTSUP`, the security mode is not implemented. |
 
 The selection never falls back: a server that needs DTLS or TLS is never
