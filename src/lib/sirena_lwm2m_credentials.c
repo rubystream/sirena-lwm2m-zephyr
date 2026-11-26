@@ -178,6 +178,67 @@ static int certificate_credentials_register(sec_tag_t tag)
     return 0;
 }
 
+static int rpk_credentials_register(sec_tag_t tag)
+{
+    const void *client_public_key = NULL;
+    const void *peer_public_key = NULL;
+    size_t client_public_key_length = 0U;
+    size_t peer_public_key_length = 0U;
+    int rc;
+
+    rc = sirena_lwm2m_get_opaque_ref(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                      SIRENA_LWM2M_IDENTITY_RESOURCE,
+                                      &client_public_key,
+                                      &client_public_key_length);
+    if (rc != 0) {
+        return rc;
+    }
+
+    rc = sirena_lwm2m_get_opaque_ref(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                      SIRENA_LWM2M_TRUST_ANCHOR_RESOURCE,
+                                      &peer_public_key, &peer_public_key_length);
+    if (rc != 0) {
+        return rc;
+    }
+
+    if (client_public_key_length == 0U) {
+        return -ENOENT;
+    }
+
+    if (peer_public_key_length == 0U) {
+        return -ENOENT;
+    }
+
+    if (client_public_key_length > CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX) {
+        return -EINVAL;
+    }
+
+    if (peer_public_key_length > CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX) {
+        return -EINVAL;
+    }
+
+    sirena_lwm2m_credentials_release(tag);
+
+    rc = tls_credential_add(tag, TLS_CREDENTIAL_PUBLIC_CERTIFICATE,
+                            client_public_key, client_public_key_length);
+    if (rc != 0) {
+        sirena_lwm2m_credentials_release(tag);
+
+        return rc;
+    }
+
+    rc = tls_credential_add(tag, TLS_CREDENTIAL_CA_CERTIFICATE,
+                            peer_public_key, peer_public_key_length);
+    if (rc != 0) {
+        sirena_lwm2m_credentials_release(tag);
+
+        return rc;
+    }
+
+    return 0;
+}
+
+
 int sirena_lwm2m_credentials_register_mode(sec_tag_t tag, int64_t mode)
 {
     switch (mode) {
@@ -186,6 +247,9 @@ int sirena_lwm2m_credentials_register_mode(sec_tag_t tag, int64_t mode)
 
     case SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE:
         return certificate_credentials_register(tag);
+
+    case SIRENA_LWM2M_SECURITY_MODE_RPK:
+        return rpk_credentials_register(tag);
 
     case SIRENA_LWM2M_SECURITY_MODE_NOSEC:
         sirena_lwm2m_credentials_release(tag);

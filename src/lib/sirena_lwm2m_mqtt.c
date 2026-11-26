@@ -109,6 +109,7 @@ static int mqtt_security_mode_check(enum sirena_lwm2m_uri_scheme scheme)
     switch (mode) {
     case SIRENA_LWM2M_SECURITY_MODE_PSK:
     case SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE:
+    case SIRENA_LWM2M_SECURITY_MODE_RPK:
         if (scheme != SIRENA_LWM2M_URI_SCHEME_MQTTS) {
             return -EINVAL;
         }
@@ -159,7 +160,8 @@ static int mqtt_transport_setup(enum sirena_lwm2m_uri_scheme scheme)
             return rc;
         }
 
-        if (mode == SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE) {
+        if (mode == SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE ||
+            mode == SIRENA_LWM2M_SECURITY_MODE_RPK) {
             client.transport.tls.config.peer_verify = ZSOCK_TLS_PEER_VERIFY_REQUIRED;
             client.transport.tls.config.cipher_list = cert_tls_ciphersuites;
             client.transport.tls.config.cipher_count = ARRAY_SIZE(cert_tls_ciphersuites);

@@ -33,6 +33,7 @@ static int security_mode_allowed(int64_t mode)
     switch (mode) {
     case SIRENA_LWM2M_SECURITY_MODE_PSK:
     case SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE:
+    case SIRENA_LWM2M_SECURITY_MODE_RPK:
         return 0;
     case SIRENA_LWM2M_SECURITY_MODE_NOSEC:
         return -EINVAL;
@@ -91,7 +92,8 @@ static int dtls_session_open(void)
         return rc;
     }
 
-    if (mode == SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE) {
+    if (mode == SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE ||
+        mode == SIRENA_LWM2M_SECURITY_MODE_RPK) {
         ciphersuites = cert_ciphersuites;
         ciphersuite_count = ARRAY_SIZE(cert_ciphersuites);
         verify = ZSOCK_TLS_PEER_VERIFY_REQUIRED;
