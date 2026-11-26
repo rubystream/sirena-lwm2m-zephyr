@@ -107,7 +107,11 @@ completion.
 | `coaps://` | 3, NoSec | none | `-EINVAL`, a noSec server has no secure transport. |
 | `mqtt://` | 0, Pre-Shared Key | none | `-EINVAL`, a pre-shared key server needs the secure scheme. |
 | `mqtts://` | 3, NoSec | none | `-EINVAL`, a noSec server has no secure transport. |
-| any | 1, 2, 4 | none | `-ENOTSUP`, the security mode is not implemented. |
+| `coaps://` | 2, Certificate | CoAP/DTLS | The DTLS binding starts. |
+| `mqtts://` | 2, Certificate | MQTT | The MQTT binding starts and protects the connection with TLS. |
+| `coap://` | 2, Certificate | none | `-EINVAL`, a certificate server needs the secure scheme. |
+| `mqtt://` | 2, Certificate | none | `-EINVAL`, a certificate server needs the secure scheme. |
+| any | 1, 4 | none | `-ENOTSUP`, the security mode is not implemented. |
 
 The selection never falls back: a server that needs DTLS or TLS is never
 contacted in the clear, and a noSec server is never contacted over DTLS
@@ -263,7 +267,7 @@ never contacted in the clear:
 | --- | --- |
 | 3, NoSec | The server is served, but only when the noSec development gate is open. |
 | 0, Pre-Shared Key | `-EINVAL`, the server needs the secure scheme and the DTLS binding. |
-| 1, 2, 4 | `-ENOTSUP`, the security mode is not implemented. |
+| 1, 4 | `-ENOTSUP`, the security mode is not implemented. |
 
 The check belongs to the binding and not only to the selection of the
 transport, so calling `sirena_lwm2m_coap_start()` directly is safe as well.
@@ -334,7 +338,7 @@ Update without a prior registration fails with `-EINVAL`.
 | `-EINVAL` | The endpoint name is missing or invalid, the server URI is malformed, the server is provisioned with the Pre-Shared Key security mode and needs the secure scheme, no registration exists for Update or Deregister, the Server (1) or the Device (3) object instance is missing from the registry, or the request path does not fit the CoAP path buffer. |
 | `-EALREADY` | The engine thread is already running. Only `sirena_lwm2m_engine_start()` returns it. |
 | `-EAGAIN` | The engine request queue is full. |
-| `-ENOTSUP` | The server URI uses the `coaps://` scheme, the host is not a numeric IPv4 address, no binding is bound to the transport interface, the engine thread is not running, or the security mode of the server is not implemented: Raw Public Key (1), Certificate (2) or Certificate with EST (4). |
+| `-ENOTSUP` | The server URI uses the `coaps://` scheme, the host is not a numeric IPv4 address, no binding is bound to the transport interface, the engine thread is not running, or the security mode of the server is not implemented: Raw Public Key (1) or Certificate with EST (4). |
 | `-EPERM` | The noSec development gate is closed and the server is provisioned with the NoSec security mode. |
 | `-ENOENT` | The Security object, the Server object or the resource that holds the server URI or the lifetime does not exist, or the server answered `4.04 Not Found`, which means that the registration is unknown to the server. |
 | `-ENOMEM` | The registration payload or the request path does not fit the configured buffer. |
@@ -416,12 +420,22 @@ The key material stays in the static storage of the Security object. The
 binding registers the identity and the key with the TLS credential subsystem
 under one secure tag, `CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG`, and points the
 credentials at the storage of the Security object, so the material is never
-copied into a second buffer and never logged. The secure tag identifies one
-set of credentials, so an application that uses credentials of its own picks a
-tag that is not used already.
+copied into a second buffer and never logged, apart from the private key of
+the Certificate mode, which mbed TLS requires as a contiguous buffer. The
+secure tag identifies one set of credentials, so an application that uses
+credentials of its own picks a tag that is not used already.
 The credentials are released when the session ends and when the transport
 stops, so a re-provisioning with other credentials cannot leave the old key
 registered.
+
+In the Certificate security mode (mode 2) the same resources carry X.509
+material: Security 0, resource 3 holds the client certificate, resource 4 the
+trust anchor and resource 5 the private key. Each of them holds up to
+`CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX` bytes, and the three of them are
+required. The binding offers the
+`TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8` ciphersuite and verifies the server
+against the trust anchor. The Server Public Key resource (4) is the trust
+anchor in this mode, not the server public key of the OMA Security object.
 
 ### The DTLS session
 
@@ -430,11 +444,13 @@ Update and the Deregister requests. A registration opens a new session, so the
 credentials are read from the Security object again and a re-provisioning with
 other credentials takes effect on the next registration.
 
-The session uses a DTLS 1.2 datagram socket, `NET_IPPROTO_DTLS_1_2`, with the
-credentials of the secure tag, the `TLS_PSK_WITH_AES_128_CCM_8` ciphersuite
-and no peer verification, because a pre-shared key server has no certificate
-to verify. The handshake runs in the engine thread, like the rest of the
-transport work.
+In the Pre-Shared Key mode the session uses a DTLS 1.2 datagram socket,
+with the credentials of the secure tag,
+the `TLS_PSK_WITH_AES_128_CCM_8` ciphersuite and no peer verification, because
+a pre-shared key server has no certificate to verify. In the Certificate mode
+it uses the `TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8` ciphersuite and requires
+peer verification against the trust anchor. The handshake runs in the engine
+thread, like the rest of the transport work.
 
 ### The noSec development gate
 
@@ -458,7 +474,7 @@ a TLS security mode.
 | `0` | The server accepted the request. |
 | `-EINVAL` | The endpoint name is missing or invalid, the server URI is malformed or does not use the `coaps://` scheme, the server is provisioned with the NoSec security mode, the PSK identity or the PSK is longer than the configured limit, no registration exists for Update or Deregister, the Server (1) or the Device (3) object instance is missing from the registry, or the request path does not fit the CoAP path buffer. |
 | `-EPERM` | The noSec development gate is closed and the server is provisioned with the NoSec security mode. The transport refuses to select the secure binding for such a server. |
-| `-ENOTSUP` | The security mode of the server is not implemented: Raw Public Key (1), Certificate (2) or Certificate with EST (4). |
+| `-ENOTSUP` | The security mode of the server is not implemented: Raw Public Key (1) or Certificate with EST (4). |
 | `-ENOENT` | The Security object, the Server object or the resource that holds the server URI or the lifetime does not exist, the Security object holds no PSK identity or no PSK, or the server answered `4.04 Not Found`. |
 | `-EACCES` | The DTLS handshake failed. The server rejected the pre-shared key or the key exchange did not complete. |
 | `-ENOMEM` | The registration payload or the request path does not fit the configured buffer, or the PSK is longer than `CONFIG_MBEDTLS_PSK_MAX_LEN`. |
@@ -528,10 +544,14 @@ from nowhere else, the same way the DTLS binding reads them:
 
 The binding registers the identity and the key with the TLS credential
 subsystem under the secure tag `CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG` and
-attaches the tag to the socket of the MQTT client, which connects over
-TLS 1.2 with the `TLS_PSK_WITH_AES_128_CCM_8` ciphersuite and without
-peer verification, because a pre-shared key server has no certificate
-to verify. The credentials are released when the transport stops, so a
+attaches the tag to the socket of the MQTT client. In the Pre-Shared Key
+mode it connects over TLS 1.2 with the `TLS_PSK_WITH_AES_128_CCM_8`
+ciphersuite and without peer verification, because a pre-shared key
+server has no certificate to verify. In the Certificate mode it connects
+with the `TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8` ciphersuite and requires
+peer verification against the trust anchor; the same Security resources as
+in the DTLS binding carry the certificate, the trust anchor and the
+private key. The credentials are released when the transport stops, so a
 re-provisioning with other credentials cannot leave the old key
 registered. The TLS handshake runs in the engine thread, like the rest
 of the transport work.
@@ -694,7 +714,7 @@ and the negotiated content format.
 | --- | --- |
 | Broker address | Security object resource 0, the LwM2M Server URI, for example `mqtt://192.0.2.10:1883` or `mqtts://192.0.2.10:8883` |
 | Port | 1883 for the `mqtt://` scheme and 8883 for the `mqtts://` scheme, when the URI carries no port |
-| Credentials | Security object instance 0, resources 3 and 5, the PSK identity and the PSK, for the `mqtts://` scheme |
+| Credentials | Security object instance 0, resources 3 and 5 for the Pre-Shared Key mode, or resources 3, 4 and 5 for the Certificate mode, for the `mqtts://` scheme |
 | Client identifier | The endpoint name, or the value of `sirena_lwm2m_mqtt_set_client_id()` |
 | Topic prefix | The value of `sirena_lwm2m_mqtt_set_topic_prefix()`, empty by default |
 | Lifetime | Server object instance 0, resource 1 |
@@ -764,7 +784,7 @@ can match it.
 | `0` | The server accepted the operation. |
 | `-EINVAL` | The endpoint name is missing, the server URI is malformed or does not use the `mqtt://` or the `mqtts://` scheme, the client identifier or the topic prefix is too long, the server is provisioned with the Pre-Shared Key security mode and needs the secure scheme, the server is provisioned with the NoSec security mode and needs the plain scheme, or the URI of a request does not name a resource. |
 | `-EBUSY` | The client identifier or the topic prefix is set while the transport runs. |
-| `-ENOTSUP` | The host is not a numeric IPv4 address, the binding is not built, or the security mode of the server is not implemented: Raw Public Key (1), Certificate (2) or Certificate with EST (4). |
+| `-ENOTSUP` | The host is not a numeric IPv4 address, the binding is not built, or the security mode of the server is not implemented: Raw Public Key (1) or Certificate with EST (4). |
 | `-EPERM` | The noSec development gate is closed and the server is provisioned with the NoSec security mode. |
 | `-ENOENT` | The Security object, the Server object or the resource that holds the server URI or the lifetime does not exist, or the server answered that the URI is not found. |
 | `-ENOMEM` | The topic, the payload or the CBOR message does not fit the configured buffer. |
@@ -795,7 +815,8 @@ can match it.
 | `CONFIG_SIRENA_LWM2M_PSK_IDENTITY_MAX` | Maximum size of the PSK identity. | 128 |
 | `CONFIG_SIRENA_LWM2M_PSK_KEY_MAX` | Maximum size of the PSK key. | 64 |
 | `CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG` | Secure tag under which the DTLS binding registers the credentials. It has to be unique in the application. | 1 |
-| `CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX` | Size of the identity, public key and secret key buffers of the Security object. It is 128 when the DTLS or the MQTT binding is enabled. | 32 |
+| `CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX` | Size of the PSK identity, public key, secret key and SMS binding buffers. It is 128 when the DTLS or the MQTT binding is enabled. | 32 |
+| `CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX` | Size of the client certificate, trust anchor and private key buffers of the Security object; applies in every mode because the buffers are shared. | 4096 |
 | `CONFIG_COAP_EXTENDED_OPTIONS_LEN_VALUE` | Length of a CoAP option value. The module sizes it so that the endpoint client name fits. | 64 |
 | `CONFIG_SIRENA_LWM2M_ENGINE_QUEUE_SIZE` | Number of queued engine requests. | 8 |
 | `CONFIG_SIRENA_LWM2M_ENGINE_STACK_SIZE` | Stack size of the engine thread. | 2048 |
@@ -851,7 +872,7 @@ which is 64 bytes by default. A request that does not fit is rejected with
   implemented and reachable through the API, the scheduling policy belongs to
   the protocol layer.
 - Host names and IPv6 addresses in the server URI.
-- The Raw Public Key, the Certificate and the Certificate with EST security
+- The Raw Public Key and the Certificate with EST security
   modes. They are refused with `-ENOTSUP`.
 - The SNI resource of the Security object. It belongs to the certificate
   modes.

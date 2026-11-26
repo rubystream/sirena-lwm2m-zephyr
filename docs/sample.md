@@ -131,7 +131,7 @@ another server without a change of the sources. The symbols live in the
 | --- | --- | --- |
 | `CONFIG_SIRENA_LWM2M_SAMPLE_SERVER_URI` | The URI of the LwM2M server. The scheme selects the binding: `coap`, `coaps`, `mqtt` or `mqtts`. | `coap://127.0.0.1:5683` |
 | `CONFIG_SIRENA_LWM2M_SAMPLE_ENDPOINT_NAME` | The LwM2M Endpoint Client Name of the sample. | `sirena-sample` |
-| `CONFIG_SIRENA_LWM2M_SAMPLE_SECURITY_MODE` | The security mode of the Security object: 0 pre-shared key, 1 public key, 2 certificate, 3 noSec. | 3 |
+| `CONFIG_SIRENA_LWM2M_SAMPLE_SECURITY_MODE` | The security mode of the Security object: 0 pre-shared key, 2 certificate, 3 noSec. | 3 |
 | `CONFIG_SIRENA_LWM2M_SAMPLE_IDENTITY` | The identity of the pre-shared key. | empty |
 | `CONFIG_SIRENA_LWM2M_SAMPLE_SECRET_KEY` | The pre-shared key. | empty |
 | `CONFIG_SIRENA_LWM2M_SAMPLE_SHORT_SERVER_ID` | The short server id of the Security and the Server instance. | 1 |

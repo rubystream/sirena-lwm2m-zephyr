@@ -8,6 +8,15 @@
 #define SIRENA_LWM2M_SECURITY_OBJECT_ID 0U
 #define SIRENA_LWM2M_SERVER_OBJECT_ID 1U
 #define SIRENA_LWM2M_DEVICE_OBJECT_ID 3U
+#define SIRENA_LWM2M_SECURITY_URI_RESOURCE 0U
+#define SIRENA_LWM2M_SECURITY_MODE_RESOURCE 2U
+#define SIRENA_LWM2M_SECURITY_IDENTITY_RESOURCE 3U
+#define SIRENA_LWM2M_SECURITY_SERVER_PUBLIC_KEY_RESOURCE 4U
+#define SIRENA_LWM2M_SECURITY_SECRET_KEY_RESOURCE 5U
+#define SIRENA_LWM2M_SECURITY_CLIENT_CERTIFICATE_RESOURCE SIRENA_LWM2M_SECURITY_IDENTITY_RESOURCE
+#define SIRENA_LWM2M_SECURITY_TRUST_ANCHOR_RESOURCE SIRENA_LWM2M_SECURITY_SERVER_PUBLIC_KEY_RESOURCE
+#define SIRENA_LWM2M_SECURITY_PRIVATE_KEY_RESOURCE SIRENA_LWM2M_SECURITY_SECRET_KEY_RESOURCE
+#define SIRENA_LWM2M_SECURITY_SHORT_SERVER_ID_RESOURCE 10U
 
 enum sirena_lwm2m_resource_kind {
     SIRENA_LWM2M_RESOURCE_VALUE,
@@ -39,9 +48,9 @@ struct sirena_lwm2m_object_definition {
 
 struct sirena_lwm2m_security_instance {
     char server_uri[CONFIG_SIRENA_LWM2M_SERVER_URI_MAX + 1U];
-    uint8_t identity[CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX];
-    uint8_t server_public_key[CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX];
-    uint8_t secret_key[CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX];
+    uint8_t identity[CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX];
+    uint8_t server_public_key[CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX];
+    uint8_t secret_key[CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX];
 #if IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL)
     uint8_t sms_binding_key_parameters[CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX];
     uint8_t sms_binding_secret_key[CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX];
@@ -82,16 +91,16 @@ static struct sirena_lwm2m_resource_entry security_resources[] = {
       .kind = SIRENA_LWM2M_RESOURCE_CONSTANT },
     { .id = 2U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_INTEGER,
       .kind = SIRENA_LWM2M_RESOURCE_VALUE },
-    { .id = 3U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_OPAQUE,
+    { .id = SIRENA_LWM2M_SECURITY_IDENTITY_RESOURCE, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_OPAQUE,
       .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = security_instance.identity,
-      .capacity = CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX },
-    { .id = 4U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_OPAQUE,
+      .capacity = CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX },
+    { .id = SIRENA_LWM2M_SECURITY_SERVER_PUBLIC_KEY_RESOURCE, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_OPAQUE,
       .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = security_instance.server_public_key,
-      .capacity = CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX },
-    { .id = 5U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_OPAQUE,
+      .capacity = CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX },
+    { .id = SIRENA_LWM2M_SECURITY_SECRET_KEY_RESOURCE, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_OPAQUE,
       .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = security_instance.secret_key,
-      .capacity = CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX },
-    { .id = 10U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_INTEGER,
+      .capacity = CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX },
+    { .id = SIRENA_LWM2M_SECURITY_SHORT_SERVER_ID_RESOURCE, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_INTEGER,
       .kind = SIRENA_LWM2M_RESOURCE_VALUE },
 #if IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL)
     { .id = 6U, .operations = SIRENA_LWM2M_OP_READ, .kconfig_gated = true,
@@ -375,6 +384,7 @@ static int value_write(uint16_t object_id, uint16_t instance_id, uint16_t resour
         if (length > entry->capacity) {
             return -ENOMEM;
         }
+        memset(entry->data, 0, entry->capacity);
         if (length > 0U) {
             if (buffer == NULL) {
                 return -EINVAL;
@@ -900,39 +910,45 @@ int sirena_lwm2m_provision(const struct sirena_lwm2m_provisioning *provisioning)
     }
 
     if (provisioning->server_uri != NULL) {
-        rc = sirena_lwm2m_set_string(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U, 0U,
+        rc = sirena_lwm2m_set_string(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                 SIRENA_LWM2M_SECURITY_URI_RESOURCE,
                                      provisioning->server_uri);
         if (rc != 0) {
             return rc;
         }
     }
 
-    rc = sirena_lwm2m_set_integer(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U, 2U,
+    rc = sirena_lwm2m_set_integer(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                  SIRENA_LWM2M_SECURITY_MODE_RESOURCE,
                                   (int64_t)provisioning->security_mode);
     if (rc != 0) {
         return rc;
     }
 
-    rc = sirena_lwm2m_set_opaque(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U, 3U,
+    rc = sirena_lwm2m_set_opaque(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                 SIRENA_LWM2M_SECURITY_IDENTITY_RESOURCE,
                                  provisioning->identity, provisioning->identity_length);
     if (rc != 0) {
         return rc;
     }
 
-    rc = sirena_lwm2m_set_opaque(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U, 4U,
+    rc = sirena_lwm2m_set_opaque(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                 SIRENA_LWM2M_SECURITY_SERVER_PUBLIC_KEY_RESOURCE,
                                  provisioning->server_public_key,
                                  provisioning->server_public_key_length);
     if (rc != 0) {
         return rc;
     }
 
-    rc = sirena_lwm2m_set_opaque(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U, 5U,
+    rc = sirena_lwm2m_set_opaque(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                 SIRENA_LWM2M_SECURITY_SECRET_KEY_RESOURCE,
                                  provisioning->secret_key, provisioning->secret_key_length);
     if (rc != 0) {
         return rc;
     }
 
-    rc = sirena_lwm2m_set_integer(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U, 10U,
+    rc = sirena_lwm2m_set_integer(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                  SIRENA_LWM2M_SECURITY_SHORT_SERVER_ID_RESOURCE,
                                   (int64_t)provisioning->short_server_id);
     if (rc != 0) {
         return rc;

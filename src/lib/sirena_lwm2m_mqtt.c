@@ -65,7 +65,8 @@ static bool response_received;
 static uint32_t pending_token;
 static uint32_t response_result;
 static sec_tag_t tls_sec_tags[] = { CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG };
-static const int tls_ciphersuites[] = { MBEDTLS_TLS_PSK_WITH_AES_128_CCM_8 };
+static const int psk_tls_ciphersuites[] = { MBEDTLS_TLS_PSK_WITH_AES_128_CCM_8 };
+static const int cert_tls_ciphersuites[] = { MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8 };
 
 static int mqtt_publish_payload(const void *data, size_t length);
 static void mqtt_handle_message(const struct sirena_lwm2m_mqtt_message *message);
@@ -107,6 +108,7 @@ static int mqtt_security_mode_check(enum sirena_lwm2m_uri_scheme scheme)
 
     switch (mode) {
     case SIRENA_LWM2M_SECURITY_MODE_PSK:
+    case SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE:
         if (scheme != SIRENA_LWM2M_URI_SCHEME_MQTTS) {
             return -EINVAL;
         }
@@ -141,15 +143,34 @@ static int mqtt_transport_setup(enum sirena_lwm2m_uri_scheme scheme)
         return -EINVAL;
     }
 
-    rc = sirena_lwm2m_credentials_register(CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG);
-    if (rc != 0) {
-        return rc;
+    {
+        int64_t mode;
+
+        rc = sirena_lwm2m_get_integer(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                      SIRENA_LWM2M_SECURITY_MODE_RESOURCE,
+                                      &mode);
+        if (rc != 0) {
+            return rc;
+        }
+
+        rc = sirena_lwm2m_credentials_register_mode(CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG,
+                                                   mode);
+        if (rc != 0) {
+            return rc;
+        }
+
+        if (mode == SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE) {
+            client.transport.tls.config.peer_verify = ZSOCK_TLS_PEER_VERIFY_REQUIRED;
+            client.transport.tls.config.cipher_list = cert_tls_ciphersuites;
+            client.transport.tls.config.cipher_count = ARRAY_SIZE(cert_tls_ciphersuites);
+        } else {
+            client.transport.tls.config.peer_verify = ZSOCK_TLS_PEER_VERIFY_NONE;
+            client.transport.tls.config.cipher_list = psk_tls_ciphersuites;
+            client.transport.tls.config.cipher_count = ARRAY_SIZE(psk_tls_ciphersuites);
+        }
     }
 
     client.transport.type = MQTT_TRANSPORT_SECURE;
-    client.transport.tls.config.peer_verify = ZSOCK_TLS_PEER_VERIFY_NONE;
-    client.transport.tls.config.cipher_list = tls_ciphersuites;
-    client.transport.tls.config.cipher_count = ARRAY_SIZE(tls_ciphersuites);
     client.transport.tls.config.sec_tag_list = tls_sec_tags;
     client.transport.tls.config.sec_tag_count = ARRAY_SIZE(tls_sec_tags);
 

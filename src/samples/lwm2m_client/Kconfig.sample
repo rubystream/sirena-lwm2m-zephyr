@@ -22,9 +22,10 @@ config SIRENA_LWM2M_SAMPLE_SECURITY_MODE
 	range 0 3
 	help
 	  The security mode of the Security object of the sample: 0 is the
-	  pre-shared key, 1 the public key, 2 the certificate and 3 the noSec
-	  mode. Only the pre-shared key and the noSec mode are implemented by
-	  the bindings.
+	  pre-shared key, 2 the certificate and 3 the noSec mode. The
+	  bindings implement the pre-shared key, the certificate and the
+	  noSec modes; the public key and the certificate with EST modes
+	  are not implemented.
 
 config SIRENA_LWM2M_SAMPLE_IDENTITY
 	string "Pre-shared key identity of the sample"

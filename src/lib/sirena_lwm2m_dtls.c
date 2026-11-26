@@ -32,6 +32,7 @@ static int security_mode_allowed(int64_t mode)
 {
     switch (mode) {
     case SIRENA_LWM2M_SECURITY_MODE_PSK:
+    case SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE:
         return 0;
     case SIRENA_LWM2M_SECURITY_MODE_NOSEC:
         return -EINVAL;
@@ -45,9 +46,9 @@ static void credentials_release(void)
     sirena_lwm2m_credentials_release(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG);
 }
 
-static int credentials_register(void)
+static int credentials_register(int64_t mode)
 {
-    return sirena_lwm2m_credentials_register(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG);
+    return sirena_lwm2m_credentials_register_mode(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG, mode);
 }
 
 static void dtls_session_close(void)
@@ -65,10 +66,13 @@ static void dtls_session_close(void)
 
 static int dtls_session_open(void)
 {
-    static const int ciphersuites[] = { MBEDTLS_TLS_PSK_WITH_AES_128_CCM_8 };
+    static const int psk_ciphersuites[] = { MBEDTLS_TLS_PSK_WITH_AES_128_CCM_8 };
+    static const int cert_ciphersuites[] = { MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8 };
+    const int *ciphersuites;
+    size_t ciphersuite_count;
     sec_tag_t tags[] = { CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG };
     struct net_sockaddr_storage storage;
-    int verify = ZSOCK_TLS_PEER_VERIFY_NONE;
+    int verify;
     int64_t mode;
     int rc;
 
@@ -87,12 +91,22 @@ static int dtls_session_open(void)
         return rc;
     }
 
+    if (mode == SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE) {
+        ciphersuites = cert_ciphersuites;
+        ciphersuite_count = ARRAY_SIZE(cert_ciphersuites);
+        verify = ZSOCK_TLS_PEER_VERIFY_REQUIRED;
+    } else {
+        ciphersuites = psk_ciphersuites;
+        ciphersuite_count = ARRAY_SIZE(psk_ciphersuites);
+        verify = ZSOCK_TLS_PEER_VERIFY_NONE;
+    }
+
     rc = sirena_lwm2m_exchange_server_address(&storage, SIRENA_LWM2M_URI_SCHEME_COAPS);
     if (rc != 0) {
         return rc;
     }
 
-    rc = credentials_register();
+    rc = credentials_register(mode);
     if (rc != 0) {
         return rc;
     }
@@ -116,7 +130,7 @@ static int dtls_session_open(void)
     }
 
     rc = zsock_setsockopt(client_socket, ZSOCK_SOL_TLS, ZSOCK_TLS_CIPHERSUITE_LIST,
-                          ciphersuites, sizeof(ciphersuites));
+                          ciphersuites, ciphersuite_count * sizeof(*ciphersuites));
     if (rc != 0) {
         rc = -errno;
         dtls_session_close();

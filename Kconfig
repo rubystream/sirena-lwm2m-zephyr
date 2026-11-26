@@ -102,15 +102,29 @@ config SIRENA_LWM2M_SERVER_URI_MAX
 	range 16 512
 
 config SIRENA_LWM2M_CREDENTIAL_MAX
-	int "Maximum size of a credential (identity, public key, secret key)"
+	int "Maximum size of a PSK credential and SMS-binding material"
 	default 128 if SIRENA_LWM2M_TRANSPORT_DTLS || SIRENA_LWM2M_TRANSPORT_MQTT
 	default 32
 	range 8 1024
 	help
-	  The Security object stores the identity, the public key and the
-	  secret key in buffers of this size. The DTLS and the MQTT bindings
-	  need room for the PSK identity and the PSK key, so the size is
-	  raised when one of them is enabled.
+	  Size of the buffers that hold the PSK identity, the server public
+	  key and the secret key, plus the optional SMS binding material. The
+	  DTLS and MQTT bindings raise the default when they are enabled.
+	  X.509 certificate, trust-anchor and private-key buffers are sized
+	  by CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX instead.
+
+config SIRENA_LWM2M_CERTIFICATE_MAX
+	int "Maximum size of X.509 certificate material (client cert, trust anchor, private key)"
+	default 4096
+	range 256 8192
+	help
+	  Size of the buffers that hold the client certificate, the trust
+	  anchor (CA) and the private key of the Security object. The same
+	  buffers carry PSK identity, public key and secret key material, so
+	  a build that enables certificate support pays this size in any
+	  security mode. Realistic DER certificate material needs far more
+	  room than a pre-shared key, and this symbol provides it without
+	  changing the PSK-specific CREDENTIAL_MAX limit.
 
 config SIRENA_LWM2M_SERVER_STRING_MAX
 	int "Maximum length of a server side string (binding, optional strings)"
@@ -183,6 +197,9 @@ config SIRENA_LWM2M_TRANSPORT_DTLS
 	select MBEDTLS_SSL_PROTO_TLS1_2
 	select MBEDTLS_SSL_PROTO_DTLS
 	select MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
+	select MBEDTLS_CIPHERSUITE_TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8
+	select MBEDTLS_X509_CRT_PARSE_C
+	select MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
 	select PSA_WANT_ALG_CCM
 	select PSA_WANT_ALG_SHA_256
 	select PSA_WANT_ALG_TLS12_PRF
@@ -191,11 +208,11 @@ config SIRENA_LWM2M_TRANSPORT_DTLS
 	select PSA_WANT_KEY_TYPE_DERIVE
 	help
 	  Enables the secure CoAP over DTLS transport binding. The binding
-	  reads the pre-shared key credentials from the Security object and
-	  registers with the LwM2M server over DTLS 1.2 with the
-	  TLS_PSK_WITH_AES_128_CCM_8 ciphersuite. It needs mbed TLS with the
-	  PSK key exchange enabled, so the application has to enable
-	  CONFIG_MBEDTLS and CONFIG_NET_SOCKETS_SOCKOPT_TLS.
+	  reads the credentials of the Security object, a pre-shared key or
+	  an X.509 certificate, and registers with the LwM2M server over
+	  DTLS 1.2. It needs mbed TLS with the key exchange enabled, so the
+	  application has to enable CONFIG_MBEDTLS and
+	  CONFIG_NET_SOCKETS_SOCKOPT_TLS.
 
 	  The binding selects the HMAC and the SHA-384 algorithms of mbed
 	  TLS. The TLS 1.2 master secret is 48 bytes long and the static
@@ -212,6 +229,9 @@ config SIRENA_LWM2M_TRANSPORT_MQTT
 	select MQTT_LIB_TLS
 	select MBEDTLS_SSL_PROTO_TLS1_2
 	select MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
+	select MBEDTLS_CIPHERSUITE_TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8
+	select MBEDTLS_X509_CRT_PARSE_C
+	select MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
 	select PSA_WANT_ALG_CCM
 	select PSA_WANT_ALG_HMAC
 	select PSA_WANT_ALG_SHA_256
@@ -233,7 +253,8 @@ config SIRENA_LWM2M_TRANSPORT_MQTT
 	  CONFIG_MQTT_LIB, CONFIG_MBEDTLS and CONFIG_NET_SOCKETS_SOCKOPT_TLS.
 	  The "mqtt://" scheme talks to the broker in the clear and needs
 	  the noSec development gate, the "mqtts://" scheme protects the
-	  connection with the pre-shared key of the Security object.
+	  connection with the credentials of the Security object, a
+	  pre-shared key or a certificate.
 
 config SIRENA_LWM2M_MQTT_TOPIC_MAX
 	int "Maximum length of the MQTT topic of the endpoint"

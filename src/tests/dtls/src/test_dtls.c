@@ -11,11 +11,13 @@
 #include <sirena/lwm2m/object_registry.h>
 #include <sirena/lwm2m/objects.h>
 #include <sirena/lwm2m/transport.h>
+#include "sirena_lwm2m_credentials.h"
 #include <mbedtls/ssl_ciphersuites.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
+extern int sirena_lwm2m_dtls_stop_engine(void);
 #define SECURITY_OBJECT_ID 0U
 #define SECURITY_MODE_RESOURCE 2U
 #define SECURITY_WRITTEN_RESOURCE 20U
@@ -315,6 +317,34 @@ static void provision_nosec(const char *uri)
 	struct sirena_lwm2m_provisioning provisioning = {
 		.server_uri = uri,
 		.security_mode = SIRENA_LWM2M_SECURITY_MODE_NOSEC,
+		.short_server_id = 1U,
+		.lifetime = PEER_LIFETIME,
+		.binding = "U",
+	};
+	int rc;
+
+	rc = sirena_lwm2m_provision(&provisioning);
+	zassert_equal(rc, 0, "provisioning failed: %d", rc);
+}
+
+static const uint8_t DTLS_CERT_CLIENT[] = "dtls-test-client-cert";
+static const uint8_t DTLS_CERT_TRUST[] = "dtls-test-trust-anchor";
+static const uint8_t DTLS_CERT_KEY[] = "dtls-test-private-key";
+static const uint8_t DTLS_CERT_OVERSIZED[CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX + 8U] = { 0U };
+
+static void provision_cert(const char *uri, const uint8_t *client_cert, size_t client_cert_length,
+			   const uint8_t *trust_anchor, size_t trust_anchor_length,
+			   const uint8_t *private_key, size_t private_key_length)
+{
+	struct sirena_lwm2m_provisioning provisioning = {
+		.server_uri = uri,
+		.security_mode = SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE,
+		.identity = client_cert,
+		.identity_length = client_cert_length,
+		.server_public_key = trust_anchor,
+		.server_public_key_length = trust_anchor_length,
+		.secret_key = private_key,
+		.secret_key_length = private_key_length,
 		.short_server_id = 1U,
 		.lifetime = PEER_LIFETIME,
 		.binding = "U",
@@ -669,10 +699,33 @@ ZTEST(sirena_lwm2m_dtls, test_register_fails_with_an_unknown_psk_identity)
 	zassert_false(dtls_request.received, "no request must reach the server");
 }
 
+ZTEST(sirena_lwm2m_dtls, test_certificate_credentials_reject_empty_inputs)
+{
+	zassert_equal(sirena_lwm2m_credentials_register_mode(PEER_SEC_TAG,
+						 SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE),
+		      -ENOENT, "empty certificate inputs must be rejected");
+
+	(void)sirena_lwm2m_set_opaque(SECURITY_OBJECT_ID, 0U, 3U, DTLS_CERT_CLIENT,
+				   sizeof(DTLS_CERT_CLIENT) - 1U);
+	(void)sirena_lwm2m_set_opaque(SECURITY_OBJECT_ID, 0U, 4U, DTLS_CERT_TRUST,
+				   sizeof(DTLS_CERT_TRUST) - 1U);
+	zassert_equal(sirena_lwm2m_credentials_register_mode(PEER_SEC_TAG,
+						 SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE),
+		      -ENOENT, "partial certificate inputs must be rejected");
+}
+
+ZTEST(sirena_lwm2m_dtls, test_certificate_credentials_reject_oversized_inputs)
+{
+	int rc;
+
+	rc = sirena_lwm2m_set_opaque(SECURITY_OBJECT_ID, 0U, 3U, DTLS_CERT_OVERSIZED,
+				   sizeof(DTLS_CERT_OVERSIZED));
+	zassert_not_equal(rc, 0, "oversized certificate input must be rejected");
+}
+
 ZTEST(sirena_lwm2m_dtls, test_transport_refuses_the_unsupported_security_modes)
 {
 	static const int64_t modes[] = { SIRENA_LWM2M_SECURITY_MODE_RPK,
-					 SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE,
 					 SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE_EST };
 	size_t i;
 	int rc;
@@ -720,6 +773,35 @@ ZTEST(sirena_lwm2m_dtls, test_register_fails_without_the_credentials)
 
 	rc = sirena_lwm2m_transport_register();
 	zassert_equal(rc, -ENOENT, "a missing pre-shared key must be refused");
+	zassert_false(dtls_request.received, "no request must be sent");
+}
+
+ZTEST(sirena_lwm2m_dtls, test_dtls_accepts_certificate_mode)
+{
+	int rc;
+
+	provision_cert(dtls_uri, DTLS_CERT_CLIENT, sizeof(DTLS_CERT_CLIENT) - 1U,
+		       DTLS_CERT_TRUST, sizeof(DTLS_CERT_TRUST) - 1U,
+		       DTLS_CERT_KEY, sizeof(DTLS_CERT_KEY) - 1U);
+
+	(void)sirena_lwm2m_dtls_stop_engine();
+
+	rc = sirena_lwm2m_transport_start();
+	zassert_equal(rc, 0, "the certificate security mode must be accepted: %d", rc);
+}
+
+ZTEST(sirena_lwm2m_dtls, test_dtls_aborts_with_missing_certificates)
+{
+	int rc;
+
+	provision_cert(dtls_uri, NULL, 0U, NULL, 0U, DTLS_CERT_KEY, sizeof(DTLS_CERT_KEY) - 1U);
+
+	rc = sirena_lwm2m_transport_start();
+	zassert_equal(rc, 0, "transport start failed: %d", rc);
+
+	rc = sirena_lwm2m_transport_register();
+	zassert_equal(rc, -ENOENT, "missing certificate inputs must abort: %d", rc);
+
 	zassert_false(dtls_request.received, "no request must be sent");
 }
 
