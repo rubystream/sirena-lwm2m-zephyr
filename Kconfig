@@ -208,11 +208,11 @@ config SIRENA_LWM2M_TRANSPORT_DTLS
 	select PSA_WANT_KEY_TYPE_DERIVE
 	help
 	  Enables the secure CoAP over DTLS transport binding. The binding
-	  reads the pre-shared key credentials from the Security object and
-	  registers with the LwM2M server over DTLS 1.2 with the
-	  TLS_PSK_WITH_AES_128_CCM_8 ciphersuite. It needs mbed TLS with the
-	  PSK key exchange enabled, so the application has to enable
-	  CONFIG_MBEDTLS and CONFIG_NET_SOCKETS_SOCKOPT_TLS.
+	  reads the credentials of the Security object, a pre-shared key or
+	  an X.509 certificate, and registers with the LwM2M server over
+	  DTLS 1.2. It needs mbed TLS with the key exchange enabled, so the
+	  application has to enable CONFIG_MBEDTLS and
+	  CONFIG_NET_SOCKETS_SOCKOPT_TLS.
 
 	  The binding selects the HMAC and the SHA-384 algorithms of mbed
 	  TLS. The TLS 1.2 master secret is 48 bytes long and the static
@@ -253,7 +253,8 @@ config SIRENA_LWM2M_TRANSPORT_MQTT
 	  CONFIG_MQTT_LIB, CONFIG_MBEDTLS and CONFIG_NET_SOCKETS_SOCKOPT_TLS.
 	  The "mqtt://" scheme talks to the broker in the clear and needs
 	  the noSec development gate, the "mqtts://" scheme protects the
-	  connection with the pre-shared key of the Security object.
+	  connection with the credentials of the Security object, a
+	  pre-shared key or a certificate.
 
 config SIRENA_LWM2M_MQTT_TOPIC_MAX
 	int "Maximum length of the MQTT topic of the endpoint"

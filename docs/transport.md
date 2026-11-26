@@ -267,7 +267,7 @@ never contacted in the clear:
 | --- | --- |
 | 3, NoSec | The server is served, but only when the noSec development gate is open. |
 | 0, Pre-Shared Key | `-EINVAL`, the server needs the secure scheme and the DTLS binding. |
-| 1, 2, 4 | `-ENOTSUP`, the security mode is not implemented. |
+| 1, 4 | `-ENOTSUP`, the security mode is not implemented. |
 
 The check belongs to the binding and not only to the selection of the
 transport, so calling `sirena_lwm2m_coap_start()` directly is safe as well.
@@ -420,12 +420,22 @@ The key material stays in the static storage of the Security object. The
 binding registers the identity and the key with the TLS credential subsystem
 under one secure tag, `CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG`, and points the
 credentials at the storage of the Security object, so the material is never
-copied into a second buffer and never logged. The secure tag identifies one
-set of credentials, so an application that uses credentials of its own picks a
-tag that is not used already.
+copied into a second buffer and never logged, apart from the private key of
+the Certificate mode, which mbed TLS requires as a contiguous buffer. The
+secure tag identifies one set of credentials, so an application that uses
+credentials of its own picks a tag that is not used already.
 The credentials are released when the session ends and when the transport
 stops, so a re-provisioning with other credentials cannot leave the old key
 registered.
+
+In the Certificate security mode (mode 2) the same resources carry X.509
+material: Security 0, resource 3 holds the client certificate, resource 4 the
+trust anchor and resource 5 the private key. Each of them holds up to
+`CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX` bytes, and the three of them are
+required. The binding offers the
+`TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8` ciphersuite and verifies the server
+against the trust anchor. The Server Public Key resource (4) is the trust
+anchor in this mode, not the server public key of the OMA Security object.
 
 ### The DTLS session
 
@@ -434,11 +444,13 @@ Update and the Deregister requests. A registration opens a new session, so the
 credentials are read from the Security object again and a re-provisioning with
 other credentials takes effect on the next registration.
 
-The session uses a DTLS 1.2 datagram socket, `NET_IPPROTO_DTLS_1_2`, with the
-credentials of the secure tag, the `TLS_PSK_WITH_AES_128_CCM_8` ciphersuite
-and no peer verification, because a pre-shared key server has no certificate
-to verify. The handshake runs in the engine thread, like the rest of the
-transport work.
+In the Pre-Shared Key mode the session uses a DTLS 1.2 datagram socket,
+with the credentials of the secure tag,
+the `TLS_PSK_WITH_AES_128_CCM_8` ciphersuite and no peer verification, because
+a pre-shared key server has no certificate to verify. In the Certificate mode
+it uses the `TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8` ciphersuite and requires
+peer verification against the trust anchor. The handshake runs in the engine
+thread, like the rest of the transport work.
 
 ### The noSec development gate
 
@@ -532,10 +544,14 @@ from nowhere else, the same way the DTLS binding reads them:
 
 The binding registers the identity and the key with the TLS credential
 subsystem under the secure tag `CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG` and
-attaches the tag to the socket of the MQTT client, which connects over
-TLS 1.2 with the `TLS_PSK_WITH_AES_128_CCM_8` ciphersuite and without
-peer verification, because a pre-shared key server has no certificate
-to verify. The credentials are released when the transport stops, so a
+attaches the tag to the socket of the MQTT client. In the Pre-Shared Key
+mode it connects over TLS 1.2 with the `TLS_PSK_WITH_AES_128_CCM_8`
+ciphersuite and without peer verification, because a pre-shared key
+server has no certificate to verify. In the Certificate mode it connects
+with the `TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8` ciphersuite and requires
+peer verification against the trust anchor; the same Security resources as
+in the DTLS binding carry the certificate, the trust anchor and the
+private key. The credentials are released when the transport stops, so a
 re-provisioning with other credentials cannot leave the old key
 registered. The TLS handshake runs in the engine thread, like the rest
 of the transport work.
@@ -698,7 +714,7 @@ and the negotiated content format.
 | --- | --- |
 | Broker address | Security object resource 0, the LwM2M Server URI, for example `mqtt://192.0.2.10:1883` or `mqtts://192.0.2.10:8883` |
 | Port | 1883 for the `mqtt://` scheme and 8883 for the `mqtts://` scheme, when the URI carries no port |
-| Credentials | Security object instance 0, resources 3 and 5, the PSK identity and the PSK, for the `mqtts://` scheme |
+| Credentials | Security object instance 0, resources 3 and 5 for the Pre-Shared Key mode, or resources 3, 4 and 5 for the Certificate mode, for the `mqtts://` scheme |
 | Client identifier | The endpoint name, or the value of `sirena_lwm2m_mqtt_set_client_id()` |
 | Topic prefix | The value of `sirena_lwm2m_mqtt_set_topic_prefix()`, empty by default |
 | Lifetime | Server object instance 0, resource 1 |
