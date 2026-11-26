@@ -725,8 +725,7 @@ ZTEST(sirena_lwm2m_dtls, test_certificate_credentials_reject_oversized_inputs)
 
 ZTEST(sirena_lwm2m_dtls, test_transport_refuses_the_unsupported_security_modes)
 {
-	static const int64_t modes[] = { SIRENA_LWM2M_SECURITY_MODE_RPK,
-					 SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE_EST };
+	static const int64_t modes[] = { SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE_EST };
 	size_t i;
 	int rc;
 

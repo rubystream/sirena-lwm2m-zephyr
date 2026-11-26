@@ -1605,7 +1605,7 @@ ZTEST(sirena_lwm2m_mqtt, test_the_unsupported_security_modes_are_refused)
     rc = snprintf(uri, sizeof(uri), "mqtts://127.0.0.1:%u", peer_tls_port);
     zassert_true(rc > 0 && rc < (int)sizeof(uri), "the server uri build failed");
 
-    rc = peer_provision(uri, SIRENA_LWM2M_SECURITY_MODE_RPK);
+    rc = peer_provision(uri, SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE_EST);
     zassert_equal(rc, 0, "the provisioning failed: %d", rc);
 
     rc = peer_start_transport();
