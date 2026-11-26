@@ -799,8 +799,8 @@ can match it.
 | `CONFIG_SIRENA_LWM2M_PSK_IDENTITY_MAX` | Maximum size of the PSK identity. | 128 |
 | `CONFIG_SIRENA_LWM2M_PSK_KEY_MAX` | Maximum size of the PSK key. | 64 |
 | `CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG` | Secure tag under which the DTLS binding registers the credentials. It has to be unique in the application. | 1 |
-| `CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX` | Size of the identity, public key and secret key buffers of the Security object. It is 128 when the DTLS or the MQTT binding is enabled. | 32 |
-| `CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX` | Size of the client certificate, trust anchor and private key buffers of the Security object, used in certificate security mode. | 4096 |
+| `CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX` | Size of the PSK identity, public key, secret key and SMS binding buffers. It is 128 when the DTLS or the MQTT binding is enabled. | 32 |
+| `CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX` | Size of the client certificate, trust anchor and private key buffers of the Security object; applies in every mode because the buffers are shared. | 4096 |
 | `CONFIG_COAP_EXTENDED_OPTIONS_LEN_VALUE` | Length of a CoAP option value. The module sizes it so that the endpoint client name fits. | 64 |
 | `CONFIG_SIRENA_LWM2M_ENGINE_QUEUE_SIZE` | Number of queued engine requests. | 8 |
 | `CONFIG_SIRENA_LWM2M_ENGINE_STACK_SIZE` | Stack size of the engine thread. | 2048 |
