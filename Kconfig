@@ -112,6 +112,19 @@ config SIRENA_LWM2M_CREDENTIAL_MAX
 	  need room for the PSK identity and the PSK key, so the size is
 	  raised when one of them is enabled.
 
+config SIRENA_LWM2M_CERTIFICATE_MAX
+	int "Maximum size of X.509 certificate material (client cert, trust anchor, private key)"
+	default 4096
+	range 256 8192
+	help
+	  The Security object stores the client certificate, the CA / trust
+	  anchor and the private key in buffers of this size. It controls
+	  certificate security mode only: realistic DER / PEM X.509
+	  material needs far more room than a pre-shared key, and this
+	  symbol provides it without inflating
+	  CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX. PSK and noSec modes and the
+	  CREDENTIAL_MAX limit are unaffected.
+
 config SIRENA_LWM2M_SERVER_STRING_MAX
 	int "Maximum length of a server side string (binding, optional strings)"
 	default 32
