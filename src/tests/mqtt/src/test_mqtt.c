@@ -1576,6 +1576,42 @@ ZTEST(sirena_lwm2m_mqtt, test_the_plain_scheme_is_refused_for_a_psk_server)
     zassert_equal(rc, -EINVAL, "a psk server must not use the plain scheme: %d", rc);
 }
 
+ZTEST(sirena_lwm2m_mqtt, test_the_plain_scheme_is_refused_for_a_certificate_server)
+{
+    char uri[64];
+    int rc;
+
+    rc = peer_stop_transport();
+    zassert_equal(rc, 0, "the transport stop failed: %d", rc);
+
+    rc = snprintf(uri, sizeof(uri), "mqtt://127.0.0.1:%u", peer_port);
+    zassert_true(rc > 0 && rc < (int)sizeof(uri), "the server uri build failed");
+
+    rc = peer_provision(uri, SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE);
+    zassert_equal(rc, 0, "the provisioning failed: %d", rc);
+
+    rc = peer_start_transport();
+    zassert_equal(rc, -EINVAL, "a certificate server must not use the plain scheme: %d", rc);
+}
+
+ZTEST(sirena_lwm2m_mqtt, test_the_unsupported_security_modes_are_refused)
+{
+    char uri[64];
+    int rc;
+
+    rc = peer_stop_transport();
+    zassert_equal(rc, 0, "the transport stop failed: %d", rc);
+
+    rc = snprintf(uri, sizeof(uri), "mqtts://127.0.0.1:%u", peer_tls_port);
+    zassert_true(rc > 0 && rc < (int)sizeof(uri), "the server uri build failed");
+
+    rc = peer_provision(uri, SIRENA_LWM2M_SECURITY_MODE_RPK);
+    zassert_equal(rc, 0, "the provisioning failed: %d", rc);
+
+    rc = peer_start_transport();
+    zassert_equal(rc, -ENOTSUP, "an unsupported security mode must be refused: %d", rc);
+}
+
 ZTEST(sirena_lwm2m_mqtt, test_the_secure_transport_connects_to_the_broker)
 {
     char uri[64];

@@ -6,6 +6,7 @@ project(sirena_lwm2m_dtls_tests)
 
 target_sources(app PRIVATE src/test_dtls.c)
 
+target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../lib)
 target_link_libraries(app PRIVATE sirena_lwm2m)
 
 if(CONFIG_MBEDTLS_BUILTIN)
@@ -17,3 +18,4 @@ zephyr_linker_sources(DATA_SECTIONS sections-ram.ld)
 zephyr_iterable_section(
   NAME coap_resource_peer_service
   GROUP DATA_REGION ${XIP_ALIGN_WITH_INPUT})
+
