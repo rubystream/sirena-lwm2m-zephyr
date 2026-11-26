@@ -143,17 +143,21 @@ static int mqtt_transport_setup(enum sirena_lwm2m_uri_scheme scheme)
         return -EINVAL;
     }
 
-    rc = sirena_lwm2m_credentials_register(CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG);
-    if (rc != 0) {
-        return rc;
-    }
-
     {
-        int64_t mode = SIRENA_LWM2M_SECURITY_MODE_PSK;
+        int64_t mode;
 
-        (void)sirena_lwm2m_get_integer(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
-                                        SIRENA_LWM2M_SECURITY_MODE_RESOURCE,
-                                        &mode);
+        rc = sirena_lwm2m_get_integer(SIRENA_LWM2M_SECURITY_OBJECT_ID, 0U,
+                                      SIRENA_LWM2M_SECURITY_MODE_RESOURCE,
+                                      &mode);
+        if (rc != 0) {
+            return rc;
+        }
+
+        rc = sirena_lwm2m_credentials_register_mode(CONFIG_SIRENA_LWM2M_MQTT_SEC_TAG,
+                                                   mode);
+        if (rc != 0) {
+            return rc;
+        }
 
         if (mode == SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE) {
             client.transport.tls.config.peer_verify = ZSOCK_TLS_PEER_VERIFY_REQUIRED;

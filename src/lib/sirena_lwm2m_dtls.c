@@ -46,9 +46,9 @@ static void credentials_release(void)
     sirena_lwm2m_credentials_release(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG);
 }
 
-static int credentials_register(void)
+static int credentials_register(int64_t mode)
 {
-    return sirena_lwm2m_credentials_register(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG);
+    return sirena_lwm2m_credentials_register_mode(CONFIG_SIRENA_LWM2M_DTLS_SEC_TAG, mode);
 }
 
 static void dtls_session_close(void)
@@ -106,7 +106,7 @@ static int dtls_session_open(void)
         return rc;
     }
 
-    rc = credentials_register();
+    rc = credentials_register(mode);
     if (rc != 0) {
         return rc;
     }

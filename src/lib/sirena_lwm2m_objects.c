@@ -384,6 +384,7 @@ static int value_write(uint16_t object_id, uint16_t instance_id, uint16_t resour
         if (length > entry->capacity) {
             return -ENOMEM;
         }
+        memset(entry->data, 0, entry->capacity);
         if (length > 0U) {
             if (buffer == NULL) {
                 return -EINVAL;
