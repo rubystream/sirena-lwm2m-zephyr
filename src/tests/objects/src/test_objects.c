@@ -340,7 +340,7 @@ ZTEST(sirena_lwm2m_objects, test_unknown_targets_rejected)
 
 ZTEST(sirena_lwm2m_objects, test_capacity_overflow_rejected)
 {
-    static char oversized[CONFIG_SIRENA_LWM2M_SERVER_URI_MAX + 8U];
+    static char oversized[CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX + 8U];
     uint8_t guarded[32];
     size_t small = 4U;
     int rc;

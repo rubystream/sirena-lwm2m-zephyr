@@ -282,7 +282,8 @@ the announced LwM2M version come from Kconfig:
 | Kconfig symbol | Purpose | Default |
 | --- | --- | --- |
 | `CONFIG_SIRENA_LWM2M_SERVER_URI_MAX` | LwM2M server URI length | 64 |
-| `CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX` | Identity, server public key, secret key size. It is 128 when the DTLS binding is enabled. | 32 |
+| `CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX` | Size of the PSK identity, public key, secret key and optional SMS binding buffers. It is 128 when the DTLS or MQTT binding is enabled; certificate material uses `CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX`. | 32 |
+| `CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX` | Size of the client certificate, trust anchor / CA and private key buffers of the Security object. These buffers also carry PSK material, so the size applies in every mode. | 4096 |
 | `CONFIG_SIRENA_LWM2M_SERVER_STRING_MAX` | Server-side strings such as the binding | 32 |
 | `CONFIG_SIRENA_LWM2M_DEVICE_STRING_MAX` | Device metadata strings | 32 |
 | `CONFIG_SIRENA_LWM2M_LWM2M_VERSION` | The LwM2M version the client announces in the registration | 1.2 |

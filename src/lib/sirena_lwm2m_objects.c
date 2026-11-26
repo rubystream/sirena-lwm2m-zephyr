@@ -39,9 +39,9 @@ struct sirena_lwm2m_object_definition {
 
 struct sirena_lwm2m_security_instance {
     char server_uri[CONFIG_SIRENA_LWM2M_SERVER_URI_MAX + 1U];
-    uint8_t identity[CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX];
-    uint8_t server_public_key[CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX];
-    uint8_t secret_key[CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX];
+    uint8_t identity[CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX];
+    uint8_t server_public_key[CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX];
+    uint8_t secret_key[CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX];
 #if IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL)
     uint8_t sms_binding_key_parameters[CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX];
     uint8_t sms_binding_secret_key[CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX];
@@ -84,13 +84,13 @@ static struct sirena_lwm2m_resource_entry security_resources[] = {
       .kind = SIRENA_LWM2M_RESOURCE_VALUE },
     { .id = 3U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_OPAQUE,
       .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = security_instance.identity,
-      .capacity = CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX },
+      .capacity = CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX },
     { .id = 4U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_OPAQUE,
       .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = security_instance.server_public_key,
-      .capacity = CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX },
+      .capacity = CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX },
     { .id = 5U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_OPAQUE,
       .kind = SIRENA_LWM2M_RESOURCE_VALUE, .data = security_instance.secret_key,
-      .capacity = CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX },
+      .capacity = CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX },
     { .id = 10U, .operations = SIRENA_LWM2M_OP_READ, .type = SIRENA_LWM2M_VALUE_INTEGER,
       .kind = SIRENA_LWM2M_RESOURCE_VALUE },
 #if IS_ENABLED(CONFIG_SIRENA_LWM2M_OBJECT_SECURITY_OPTIONAL)

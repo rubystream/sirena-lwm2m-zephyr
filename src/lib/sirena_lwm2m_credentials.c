@@ -129,15 +129,15 @@ static int certificate_credentials_register(sec_tag_t tag)
         return -ENOENT;
     }
 
-    if (client_certificate_length > CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX) {
+    if (client_certificate_length > CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX) {
         return -EINVAL;
     }
 
-    if (trust_anchor_length > CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX) {
+    if (trust_anchor_length > CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX) {
         return -EINVAL;
     }
 
-    if (private_key_length > CONFIG_SIRENA_LWM2M_CREDENTIAL_MAX) {
+    if (private_key_length > CONFIG_SIRENA_LWM2M_CERTIFICATE_MAX) {
         return -EINVAL;
     }
 
