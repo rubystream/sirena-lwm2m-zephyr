@@ -159,6 +159,17 @@ static int transport_binding_for(const char *uri, int64_t mode,
         default:
             return -EINVAL;
         }
+    case SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE:
+        switch (scheme) {
+        case SIRENA_LWM2M_URI_SCHEME_COAPS:
+            *binding = SIRENA_LWM2M_TRANSPORT_BINDING_DTLS;
+            return 0;
+        case SIRENA_LWM2M_URI_SCHEME_MQTTS:
+            *binding = SIRENA_LWM2M_TRANSPORT_BINDING_MQTT;
+            return 0;
+        default:
+            return -EINVAL;
+        }
     case SIRENA_LWM2M_SECURITY_MODE_NOSEC:
         if (!IS_ENABLED(CONFIG_SIRENA_LWM2M_TRANSPORT_NOSEC)) {
             return -EPERM;
