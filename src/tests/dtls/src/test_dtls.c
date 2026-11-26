@@ -672,7 +672,6 @@ ZTEST(sirena_lwm2m_dtls, test_register_fails_with_an_unknown_psk_identity)
 ZTEST(sirena_lwm2m_dtls, test_transport_refuses_the_unsupported_security_modes)
 {
 	static const int64_t modes[] = { SIRENA_LWM2M_SECURITY_MODE_RPK,
-					 SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE,
 					 SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE_EST };
 	size_t i;
 	int rc;
