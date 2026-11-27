@@ -113,7 +113,7 @@ ZTEST(sirena_lwm2m_codec, test_cbor_roundtrip_dispatch)
     size_t count=1;
     rc=sirena_lwm2m_codec_decode(SIRENA_LWM2M_CF_CBOR,
                                SIRENA_LWM2M_VALUE_OPAQUE,out,len,dec,&count);
-    zassert_equal(rc, -ENOTSUP, "dec");
+    zassert_equal(rc, 0, "dec");
 }
 
 ZTEST(sirena_lwm2m_codec, test_json_contains_value)

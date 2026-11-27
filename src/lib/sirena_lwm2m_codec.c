@@ -1154,10 +1154,16 @@ static int decode_json_value(const char *buf, size_t len,
         break;
     }
     case SIRENA_LWM2M_VALUE_FLOAT: {
+        char tmp[65];
         char *endptr = NULL;
-        double val = strtod(buf + pos, &endptr);
-        if (endptr == buf + pos) return -EINVAL;
-        pos = (size_t)(endptr - buf);
+        size_t avail = len - pos;
+        double val;
+        if (avail == 0U || avail > (sizeof(tmp) - 1U)) return -EINVAL;
+        memcpy(tmp, buf + pos, avail);
+        tmp[avail] = '\0';
+        val = strtod(tmp, &endptr);
+        if (endptr == tmp) return -EINVAL;
+        pos += (size_t)(endptr - tmp);
         v->data.floating_point = val;
         break;
     }
