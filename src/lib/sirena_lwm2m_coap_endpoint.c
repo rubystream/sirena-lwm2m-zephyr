@@ -792,7 +792,7 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         size_t target_index;
         bool unknown_path = false;
         bool resource_error = false;
-        int unsupported_format = -1;
+        bool unsupported_format = false;
         int negotiated = -1;
         size_t candidate;
         bool negotiated_found = false;
@@ -890,8 +890,8 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
             uint16_t preferred = (uint16_t)CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
             uint16_t selected = 0U;
 
-            if (sirena_lwm2m_content_format_negotiate_multi(accepted, accepted_count, preferred, values,
-                                                           value_count, &selected) == 0) {
+            if (sirena_lwm2m_content_format_negotiate_multi(accepted, accepted_count, preferred,
+                                                           values, value_count, &selected) == 0) {
                 negotiated = (int)selected;
                 negotiated_found = true;
             } else if (accepted_count > 0U) {
