@@ -868,9 +868,8 @@ which is 64 bytes by default. A request that does not fit is rejected with
 ## Not in this binding
 
 - Content format negotiation on the registration payload.
-- The periodic re-registration timer that drives the Update. The Update is
-  implemented and reachable through the API, the scheduling policy belongs to
-  the protocol layer.
+- The scheduling policy for the periodic re-registration timer is implemented
+  in the transport polling path; the Update remains reachable through the API.
 - Host names and IPv6 addresses in the server URI.
 - The Certificate with EST security mode. It is refused with
   `-ENOTSUP`.
