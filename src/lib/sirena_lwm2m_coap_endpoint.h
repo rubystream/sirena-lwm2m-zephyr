@@ -27,5 +27,6 @@ int sirena_lwm2m_coap_endpoint_request(const struct net_sockaddr *server,
                                        char *location, size_t location_capacity);
 int sirena_lwm2m_coap_endpoint_notify(uint16_t object_id, uint16_t instance_id,
                                       uint16_t resource_id);
+void sirena_lwm2m_coap_endpoint_enforce_pmax(void);
 
 #endif

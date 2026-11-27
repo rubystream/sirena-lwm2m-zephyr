@@ -210,8 +210,6 @@ error codes of the API are the negative `errno` values of the table.
 - The creation and the deletion of object instances.
 - The Send operation, as opposed to the Notify operation.
 - The block-wise transfer of large payloads.
-- The periodic re-registration timer and the pmin and pmax attributes of an
-  observation.
 - The decoding of the structured content formats. The codec encodes them, but a
   write in one of them is refused with 4.15.
 

@@ -12,6 +12,8 @@
 #define SIRENA_LWM2M_SECURITY_OBJECT_ID 0U
 #define SIRENA_LWM2M_SERVER_URI_RESOURCE 0U
 #define SIRENA_LWM2M_SECURITY_MODE_RESOURCE 2U
+#define SIRENA_LWM2M_SERVER_OBJECT_ID 1U
+#define SIRENA_LWM2M_SERVER_LIFETIME_RESOURCE 1U
 
 struct sirena_lwm2m_binding_entry {
     enum sirena_lwm2m_transport_binding binding;
@@ -54,6 +56,8 @@ static struct k_mutex transport_lock;
 static const struct sirena_lwm2m_transport_ops *transport_ops;
 static const struct sirena_lwm2m_transport_ops *pending_ops;
 static enum sirena_lwm2m_transport_binding transport_binding;
+static bool transport_registered;
+static int64_t transport_last_registration_ms;
 static char endpoint_name[CONFIG_SIRENA_LWM2M_ENDPOINT_NAME_MAX + 1U];
 
 static int transport_poll(int timeout_ms);
@@ -247,6 +251,27 @@ static int transport_poll(int timeout_ms)
         return 0;
     }
 
+    if (transport_registered) {
+        int64_t lifetime = 0;
+        int rc_lifetime;
+
+        rc_lifetime = sirena_lwm2m_get_integer(SIRENA_LWM2M_SERVER_OBJECT_ID, 0U,
+                                               SIRENA_LWM2M_SERVER_LIFETIME_RESOURCE,
+                                               &lifetime);
+        if (rc_lifetime == 0 && lifetime > 0) {
+            int64_t now = k_uptime_get();
+            int64_t threshold = lifetime * 900;
+
+            if (now - transport_last_registration_ms >= threshold) {
+                int rc = transport_ops->update();
+
+                if (rc == 0) {
+                    transport_last_registration_ms = k_uptime_get();
+                }
+            }
+        }
+    }
+
     return transport_ops->poll(timeout_ms);
 }
 
@@ -267,12 +292,31 @@ static int transport_dispatch(enum sirena_lwm2m_engine_operation operation, void
         return transport_start_binding(SIRENA_LWM2M_TRANSPORT_BINDING_MQTT);
     case SIRENA_LWM2M_ENGINE_OPERATION_STOP_MQTT:
         return transport_stop_binding(SIRENA_LWM2M_TRANSPORT_BINDING_MQTT);
-    case SIRENA_LWM2M_ENGINE_OPERATION_REGISTER:
-        return transport_ops != NULL ? transport_ops->register_client() : -ENOTSUP;
-    case SIRENA_LWM2M_ENGINE_OPERATION_UPDATE:
-        return transport_ops != NULL ? transport_ops->update() : -ENOTSUP;
-    case SIRENA_LWM2M_ENGINE_OPERATION_DEREGISTER:
-        return transport_ops != NULL ? transport_ops->deregister() : -ENOTSUP;
+    case SIRENA_LWM2M_ENGINE_OPERATION_REGISTER: {
+        int rc = transport_ops != NULL ? transport_ops->register_client() : -ENOTSUP;
+
+        if (rc == 0) {
+            transport_registered = true;
+            transport_last_registration_ms = k_uptime_get();
+        }
+        return rc;
+    }
+    case SIRENA_LWM2M_ENGINE_OPERATION_UPDATE: {
+        int rc = transport_ops != NULL ? transport_ops->update() : -ENOTSUP;
+
+        if (rc == 0 && transport_registered) {
+            transport_last_registration_ms = k_uptime_get();
+        }
+        return rc;
+    }
+    case SIRENA_LWM2M_ENGINE_OPERATION_DEREGISTER: {
+        int rc = transport_ops != NULL ? transport_ops->deregister() : -ENOTSUP;
+
+        if (rc == 0) {
+            transport_registered = false;
+        }
+        return rc;
+    }
     case SIRENA_LWM2M_ENGINE_OPERATION_BIND:
         return transport_bind_pending();
     case SIRENA_LWM2M_ENGINE_OPERATION_NOTIFY: {

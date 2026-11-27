@@ -9,6 +9,7 @@
 #include <sirena/lwm2m/protocol.h>
 #include <sirena/lwm2m/transport.h>
 #include <zephyr/kernel.h>
+#include <sirena/lwm2m/object_registry.h>
 #include <zephyr/net/mqtt.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/socket.h>
@@ -43,9 +44,11 @@ struct sirena_lwm2m_mqtt_observation {
     uint16_t instance_id;
     uint16_t resource_id;
     uint16_t content_format;
+    int64_t last_notify_ms;
 };
 
 static atomic_t transport_started;
+static int mqtt_notify(uint16_t object_id, uint16_t instance_id, uint16_t resource_id);
 static struct mqtt_client client;
 static uint8_t rx_buffer[CONFIG_SIRENA_LWM2M_MQTT_BUFFER_SIZE];
 static uint8_t tx_buffer[CONFIG_SIRENA_LWM2M_MQTT_BUFFER_SIZE];
@@ -780,6 +783,7 @@ static void mqtt_handle_observe(const struct sirena_lwm2m_mqtt_message *message)
     observation->used = true;
     observation->token = message->token;
     observation->content_format = response.content_format;
+    observation->last_notify_ms = k_uptime_get();
 
     (void)mqtt_send_response(message->token, SIRENA_LWM2M_MQTT_RESULT_CONTENT, false, 0U, NULL,
                               0U);
@@ -1185,6 +1189,52 @@ static int mqtt_poll(int timeout_ms)
 
     (void)mqtt_live(&client);
 
+    {
+        size_t i;
+        bool handled[ARRAY_SIZE(observations)] = { false };
+
+        for (i = 0U; i < ARRAY_SIZE(observations); ++i) {
+            struct sirena_lwm2m_mqtt_observation *observation = &observations[i];
+            struct sirena_lwm2m_resource_attributes attrs;
+            int64_t now;
+            size_t j;
+            bool already = false;
+
+            if (!observation->used || observation->last_notify_ms == 0) {
+                continue;
+            }
+
+            if (sirena_lwm2m_get_resource_attributes(observation->object_id,
+                                                     observation->instance_id,
+                                                     observation->resource_id,
+                                                     &attrs) != 0 || !attrs.has_pmax) {
+                continue;
+            }
+
+            now = k_uptime_get();
+            if (now - observation->last_notify_ms < (int64_t)attrs.pmax * 1000) {
+                continue;
+            }
+
+            for (j = 0U; j < i; ++j) {
+                if (handled[j] && observations[j].used &&
+                    observations[j].object_id == observation->object_id &&
+                    observations[j].instance_id == observation->instance_id &&
+                    observations[j].resource_id == observation->resource_id) {
+                    already = true;
+                    break;
+                }
+            }
+            if (already) {
+                continue;
+            }
+
+            (void)mqtt_notify(observation->object_id, observation->instance_id,
+                              observation->resource_id);
+            handled[i] = true;
+        }
+    }
+
     k_msleep(timeout_ms);
 
     return 0;
@@ -1217,6 +1267,18 @@ static int mqtt_notify(uint16_t object_id, uint16_t instance_id, uint16_t resour
             continue;
         }
 
+        {
+            struct sirena_lwm2m_resource_attributes notify_attrs;
+            int64_t now = k_uptime_get();
+
+            if (sirena_lwm2m_get_resource_attributes(object_id, instance_id, resource_id,
+                                                     &notify_attrs) == 0 &&
+                notify_attrs.has_pmin && observation->last_notify_ms != 0 &&
+                (now - observation->last_notify_ms) < (int64_t)notify_attrs.pmin * 1000) {
+                continue;
+            }
+        }
+
         rc = sirena_lwm2m_protocol_read(object_id, instance_id, resource_id,
                                         observation->content_format, value_buffer, &length);
         if (rc != 0) {
@@ -1233,6 +1295,7 @@ static int mqtt_notify(uint16_t object_id, uint16_t instance_id, uint16_t resour
         }
 
         if (mqtt_publish_payload(message_buffer, encoded_length) == 0) {
+            observation->last_notify_ms = k_uptime_get();
             sent++;
         }
     }
