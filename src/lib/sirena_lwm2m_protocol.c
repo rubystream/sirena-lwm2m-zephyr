@@ -12,6 +12,8 @@
 
 static uint8_t protocol_raw[CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX];
 static struct sirena_lwm2m_codec_value protocol_values[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
+static uint8_t protocol_send_raw[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES][CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX];
+static struct sirena_lwm2m_codec_value protocol_send_values[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
 
 static int protocol_value_from_resource(const struct sirena_lwm2m_resource *resource,
                                         const void *raw, size_t raw_length,
@@ -754,6 +756,81 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         protocol_set_status(response, SIRENA_LWM2M_STATUS_METHOD_NOT_ALLOWED);
         return 0;
     }
+}
+
+int sirena_lwm2m_protocol_send_encode(const struct sirena_lwm2m_send_record *records,
+                                       size_t count, void *buffer, size_t *length)
+{
+    struct sirena_lwm2m_resource *resource;
+    size_t i;
+    size_t value_count = 0U;
+    size_t encoded_length;
+    int rc;
+
+    if (records == NULL || count == 0U || buffer == NULL || length == NULL) {
+        return -EINVAL;
+    }
+
+    if (count > CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES) {
+        return -EINVAL;
+    }
+
+    for (i = 0U; i < count; ++i) {
+        struct sirena_lwm2m_codec_value *value;
+        size_t raw_length = CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX;
+
+        rc = sirena_lwm2m_find_resource(records[i].object_id, records[i].instance_id,
+                                        records[i].resource_id, &resource);
+        if (rc != 0) {
+            return rc;
+        }
+
+        if ((resource->operations & SIRENA_LWM2M_OP_READ) == 0U || resource->read == NULL) {
+            return -ENOTSUP;
+        }
+
+        rc = sirena_lwm2m_get(records[i].object_id, records[i].instance_id,
+                              records[i].resource_id, protocol_send_raw[i], &raw_length);
+        if (rc != 0) {
+            return rc;
+        }
+
+        value = &protocol_send_values[i];
+        rc = protocol_value_from_resource(resource, protocol_send_raw[i], raw_length, value);
+        if (rc != 0) {
+            return rc;
+        }
+
+        value->object_id = records[i].object_id;
+        value->instance_id = records[i].instance_id;
+        value->resource_id = records[i].resource_id;
+        value->id = records[i].resource_id;
+        value_count++;
+    }
+
+    encoded_length = *length;
+    rc = sirena_lwm2m_codec_encode(SIRENA_LWM2M_CF_SENML_JSON, protocol_send_values,
+                                     value_count, buffer, &encoded_length);
+    if (rc != 0) {
+        return rc;
+    }
+
+    *length = encoded_length;
+    return 0;
+}
+
+int sirena_lwm2m_send(const struct sirena_lwm2m_send_record *records, size_t count)
+{
+    struct sirena_lwm2m_send_request request;
+
+    if (records == NULL || count == 0U) {
+        return -EINVAL;
+    }
+
+    request.records = records;
+    request.count = count;
+
+    return sirena_lwm2m_engine_submit(SIRENA_LWM2M_ENGINE_OPERATION_SEND, &request);
 }
 
 int sirena_lwm2m_notify_resource(uint16_t object_id, uint16_t instance_id,
