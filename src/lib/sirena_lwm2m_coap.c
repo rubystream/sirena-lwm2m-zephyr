@@ -135,7 +135,9 @@ static int coap_deregister(void)
 
 static int coap_poll(int timeout_ms)
 {
-    return sirena_lwm2m_coap_endpoint_poll(timeout_ms);
+    int rc = sirena_lwm2m_coap_endpoint_poll(timeout_ms);
+    sirena_lwm2m_coap_endpoint_enforce_pmax();
+    return rc;
 }
 
 static int coap_notify(uint16_t object_id, uint16_t instance_id, uint16_t resource_id)
