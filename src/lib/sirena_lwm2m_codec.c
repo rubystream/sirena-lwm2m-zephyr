@@ -197,6 +197,85 @@ int sirena_lwm2m_content_format_negotiate(const uint16_t *accepted,
     return -ENOTSUP;
 }
 
+int sirena_lwm2m_content_format_negotiate_multi(const uint16_t *accepted,
+                                                size_t accepted_count,
+                                                uint16_t preferred,
+                                                const struct sirena_lwm2m_codec_value *values,
+                                                size_t value_count, uint16_t *selected)
+{
+    size_t vi;
+    size_t candidate;
+
+    if (selected == NULL || values == NULL || value_count == 0U) {
+        return -EINVAL;
+    }
+
+    *selected = 0U;
+
+    if (accepted != NULL && accepted_count > 0U) {
+        for (candidate = 0U; candidate < accepted_count; ++candidate) {
+            bool ok = true;
+
+            if (accepted[candidate] != SIRENA_LWM2M_CF_SENML_JSON &&
+                accepted[candidate] != SIRENA_LWM2M_CF_SENML_CBOR) {
+                continue;
+            }
+            for (vi = 0U; vi < value_count; ++vi) {
+                if (!sirena_lwm2m_codec_can_encode(accepted[candidate], values[vi].type)) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) {
+                *selected = accepted[candidate];
+                return 0;
+            }
+        }
+        return -ENOTSUP;
+    }
+
+    {
+        uint16_t pref = preferred;
+
+        if (pref != SIRENA_LWM2M_CF_SENML_JSON && pref != SIRENA_LWM2M_CF_SENML_CBOR) {
+            pref = SIRENA_LWM2M_CF_SENML_JSON;
+        }
+        {
+            bool ok = true;
+            for (vi = 0U; vi < value_count; ++vi) {
+                if (!sirena_lwm2m_codec_can_encode(pref, values[vi].type)) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) {
+                *selected = pref;
+                return 0;
+            }
+        }
+    }
+
+    {
+        const uint16_t formats[] = { SIRENA_LWM2M_CF_SENML_JSON, SIRENA_LWM2M_CF_SENML_CBOR };
+
+        for (candidate = 0U; candidate < ARRAY_SIZE(formats); ++candidate) {
+            bool ok = true;
+            for (vi = 0U; vi < value_count; ++vi) {
+                if (!sirena_lwm2m_codec_can_encode(formats[candidate], values[vi].type)) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) {
+                *selected = formats[candidate];
+                return 0;
+            }
+        }
+    }
+
+    return -ENOTSUP;
+}
+
 static int encode_tlv_value(void *buffer, size_t capacity, size_t *used,
                            const struct sirena_lwm2m_codec_value *v)
 {
@@ -571,9 +650,6 @@ int sirena_lwm2m_codec_encode(uint16_t content_format,
         for (i = 0U; i < value_count; ++i) {
             uint8_t rec = 0xA0 | 2U;
             char rid[64];
-            if (i == 0U ? false : (values[i].object_id != values[0].object_id || values[i].instance_id != values[0].instance_id)) {
-
-            }
             if (values[i].object_id != values[0].object_id || values[i].instance_id != values[0].instance_id || !same_base) {
                 snprintf(rid, sizeof(rid), "/%u/%u/%u", values[i].object_id, values[i].instance_id,
                          effective_resource_id(&values[i]));

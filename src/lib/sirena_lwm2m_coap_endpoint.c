@@ -366,9 +366,18 @@ static int composite_parse_path_text(const char *text, size_t length, uint16_t *
         pos++;
     }
 
-    if (part != 3U) {
+    if (part == 0U || part > 3U) {
         return -EINVAL;
     }
+
+    if (part == 1U) {
+        *instance_id = 0U;
+        *resource_id = 0U;
+    } else if (part == 2U) {
+        *resource_id = 0U;
+    }
+
+
 
     *object_id = (uint16_t)parts[0];
     *instance_id = (uint16_t)parts[1];
@@ -382,16 +391,25 @@ static size_t composite_collect_json(const char *buf, size_t len, uint16_t *oids
 {
     size_t count = 0U;
     size_t pos = 0U;
+    char base[128];
+    base[0] = '\0';
 
     while (pos < len) {
-
         size_t key_pos = pos;
         bool found = false;
+        bool is_base = false;
 
         while (key_pos + 2U < len) {
+            if (buf[key_pos] == '"' && buf[key_pos + 1U] == 'b' &&
+                buf[key_pos + 2U] == 'n' && key_pos + 3U < len && buf[key_pos + 3U] == '"') {
+                found = true;
+                is_base = true;
+                break;
+            }
             if (buf[key_pos] == '"' && buf[key_pos + 1U] == 'n' &&
                 buf[key_pos + 2U] == '"') {
                 found = true;
+                is_base = false;
                 break;
             }
             key_pos++;
@@ -402,7 +420,7 @@ static size_t composite_collect_json(const char *buf, size_t len, uint16_t *oids
         }
 
         {
-            size_t after = key_pos + 3U;
+            size_t after = is_base ? key_pos + 4U : key_pos + 3U;
             size_t quote_start;
             size_t quote_end;
 
@@ -411,7 +429,7 @@ static size_t composite_collect_json(const char *buf, size_t len, uint16_t *oids
                 after++;
             }
             if (after >= len || buf[after] != ':') {
-                pos = key_pos + 3U;
+                pos = key_pos + (is_base ? 4U : 3U);
                 continue;
             }
             after++;
@@ -432,14 +450,38 @@ static size_t composite_collect_json(const char *buf, size_t len, uint16_t *oids
                 break;
             }
 
-            if (count <= capacity) {
-                if (count == capacity) {
+            if (is_base) {
+                size_t bl = quote_end - quote_start;
+                if (bl < sizeof(base)) {
+                    memcpy(base, buf + quote_start, bl);
+                    base[bl] = '\0';
+                }
+            } else if (count <= capacity) {
+                char target[256];
+                size_t tlen = 0U;
 
+                if (base[0] != '\0' && !(quote_start < len && buf[quote_start] == '/')) {
+                    size_t blen = strlen(base);
+                    if (blen + (quote_end - quote_start) < sizeof(target)) {
+                        memcpy(target, base, blen);
+                        tlen = blen;
+                    }
+                }
+                if (tlen + (quote_end - quote_start) < sizeof(target)) {
+                    memcpy(target + tlen, buf + quote_start, quote_end - quote_start);
+                    tlen += (quote_end - quote_start);
+                    target[tlen] = '\0';
+                } else {
+                    target[0] = '\0';
+                    tlen = 0U;
+                }
+
+                if (count == capacity) {
                     count = capacity + 1U;
                     break;
                 }
-                if (composite_parse_path_text(buf + quote_start, quote_end - quote_start,
-                                             &oids[count], &iids[count], &rids[count]) == 0) {
+                if (tlen > 0U && composite_parse_path_text(target, tlen, &oids[count], &iids[count],
+                                                          &rids[count]) == 0) {
                     count++;
                 }
             }
@@ -455,10 +497,26 @@ static size_t composite_collect_cbor(const uint8_t *buf, size_t len, uint16_t *o
 {
     size_t count = 0U;
     size_t i = 0U;
+    char base[128];
+    base[0] = '\0';
 
     while (i + 2U < len) {
-        if (buf[i] == 0x61U && buf[i + 1U] == (uint8_t)'n') {
-            size_t j = i + 2U;
+        bool is_base = false;
+        bool is_name = false;
+
+        if (buf[i] == 0x62U && buf[i + 1U] == (uint8_t)'b' && buf[i + 2U] == (uint8_t)'n') {
+            is_base = true;
+        } else if (buf[i] == 0x61U && buf[i + 1U] == (uint8_t)'n') {
+            is_name = true;
+        }
+
+        if (!is_base && !is_name) {
+            i++;
+            continue;
+        }
+
+        {
+            size_t j = is_base ? i + 3U : i + 2U;
             size_t str_len = 0U;
             size_t str_start = 0U;
 
@@ -477,12 +535,45 @@ static size_t composite_collect_cbor(const uint8_t *buf, size_t len, uint16_t *o
             }
 
             if (str_len > 0U && str_start + str_len <= len) {
-                if (count == capacity) {
-                    count = capacity + 1U;
-                } else if (count < capacity) {
-                    if (composite_parse_path_text((const char *)(buf + str_start), str_len,
-                                                 &oids[count], &iids[count], &rids[count]) == 0) {
-                        count++;
+                if (is_base) {
+                    if (str_len < sizeof(base)) {
+                        memcpy(base, buf + str_start, str_len);
+                        base[str_len] = '\0';
+                    }
+                } else {
+                    if (count == capacity) {
+                        count = capacity + 1U;
+                        i = str_start + str_len;
+                        if (i <= j) {
+                            i = j + 1U;
+                        }
+                        continue;
+                    }
+                    if (count < capacity) {
+                        char target[256];
+                        size_t tlen = 0U;
+
+                        if (base[0] != '\0' && buf[str_start] != (uint8_t)'/') {
+                            size_t blen = strlen(base);
+                            if (blen + str_len < sizeof(target)) {
+                                memcpy(target, base, blen);
+                                tlen = blen;
+                            }
+                        }
+                        if (tlen + str_len < sizeof(target)) {
+                            memcpy(target + tlen, buf + str_start, str_len);
+                            tlen += str_len;
+                            target[tlen] = '\0';
+                        } else {
+                            target[0] = '\0';
+                            tlen = 0U;
+                        }
+
+                        if (tlen > 0U &&
+                            composite_parse_path_text(target, tlen, &oids[count], &iids[count],
+                                                     &rids[count]) == 0) {
+                            count++;
+                        }
                     }
                 }
             }
@@ -492,60 +583,9 @@ static size_t composite_collect_cbor(const uint8_t *buf, size_t len, uint16_t *o
             }
             continue;
         }
-        i++;
     }
 
     return count;
-}
-
-static int endpoint_value_from_resource(const struct sirena_lwm2m_resource *resource,
-                                        const void *raw, size_t raw_length,
-                                        struct sirena_lwm2m_codec_value *value)
-{
-    memset(value, 0, sizeof(*value));
-
-    switch (resource->type) {
-    case SIRENA_LWM2M_VALUE_BOOLEAN:
-        if (raw_length < sizeof(bool)) {
-            return -EINVAL;
-        }
-        value->type = SIRENA_LWM2M_VALUE_BOOLEAN;
-        memcpy(&value->data.boolean, raw, sizeof(bool));
-        return 0;
-    case SIRENA_LWM2M_VALUE_INTEGER:
-        if (raw_length < sizeof(int64_t)) {
-            return -EINVAL;
-        }
-        value->type = SIRENA_LWM2M_VALUE_INTEGER;
-        memcpy(&value->data.integer, raw, sizeof(int64_t));
-        return 0;
-    case SIRENA_LWM2M_VALUE_UNSIGNED:
-        if (raw_length < sizeof(uint64_t)) {
-            return -EINVAL;
-        }
-        value->type = SIRENA_LWM2M_VALUE_UNSIGNED;
-        memcpy(&value->data.unsigned_integer, raw, sizeof(uint64_t));
-        return 0;
-    case SIRENA_LWM2M_VALUE_FLOAT:
-        if (raw_length < sizeof(double)) {
-            return -EINVAL;
-        }
-        value->type = SIRENA_LWM2M_VALUE_FLOAT;
-        memcpy(&value->data.floating_point, raw, sizeof(double));
-        return 0;
-    case SIRENA_LWM2M_VALUE_STRING:
-        value->type = SIRENA_LWM2M_VALUE_STRING;
-        value->data.string.value = raw;
-        value->data.string.length = raw_length;
-        return 0;
-    case SIRENA_LWM2M_VALUE_OPAQUE:
-        value->type = SIRENA_LWM2M_VALUE_OPAQUE;
-        value->data.opaque.value = raw;
-        value->data.opaque.length = raw_length;
-        return 0;
-    default:
-        return -ENOTSUP;
-    }
 }
 
 static void endpoint_handle_request(struct coap_packet *packet, const struct net_sockaddr *peer,
@@ -750,7 +790,8 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         struct sirena_lwm2m_codec_value values[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
         size_t value_count = 0U;
         size_t target_index;
-        bool unknown = false;
+        bool unknown_path = false;
+        bool resource_error = false;
         int unsupported_format = -1;
         int negotiated = -1;
         size_t candidate;
@@ -801,19 +842,19 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
             if (sirena_lwm2m_find_resource(oids[target_index], iids[target_index],
                                             rids[target_index], &resource) != 0 ||
                 (resource->operations & SIRENA_LWM2M_OP_READ) == 0U || resource->read == NULL) {
-                unknown = true;
+                unknown_path = true;
                 continue;
             }
 
             if (sirena_lwm2m_get(oids[target_index], iids[target_index], rids[target_index],
                                  composite_raw[target_index], &raw_length) != 0) {
-                unknown = true;
+                resource_error = true;
                 continue;
             }
 
-            if (endpoint_value_from_resource(resource, composite_raw[target_index], raw_length,
+            if (sirena_lwm2m_protocol_value_from_resource(resource, composite_raw[target_index], raw_length,
                                             &values[value_count]) != 0) {
-                unknown = true;
+                resource_error = true;
                 continue;
             }
 
@@ -824,9 +865,16 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
             value_count++;
         }
 
-        if (value_count == 0U && unknown) {
+        if (unknown_path) {
             (void)endpoint_send_message(response_type, response_message_id, token_length, token,
                                         COAP_RESPONSE_CODE_NOT_FOUND, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
+        if (resource_error) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_INTERNAL_ERROR, false, 0U, -1, NULL, 0U,
                                         peer, peer_length);
             return;
         }
@@ -838,73 +886,16 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
             return;
         }
 
-        if (accepted_count > 0U) {
-            for (candidate = 0U; candidate < accepted_count; ++candidate) {
-                bool ok = true;
-                size_t vi;
-
-                if (accepted[candidate] != SIRENA_LWM2M_CF_SENML_JSON &&
-                    accepted[candidate] != SIRENA_LWM2M_CF_SENML_CBOR) {
-                    continue;
-                }
-
-                for (vi = 0U; vi < value_count; ++vi) {
-                    if (!sirena_lwm2m_codec_can_encode(accepted[candidate], values[vi].type)) {
-                        ok = false;
-                        break;
-                    }
-                }
-                if (ok) {
-                    negotiated = (int)accepted[candidate];
-                    negotiated_found = true;
-                    break;
-                }
-            }
-        }
-
-        if (!negotiated_found && accepted_count == 0U) {
+        {
             uint16_t preferred = (uint16_t)CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
-            if (preferred != SIRENA_LWM2M_CF_SENML_JSON && preferred != SIRENA_LWM2M_CF_SENML_CBOR) {
-                preferred = SIRENA_LWM2M_CF_SENML_JSON;
-            }
-            if (sirena_lwm2m_codec_can_encode(preferred, values[0].type)) {
-                bool ok = true;
-                size_t vi;
-                for (vi = 0U; vi < value_count; ++vi) {
-                    if (!sirena_lwm2m_codec_can_encode(preferred,
-                                                       values[vi].type)) {
-                        ok = false;
-                        break;
-                    }
-                }
-                if (ok) {
-                    negotiated = (int)preferred;
-                    negotiated_found = true;
-                }
-            }
-        }
+            uint16_t selected = 0U;
 
-        if (!negotiated_found && accepted_count > 0U) {
-
-            unsupported_format = 1;
-        }
-
-        if (!negotiated_found && accepted_count == 0U && !unsupported_format) {
-            const uint16_t formats[] = { SIRENA_LWM2M_CF_SENML_JSON, SIRENA_LWM2M_CF_SENML_CBOR };
-            for (candidate = 0U; candidate < ARRAY_SIZE(formats); ++candidate) {
-                bool ok = true;
-                size_t vi;
-                for (vi = 0U; vi < value_count; ++vi) {
-                    if (!sirena_lwm2m_codec_can_encode(formats[candidate], values[vi].type)) {
-                        ok = false;
-                        break;
-                    }
-                }
-                if (ok) {
-                    negotiated = (int)formats[candidate];
-                    negotiated_found = true;
-                    break;
-                }
+            if (sirena_lwm2m_content_format_negotiate_multi(accepted, accepted_count, preferred, values,
+                                                           value_count, &selected) == 0) {
+                negotiated = (int)selected;
+                negotiated_found = true;
+            } else if (accepted_count > 0U) {
+                unsupported_format = 1;
             }
         }
 
