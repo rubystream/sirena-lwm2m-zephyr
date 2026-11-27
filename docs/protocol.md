@@ -40,7 +40,7 @@ maps them to the LwM2M operations:
 | 4.04 Not Found | The path does not resolve to a resource of the registry. |
 | 4.05 Method Not Allowed | The resource does not support the operation. A read of a resource that only executes, a write of a read-only resource and an execute of a resource that only reads are refused with this code. |
 | 4.06 Not Acceptable | The server named no content format the client can encode the resource in, or it named more of them than the client can hold. |
-| 4.15 Unsupported Content-Format | The payload of a write uses a content format the codec cannot decode. The codec decodes the plain text, the opaque and the TLV formats; the structured formats are encoded but not decoded yet. |
+| 4.15 Unsupported Content-Format | The payload of a write uses a content format the codec cannot decode. The codec decodes all formats it can encode. |
 | 5.00 Internal Server Error | The client could not build the representation of the resource, for example because the encoded value does not fit the configured buffer. |
 | 5.03 Service Unavailable | The observation capacity of the client is exhausted. |
 
@@ -82,8 +82,7 @@ Content-Format option.
 
 The formats the codec knows are the identifiers of `sirena/lwm2m/codec.h`: plain
 text, TLV, JSON, CBOR, SenML JSON, SenML CBOR, SenML ETCH JSON, SenML ETCH CBOR
-and opaque. The codec encodes all of them and decodes the plain text, the opaque
-and the TLV formats.
+and opaque. The codec encodes all of them and decodes every format it can encode.
 
 ## The observations
 
