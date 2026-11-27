@@ -824,6 +824,7 @@ static void mqtt_handle_message(const struct sirena_lwm2m_mqtt_message *message)
     case SIRENA_LWM2M_MQTT_OPERATION_UPDATE:
     case SIRENA_LWM2M_MQTT_OPERATION_DEREGISTER:
     case SIRENA_LWM2M_MQTT_OPERATION_NOTIFY:
+    case SIRENA_LWM2M_MQTT_OPERATION_SEND:
         return;
     case SIRENA_LWM2M_MQTT_OPERATION_READ:
         mqtt_handle_read(message);
