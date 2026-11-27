@@ -160,6 +160,7 @@ static int transport_binding_for(const char *uri, int64_t mode,
             return -EINVAL;
         }
     case SIRENA_LWM2M_SECURITY_MODE_CERTIFICATE:
+    case SIRENA_LWM2M_SECURITY_MODE_RPK:
         switch (scheme) {
         case SIRENA_LWM2M_URI_SCHEME_COAPS:
             *binding = SIRENA_LWM2M_TRANSPORT_BINDING_DTLS;

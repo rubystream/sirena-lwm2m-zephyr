@@ -111,7 +111,7 @@ completion.
 | `mqtts://` | 2, Certificate | MQTT | The MQTT binding starts and protects the connection with TLS. |
 | `coap://` | 2, Certificate | none | `-EINVAL`, a certificate server needs the secure scheme. |
 | `mqtt://` | 2, Certificate | none | `-EINVAL`, a certificate server needs the secure scheme. |
-| any | 1, 4 | none | `-ENOTSUP`, the security mode is not implemented. |
+| any | 4 | none | `-ENOTSUP`, the security mode is not implemented. |
 
 The selection never falls back: a server that needs DTLS or TLS is never
 contacted in the clear, and a noSec server is never contacted over DTLS
@@ -267,7 +267,7 @@ never contacted in the clear:
 | --- | --- |
 | 3, NoSec | The server is served, but only when the noSec development gate is open. |
 | 0, Pre-Shared Key | `-EINVAL`, the server needs the secure scheme and the DTLS binding. |
-| 1, 4 | `-ENOTSUP`, the security mode is not implemented. |
+| 4 | `-ENOTSUP`, the security mode is not implemented. |
 
 The check belongs to the binding and not only to the selection of the
 transport, so calling `sirena_lwm2m_coap_start()` directly is safe as well.
@@ -338,7 +338,7 @@ Update without a prior registration fails with `-EINVAL`.
 | `-EINVAL` | The endpoint name is missing or invalid, the server URI is malformed, the server is provisioned with the Pre-Shared Key security mode and needs the secure scheme, no registration exists for Update or Deregister, the Server (1) or the Device (3) object instance is missing from the registry, or the request path does not fit the CoAP path buffer. |
 | `-EALREADY` | The engine thread is already running. Only `sirena_lwm2m_engine_start()` returns it. |
 | `-EAGAIN` | The engine request queue is full. |
-| `-ENOTSUP` | The server URI uses the `coaps://` scheme, the host is not a numeric IPv4 address, no binding is bound to the transport interface, the engine thread is not running, or the security mode of the server is not implemented: Raw Public Key (1) or Certificate with EST (4). |
+| `-ENOTSUP` | The server URI uses the `coaps://` scheme, the host is not a numeric IPv4 address, no binding is bound to the transport interface, the engine thread is not running, or the security mode of the server is not implemented: Certificate with EST (4). |
 | `-EPERM` | The noSec development gate is closed and the server is provisioned with the NoSec security mode. |
 | `-ENOENT` | The Security object, the Server object or the resource that holds the server URI or the lifetime does not exist, or the server answered `4.04 Not Found`, which means that the registration is unknown to the server. |
 | `-ENOMEM` | The registration payload or the request path does not fit the configured buffer. |
@@ -474,7 +474,7 @@ a TLS security mode.
 | `0` | The server accepted the request. |
 | `-EINVAL` | The endpoint name is missing or invalid, the server URI is malformed or does not use the `coaps://` scheme, the server is provisioned with the NoSec security mode, the PSK identity or the PSK is longer than the configured limit, no registration exists for Update or Deregister, the Server (1) or the Device (3) object instance is missing from the registry, or the request path does not fit the CoAP path buffer. |
 | `-EPERM` | The noSec development gate is closed and the server is provisioned with the NoSec security mode. The transport refuses to select the secure binding for such a server. |
-| `-ENOTSUP` | The security mode of the server is not implemented: Raw Public Key (1) or Certificate with EST (4). |
+| `-ENOTSUP` | The security mode of the server is not implemented: Certificate with EST (4). |
 | `-ENOENT` | The Security object, the Server object or the resource that holds the server URI or the lifetime does not exist, the Security object holds no PSK identity or no PSK, or the server answered `4.04 Not Found`. |
 | `-EACCES` | The DTLS handshake failed. The server rejected the pre-shared key or the key exchange did not complete. |
 | `-ENOMEM` | The registration payload or the request path does not fit the configured buffer, or the PSK is longer than `CONFIG_MBEDTLS_PSK_MAX_LEN`. |
@@ -784,7 +784,7 @@ can match it.
 | `0` | The server accepted the operation. |
 | `-EINVAL` | The endpoint name is missing, the server URI is malformed or does not use the `mqtt://` or the `mqtts://` scheme, the client identifier or the topic prefix is too long, the server is provisioned with the Pre-Shared Key security mode and needs the secure scheme, the server is provisioned with the NoSec security mode and needs the plain scheme, or the URI of a request does not name a resource. |
 | `-EBUSY` | The client identifier or the topic prefix is set while the transport runs. |
-| `-ENOTSUP` | The host is not a numeric IPv4 address, the binding is not built, or the security mode of the server is not implemented: Raw Public Key (1) or Certificate with EST (4). |
+| `-ENOTSUP` | The host is not a numeric IPv4 address, the binding is not built, or the security mode of the server is not implemented: Certificate with EST (4). |
 | `-EPERM` | The noSec development gate is closed and the server is provisioned with the NoSec security mode. |
 | `-ENOENT` | The Security object, the Server object or the resource that holds the server URI or the lifetime does not exist, or the server answered that the URI is not found. |
 | `-ENOMEM` | The topic, the payload or the CBOR message does not fit the configured buffer. |
@@ -872,8 +872,8 @@ which is 64 bytes by default. A request that does not fit is rejected with
   implemented and reachable through the API, the scheduling policy belongs to
   the protocol layer.
 - Host names and IPv6 addresses in the server URI.
-- The Raw Public Key and the Certificate with EST security
-  modes. They are refused with `-ENOTSUP`.
+- The Certificate with EST security mode. It is refused with
+  `-ENOTSUP`.
 - The SNI resource of the Security object. It belongs to the certificate
   modes.
 
