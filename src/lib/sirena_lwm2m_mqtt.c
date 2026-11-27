@@ -63,7 +63,6 @@ static struct net_sockaddr_storage broker_address;
 static struct sirena_lwm2m_mqtt_observation observations[CONFIG_SIRENA_LWM2M_MAX_OBSERVATIONS];
 static uint8_t message_buffer[CONFIG_SIRENA_LWM2M_MQTT_BUFFER_SIZE];
 static uint8_t value_buffer[CONFIG_SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX];
-static uint8_t send_payload[CONFIG_SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX];
 static uint32_t next_token = SIRENA_LWM2M_MQTT_TOKEN_BASE;
 static bool connack_received;
 static uint8_t connack_code;
@@ -1189,7 +1188,7 @@ static int mqtt_send(const struct sirena_lwm2m_send_record *records, size_t coun
         .has_payload = true,
     };
     const char *endpoint_name = sirena_lwm2m_transport_endpoint_name();
-    size_t length = sizeof(send_payload);
+    size_t length = sizeof(value_buffer);
     uint32_t result = 0U;
     int rc;
 
@@ -1197,7 +1196,7 @@ static int mqtt_send(const struct sirena_lwm2m_send_record *records, size_t coun
         return -EINVAL;
     }
 
-    rc = sirena_lwm2m_protocol_send_encode(records, count, send_payload, &length);
+    rc = sirena_lwm2m_protocol_send_encode(records, count, value_buffer, &length);
     if (rc != 0) {
         return rc;
     }
@@ -1206,7 +1205,7 @@ static int mqtt_send(const struct sirena_lwm2m_send_record *records, size_t coun
         return -EINVAL;
     }
 
-    message.payload = send_payload;
+    message.payload = value_buffer;
     message.payload_length = length;
 
     return mqtt_request(&message, SIRENA_LWM2M_MQTT_RESULT_CHANGED, &result);

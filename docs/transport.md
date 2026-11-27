@@ -644,6 +644,7 @@ The operation codes of the specification are:
 | Observe | 20 | Information reporting |
 | Cancel-Observe | 22 | Information reporting |
 | Notify | 23 | Information reporting |
+| Send | 24 | Information reporting |
 
 The answer of the client is a generic response payload with the `result`
 and the `token` members and, for a read, the `ct` and the `payload`
@@ -756,7 +757,7 @@ sends and the results it maps:
 | --- | --- | --- |
 | 201 | - | `0`, the registration succeeded |
 | 202 | - | `0`, the de-registration succeeded |
-| 204 | a successful write, execute or update | `0` |
+| 204 | a successful write, execute, update or send | `0` |
 | 205 | a successful read, observe or cancel-observe | `0` |
 | 400 | a malformed request or a malformed URI | `-EBADMSG` |
 | 403 | - | `-EACCES`, the registration is not allowed |
