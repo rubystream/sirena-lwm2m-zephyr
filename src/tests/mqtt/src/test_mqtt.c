@@ -263,6 +263,9 @@ static void peer_record_publish(const char *topic, const uint8_t *payload, size_
     case SIRENA_LWM2M_MQTT_OPERATION_DEREGISTER:
         (void)peer_send_result(message.token, SIRENA_LWM2M_MQTT_RESULT_DEREGISTERED);
         break;
+    case SIRENA_LWM2M_MQTT_OPERATION_SEND:
+        (void)peer_send_result(message.token, SIRENA_LWM2M_MQTT_RESULT_CHANGED);
+        break;
     default:
         break;
     }

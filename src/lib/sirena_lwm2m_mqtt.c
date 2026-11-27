@@ -7,6 +7,7 @@
 #include <sirena/lwm2m/mqtt.h>
 #include <sirena/lwm2m/objects.h>
 #include <sirena/lwm2m/protocol.h>
+#include <sirena/lwm2m/codec.h>
 #include <sirena/lwm2m/transport.h>
 #include <zephyr/kernel.h>
 #include <sirena/lwm2m/object_registry.h>
@@ -49,6 +50,7 @@ struct sirena_lwm2m_mqtt_observation {
 
 static atomic_t transport_started;
 static int mqtt_notify(uint16_t object_id, uint16_t instance_id, uint16_t resource_id);
+static int mqtt_send(const struct sirena_lwm2m_send_record *records, size_t count);
 static struct mqtt_client client;
 static uint8_t rx_buffer[CONFIG_SIRENA_LWM2M_MQTT_BUFFER_SIZE];
 static uint8_t tx_buffer[CONFIG_SIRENA_LWM2M_MQTT_BUFFER_SIZE];
@@ -61,6 +63,7 @@ static struct net_sockaddr_storage broker_address;
 static struct sirena_lwm2m_mqtt_observation observations[CONFIG_SIRENA_LWM2M_MAX_OBSERVATIONS];
 static uint8_t message_buffer[CONFIG_SIRENA_LWM2M_MQTT_BUFFER_SIZE];
 static uint8_t value_buffer[CONFIG_SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX];
+static uint8_t send_payload[CONFIG_SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX];
 static uint32_t next_token = SIRENA_LWM2M_MQTT_TOKEN_BASE;
 static bool connack_received;
 static uint8_t connack_code;
@@ -1174,6 +1177,40 @@ static int mqtt_deregister(void)
     return mqtt_request(&message, SIRENA_LWM2M_MQTT_RESULT_DEREGISTERED, &result);
 }
 
+static int mqtt_send(const struct sirena_lwm2m_send_record *records, size_t count)
+{
+    struct sirena_lwm2m_mqtt_message message = {
+        .has_operation = true,
+        .operation = SIRENA_LWM2M_MQTT_OPERATION_SEND,
+        .token = 0U,
+        .has_content_format = true,
+        .content_format = SIRENA_LWM2M_CF_SENML_JSON,
+        .has_payload = true,
+    };
+    const char *endpoint_name = sirena_lwm2m_transport_endpoint_name();
+    size_t length = sizeof(send_payload);
+    uint32_t result = 0U;
+    int rc;
+
+    if (records == NULL || count == 0U) {
+        return -EINVAL;
+    }
+
+    rc = sirena_lwm2m_protocol_send_encode(records, count, send_payload, &length);
+    if (rc != 0) {
+        return rc;
+    }
+
+    if (endpoint_name[0] == '\0') {
+        return -EINVAL;
+    }
+
+    message.payload = send_payload;
+    message.payload_length = length;
+
+    return mqtt_request(&message, SIRENA_LWM2M_MQTT_RESULT_CHANGED, &result);
+}
+
 static int mqtt_poll(int timeout_ms)
 {
     int rc;
@@ -1309,6 +1346,7 @@ const struct sirena_lwm2m_transport_ops sirena_lwm2m_mqtt_transport_ops = {
     .deregister = mqtt_deregister,
     .poll = mqtt_poll,
     .notify = mqtt_notify,
+    .send = mqtt_send,
 };
 
 int sirena_lwm2m_mqtt_set_client_id(const char *id)
