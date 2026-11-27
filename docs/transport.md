@@ -595,7 +595,8 @@ The messages of the client and the messages of the server therefore share
 one topic. A broker delivers the messages a client publishes to the
 clients that subscribed to the topic, so the client receives its own
 messages back. The binding therefore ignores the operations it sends
-itself, the Register, the Update, the De-register and the Notify, and
+itself, the Register, the Update, the De-register, the Notify and the
+Send, and
 it accepts a result only when it carries the token of the request it
 is waiting an answer for. The client uses the upper half of the token
 space for its own requests, so that the answer to a request of the
