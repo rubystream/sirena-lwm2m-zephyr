@@ -595,7 +595,8 @@ The messages of the client and the messages of the server therefore share
 one topic. A broker delivers the messages a client publishes to the
 clients that subscribed to the topic, so the client receives its own
 messages back. The binding therefore ignores the operations it sends
-itself, the Register, the Update, the De-register and the Notify, and
+itself, the Register, the Update, the De-register, the Notify and the
+Send, and
 it accepts a result only when it carries the token of the request it
 is waiting an answer for. The client uses the upper half of the token
 space for its own requests, so that the answer to a request of the
@@ -696,6 +697,7 @@ example `/3/0/0`.
 | Observe | 20 | `operation`, `token`, `uri` | `result`, `token` |
 | Cancel-Observe | 22 | `operation`, `token` | `result`, `token` |
 | Notify | 23 | `operation`, `token`, `ct`, `payload` | `result`, `token` |
+| Send | 24 | `operation`, `token`, `ct`, `payload` | `result`, `token` |
 
 The content format of a value is the one the `ct` member carries. A read
 uses the content format the protocol core negotiates, which is the
@@ -799,8 +801,8 @@ can match it.
 ### Not in this binding
 
 - The bootstrap interface, the `bs` topics.
-- The composite operations, the Create and the Delete operations, the
-  Send operation. The client answers them with 501.
+- The composite operations, the Create and the Delete operations. The
+  client answers them with 501.
 - The block-wise transfer of large payloads.
 - The MQTT Server object (id 24) and the COSE object (id 23).
 

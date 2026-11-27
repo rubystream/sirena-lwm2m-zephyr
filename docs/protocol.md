@@ -209,7 +209,6 @@ error codes of the API are the negative `errno` values of the table.
 - The composite operations: Read-Composite, Write-Composite and
   Observe-Composite.
 - The creation and the deletion of object instances.
-- The Send operation, as opposed to the Notify operation.
 - The block-wise transfer of large payloads.
 - The decoding of the structured content formats. The codec encodes them, but a
   write in one of them is refused with 4.15.

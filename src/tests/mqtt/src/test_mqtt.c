@@ -67,6 +67,7 @@ struct peer_state {
     uint8_t result_count;
     struct peer_publish publishes[PEER_PUBLISH_MAX];
     uint32_t register_result;
+    uint32_t send_result;
     uint32_t result_token_delta;
 };
 
@@ -262,6 +263,9 @@ static void peer_record_publish(const char *topic, const uint8_t *payload, size_
         break;
     case SIRENA_LWM2M_MQTT_OPERATION_DEREGISTER:
         (void)peer_send_result(message.token, SIRENA_LWM2M_MQTT_RESULT_DEREGISTERED);
+        break;
+    case SIRENA_LWM2M_MQTT_OPERATION_SEND:
+        (void)peer_send_result(message.token, peer.send_result);
         break;
     default:
         break;
@@ -755,6 +759,12 @@ static bool peer_match_notify(const struct sirena_lwm2m_mqtt_message *message)
            message->operation == SIRENA_LWM2M_MQTT_OPERATION_NOTIFY;
 }
 
+static bool peer_match_send(const struct sirena_lwm2m_mqtt_message *message)
+{
+    return message->has_operation &&
+           message->operation == SIRENA_LWM2M_MQTT_OPERATION_SEND;
+}
+
 static int peer_start_transport(void)
 {
     int rc = sirena_lwm2m_mqtt_start();
@@ -865,6 +875,7 @@ static void peer_reset_messages(void)
     peer.publish_count = 0U;
     peer.result_count = 0U;
     peer.register_result = SIRENA_LWM2M_MQTT_RESULT_REGISTERED;
+    peer.send_result = SIRENA_LWM2M_MQTT_RESULT_CHANGED;
     peer.result_token_delta = 0U;
     k_mutex_unlock(&peer_lock);
 }
@@ -1240,7 +1251,7 @@ ZTEST(sirena_lwm2m_mqtt, test_a_write_of_an_unsupported_format_is_refused)
         .token = 59U,
         .has_uri = true,
         .has_content_format = true,
-        .content_format = SIRENA_LWM2M_CF_SENML_JSON,
+        .content_format = 999U,
         .has_payload = true,
     };
     struct sirena_lwm2m_mqtt_message answer;
@@ -1375,6 +1386,58 @@ ZTEST(sirena_lwm2m_mqtt, test_a_cancelled_observation_stops_the_notifications)
     rc = sirena_lwm2m_notify_resource(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
                                       PEER_SERVER_LIFETIME_RESOURCE);
     zassert_equal(rc, 0, "a cancelled observation must not be notified: %d", rc);
+}
+
+ZTEST(sirena_lwm2m_mqtt, test_a_send_publishes_the_resource_value)
+{
+    struct sirena_lwm2m_send_record record = {
+        .object_id = PEER_SERVER_OBJECT_ID,
+        .instance_id = PEER_INSTANCE_ID,
+        .resource_id = PEER_SERVER_LIFETIME_RESOURCE,
+    };
+    struct sirena_lwm2m_mqtt_message message;
+    struct peer_publish publish;
+    int rc;
+
+    rc = sirena_lwm2m_transport_register();
+    zassert_equal(rc, 0, "the registration failed: %d", rc);
+
+    rc = sirena_lwm2m_send(&record, 1U);
+    zassert_equal(rc, 0, "the send failed: %d", rc);
+
+    zassert_true(peer_wait_publish(peer_match_send, 0U, &publish, &message),
+                 "the broker received no send");
+    zassert_equal(message.operation, SIRENA_LWM2M_MQTT_OPERATION_SEND,
+                  "unexpected send operation");
+    zassert_true(message.has_content_format, "the send carries no content format");
+    zassert_equal(message.content_format, SIRENA_LWM2M_CF_SENML_JSON,
+                  "unexpected content format");
+    zassert_true(message.has_payload, "the send carries no payload");
+    zassert_true(message.payload_length > 0U, "the send payload is empty");
+}
+
+ZTEST(sirena_lwm2m_mqtt, test_a_refused_send_is_reported)
+{
+    struct sirena_lwm2m_send_record record = {
+        .object_id = PEER_SERVER_OBJECT_ID,
+        .instance_id = PEER_INSTANCE_ID,
+        .resource_id = PEER_SERVER_LIFETIME_RESOURCE,
+    };
+    int rc;
+
+    rc = sirena_lwm2m_transport_register();
+    zassert_equal(rc, 0, "the registration failed: %d", rc);
+
+    k_mutex_lock(&peer_lock, K_FOREVER);
+    peer.send_result = SIRENA_LWM2M_MQTT_RESULT_BAD_REQUEST;
+    k_mutex_unlock(&peer_lock);
+
+    rc = sirena_lwm2m_send(&record, 1U);
+    zassert_equal(rc, -EBADMSG, "a refused send must be reported: %d", rc);
+
+    k_mutex_lock(&peer_lock, K_FOREVER);
+    peer.send_result = SIRENA_LWM2M_MQTT_RESULT_CHANGED;
+    k_mutex_unlock(&peer_lock);
 }
 
 static int peer_provision(const char *uri, uint8_t security_mode)
