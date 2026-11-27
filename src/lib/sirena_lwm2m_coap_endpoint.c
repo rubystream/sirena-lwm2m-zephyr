@@ -959,13 +959,14 @@ int sirena_lwm2m_coap_endpoint_notify(uint16_t object_id, uint16_t instance_id,
 void sirena_lwm2m_coap_endpoint_enforce_pmax(void)
 {
     size_t i;
+    bool handled[ARRAY_SIZE(observers)] = { false };
 
     for (i = 0U; i < ARRAY_SIZE(observers); ++i) {
         struct sirena_lwm2m_coap_observer *observer = &observers[i];
         struct sirena_lwm2m_resource_attributes attrs;
         int64_t now;
         size_t j;
-        bool already;
+        bool already = false;
 
         if (!observer->used) {
             continue;
@@ -982,9 +983,8 @@ void sirena_lwm2m_coap_endpoint_enforce_pmax(void)
             continue;
         }
 
-        already = false;
         for (j = 0U; j < i; ++j) {
-            if (observers[j].used &&
+            if (handled[j] && observers[j].used &&
                 observers[j].object_id == observer->object_id &&
                 observers[j].instance_id == observer->instance_id &&
                 observers[j].resource_id == observer->resource_id) {
@@ -998,5 +998,6 @@ void sirena_lwm2m_coap_endpoint_enforce_pmax(void)
 
         (void)sirena_lwm2m_coap_endpoint_notify(observer->object_id, observer->instance_id,
                                                 observer->resource_id);
+        handled[i] = true;
     }
 }

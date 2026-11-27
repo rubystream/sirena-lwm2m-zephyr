@@ -783,6 +783,7 @@ static void mqtt_handle_observe(const struct sirena_lwm2m_mqtt_message *message)
     observation->used = true;
     observation->token = message->token;
     observation->content_format = response.content_format;
+    observation->last_notify_ms = k_uptime_get();
 
     (void)mqtt_send_response(message->token, SIRENA_LWM2M_MQTT_RESULT_CONTENT, false, 0U, NULL,
                               0U);
@@ -1190,6 +1191,7 @@ static int mqtt_poll(int timeout_ms)
 
     {
         size_t i;
+        bool handled[ARRAY_SIZE(observations)] = { false };
 
         for (i = 0U; i < ARRAY_SIZE(observations); ++i) {
             struct sirena_lwm2m_mqtt_observation *observation = &observations[i];
@@ -1215,7 +1217,7 @@ static int mqtt_poll(int timeout_ms)
             }
 
             for (j = 0U; j < i; ++j) {
-                if (observations[j].used &&
+                if (handled[j] && observations[j].used &&
                     observations[j].object_id == observation->object_id &&
                     observations[j].instance_id == observation->instance_id &&
                     observations[j].resource_id == observation->resource_id) {
@@ -1229,6 +1231,7 @@ static int mqtt_poll(int timeout_ms)
 
             (void)mqtt_notify(observation->object_id, observation->instance_id,
                               observation->resource_id);
+            handled[i] = true;
         }
     }
 
