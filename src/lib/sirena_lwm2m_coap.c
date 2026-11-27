@@ -6,12 +6,14 @@
 #include <sirena/lwm2m/objects.h>
 #include <sirena/lwm2m/protocol.h>
 #include <sirena/lwm2m/transport.h>
+#include <sirena/lwm2m/codec.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net/coap.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/util.h>
 #include <errno.h>
+#include <stdio.h>
 #include <string.h>
 
 #define SIRENA_LWM2M_SECURITY_OBJECT_ID 0U
@@ -22,6 +24,7 @@ static int client_socket = -1;
 static char location_path[CONFIG_SIRENA_LWM2M_LOCATION_PATH_MAX + 1U];
 static char request_path[CONFIG_SIRENA_LWM2M_COAP_PATH_MAX + 1U];
 static char registration_payload[CONFIG_SIRENA_LWM2M_REGISTRATION_PAYLOAD_MAX + 1U];
+static uint8_t send_payload[CONFIG_SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX];
 
 static int security_mode_allowed(int64_t mode)
 {
@@ -145,12 +148,43 @@ static int coap_notify(uint16_t object_id, uint16_t instance_id, uint16_t resour
     return sirena_lwm2m_coap_endpoint_notify(object_id, instance_id, resource_id);
 }
 
+static int coap_send(const struct sirena_lwm2m_send_record *records, size_t count)
+{
+    char path[CONFIG_SIRENA_LWM2M_COAP_PATH_MAX + 1U];
+    const char *endpoint_name = sirena_lwm2m_transport_endpoint_name();
+    size_t length = sizeof(send_payload);
+    int written;
+    int rc;
+
+    if (records == NULL || count == 0U) {
+        return -EINVAL;
+    }
+
+    rc = sirena_lwm2m_protocol_send_encode(records, count, send_payload, &length);
+    if (rc != 0) {
+        return rc;
+    }
+
+    if (endpoint_name[0] == '\0') {
+        return -EINVAL;
+    }
+
+    written = snprintf(path, sizeof(path), "dp?ep=%s", endpoint_name);
+    if (written < 0 || (size_t)written >= sizeof(path)) {
+        return -ENOMEM;
+    }
+
+    return coap_request(path, COAP_METHOD_POST, true, SIRENA_LWM2M_CF_SENML_JSON,
+                        send_payload, length, NULL, 0U);
+}
+
 const struct sirena_lwm2m_transport_ops sirena_lwm2m_coap_transport_ops = {
     .register_client = coap_register,
     .update = coap_update,
     .deregister = coap_deregister,
     .poll = coap_poll,
     .notify = coap_notify,
+    .send = coap_send,
 };
 
 int sirena_lwm2m_coap_set_endpoint_name(const char *name)

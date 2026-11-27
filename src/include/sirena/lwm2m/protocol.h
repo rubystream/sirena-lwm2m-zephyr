@@ -58,12 +58,25 @@ struct sirena_lwm2m_notify_request {
     uint16_t resource_id;
 };
 
+struct sirena_lwm2m_send_record {
+    uint16_t object_id;
+    uint16_t instance_id;
+    uint16_t resource_id;
+};
+
+struct sirena_lwm2m_send_request {
+    const struct sirena_lwm2m_send_record *records;
+    size_t count;
+};
+
+
 int sirena_lwm2m_protocol_init(void);
 int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *request,
                                   struct sirena_lwm2m_protocol_response *response);
 int sirena_lwm2m_protocol_read(uint16_t object_id, uint16_t instance_id, uint16_t resource_id,
                                uint16_t content_format, void *buffer, size_t *length);
-int sirena_lwm2m_notify_resource(uint16_t object_id, uint16_t instance_id,
-                                 uint16_t resource_id);
+int sirena_lwm2m_protocol_send_encode(const struct sirena_lwm2m_send_record *records,
+                                       size_t count, void *buffer, size_t *length);
+int sirena_lwm2m_send(const struct sirena_lwm2m_send_record *records, size_t count);
 
 #endif
