@@ -490,7 +490,7 @@ ZTEST(sirena_lwm2m_protocol, test_write_with_an_undecodable_content_format_is_re
     rc = peer_register();
     zassert_equal(rc, 0, "registration failed");
 
-    rc = peer_request(COAP_METHOD_PUT, "/1/0/1", SIRENA_LWM2M_CF_SENML_JSON, payload,
+    rc = peer_request(COAP_METHOD_PUT, "/1/0/1", SIRENA_LWM2M_CF_LINK_FORMAT, payload,
                       sizeof(payload), NULL, 0U, -1, NULL);
     zassert_equal(rc, 0, "write request failed: %d", rc);
 
