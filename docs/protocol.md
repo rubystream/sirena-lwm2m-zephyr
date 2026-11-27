@@ -28,6 +28,7 @@ for every request it receives.
 | Observe | GET with Observe = 0 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 5.03 |
 | Cancel Observation | GET with Observe = 1 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05 |
 | Notify | notification | the observed resource | 2.05 Content | |
+| Send | POST | /dp?ep=<Endpoint> | 2.04 Changed | 4.00, 4.04, 4.05, 4.06 |
 
 The status codes of the table are the CoAP codes of the response. The endpoint
 maps them to the LwM2M operations:
