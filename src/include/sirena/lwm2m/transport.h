@@ -2,6 +2,7 @@
 #define SIRENA_LWM2M_TRANSPORT_H
 
 #include <stdint.h>
+#include <sirena/lwm2m/protocol.h>
 
 struct sirena_lwm2m_transport_ops {
     int (*register_client)(void);
@@ -9,6 +10,7 @@ struct sirena_lwm2m_transport_ops {
     int (*deregister)(void);
     int (*poll)(int timeout_ms);
     int (*notify)(uint16_t object_id, uint16_t instance_id, uint16_t resource_id);
+    int (*send)(const struct sirena_lwm2m_send_record *records, size_t count);
 };
 
 int sirena_lwm2m_transport_bind(const struct sirena_lwm2m_transport_ops *ops);
