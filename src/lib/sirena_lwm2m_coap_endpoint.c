@@ -1,6 +1,7 @@
 #include "sirena_lwm2m_coap_endpoint.h"
 #include <sirena/lwm2m/protocol.h>
 #include <zephyr/kernel.h>
+#include <sirena/lwm2m/object_registry.h>
 #include <zephyr/net/coap.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/sys/util.h>
@@ -23,6 +24,7 @@ struct sirena_lwm2m_coap_observer {
     uint16_t resource_id;
     uint16_t content_format;
     uint32_t sequence;
+    int64_t last_notify_ms;
     struct net_sockaddr_storage peer;
     net_socklen_t peer_length;
 };
@@ -920,6 +922,18 @@ int sirena_lwm2m_coap_endpoint_notify(uint16_t object_id, uint16_t instance_id,
             continue;
         }
 
+        {
+            struct sirena_lwm2m_resource_attributes notify_attrs;
+            int64_t now = k_uptime_get();
+
+            if (sirena_lwm2m_get_resource_attributes(object_id, instance_id, resource_id,
+                                                     &notify_attrs) == 0 &&
+                notify_attrs.has_pmin && observer->last_notify_ms != 0 &&
+                (now - observer->last_notify_ms) < (int64_t)notify_attrs.pmin * 1000) {
+                continue;
+            }
+        }
+
         rc = sirena_lwm2m_protocol_read(object_id, instance_id, resource_id,
                                         observer->content_format, notify_payload, &length);
         if (rc != 0) {
@@ -933,9 +947,56 @@ int sirena_lwm2m_coap_endpoint_notify(uint16_t object_id, uint16_t instance_id,
                                   observer->content_format,
                                   (int)observer->sequence, notify_payload, length,
                                   net_sad(&observer->peer), observer->peer_length) == 0) {
+            observer->last_notify_ms = k_uptime_get();
             sent++;
         }
     }
 
     return sent;
+}
+
+
+void sirena_lwm2m_coap_endpoint_enforce_pmax(void)
+{
+    size_t i;
+
+    for (i = 0U; i < ARRAY_SIZE(observers); ++i) {
+        struct sirena_lwm2m_coap_observer *observer = &observers[i];
+        struct sirena_lwm2m_resource_attributes attrs;
+        int64_t now;
+        size_t j;
+        bool already;
+
+        if (!observer->used) {
+            continue;
+        }
+
+        if (sirena_lwm2m_get_resource_attributes(observer->object_id, observer->instance_id,
+                                                 observer->resource_id, &attrs) != 0 ||
+            !attrs.has_pmax || observer->last_notify_ms == 0) {
+            continue;
+        }
+
+        now = k_uptime_get();
+        if (now - observer->last_notify_ms < (int64_t)attrs.pmax * 1000) {
+            continue;
+        }
+
+        already = false;
+        for (j = 0U; j < i; ++j) {
+            if (observers[j].used &&
+                observers[j].object_id == observer->object_id &&
+                observers[j].instance_id == observer->instance_id &&
+                observers[j].resource_id == observer->resource_id) {
+                already = true;
+                break;
+            }
+        }
+        if (already) {
+            continue;
+        }
+
+        (void)sirena_lwm2m_coap_endpoint_notify(observer->object_id, observer->instance_id,
+                                                observer->resource_id);
+    }
 }

@@ -262,7 +262,11 @@ static int dtls_poll(int timeout_ms)
         return 0;
     }
 
-    return sirena_lwm2m_coap_endpoint_poll(timeout_ms);
+    {
+        int rc = sirena_lwm2m_coap_endpoint_poll(timeout_ms);
+        sirena_lwm2m_coap_endpoint_enforce_pmax();
+        return rc;
+    }
 }
 
 static int dtls_notify(uint16_t object_id, uint16_t instance_id, uint16_t resource_id)
