@@ -54,7 +54,7 @@ static struct sirena_lwm2m_coap_observer observers[CONFIG_SIRENA_LWM2M_MAX_OBSER
 static uint8_t receive_buffer[CONFIG_SIRENA_LWM2M_COAP_MESSAGE_MAX];
 static uint8_t send_buffer[CONFIG_SIRENA_LWM2M_COAP_MESSAGE_MAX];
 static uint8_t response_payload[CONFIG_SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX];
-static uint8_t composite_raw[CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX];
+static uint8_t composite_raw[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES][CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX];
 static uint8_t notify_payload[CONFIG_SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX];
 static struct coap_option dispatch_options[SIRENA_LWM2M_COAP_OPTIONS];
 
@@ -384,49 +384,67 @@ static size_t composite_collect_json(const char *buf, size_t len, uint16_t *oids
     size_t pos = 0U;
 
     while (pos < len) {
-        char *name = strstr(buf + pos, "\"n\"");
-        size_t after;
-        size_t quote_start;
-        size_t quote_end;
 
-        if (name == NULL) {
-            break;
-        }
+        size_t key_pos = pos;
+        bool found = false;
 
-        after = (size_t)(name - buf) + 4U;
-        while (after < len && (buf[after] == ' ' || buf[after] == '\t' ||
-               buf[after] == '\n' || buf[after] == '\r')) {
-            after++;
-        }
-        if (after >= len || buf[after] != ':') {
-            pos = after;
-            continue;
-        }
-        after++;
-        while (after < len && (buf[after] == ' ' || buf[after] == '\t' ||
-               buf[after] == '\n' || buf[after] == '\r')) {
-            after++;
-        }
-        if (after >= len || buf[after] != '"') {
-            pos = after;
-            continue;
-        }
-        quote_start = after + 1U;
-        quote_end = quote_start;
-        while (quote_end < len && buf[quote_end] != '"') {
-            quote_end++;
-        }
-        if (quote_end >= len) {
-            break;
-        }
-
-        if (count < capacity) {
-            if (composite_parse_path_text(buf + quote_start, quote_end - quote_start,
-                                         &oids[count], &iids[count], &rids[count]) == 0) {
-                count++;
+        while (key_pos + 2U < len) {
+            if (buf[key_pos] == '"' && buf[key_pos + 1U] == 'n' &&
+                buf[key_pos + 2U] == '"') {
+                found = true;
+                break;
             }
+            key_pos++;
         }
-        pos = quote_end + 1U;
+
+        if (!found) {
+            break;
+        }
+
+        {
+            size_t after = key_pos + 3U;
+            size_t quote_start;
+            size_t quote_end;
+
+            while (after < len && (buf[after] == ' ' || buf[after] == '\t' ||
+                   buf[after] == '\n' || buf[after] == '\r')) {
+                after++;
+            }
+            if (after >= len || buf[after] != ':') {
+                pos = key_pos + 3U;
+                continue;
+            }
+            after++;
+            while (after < len && (buf[after] == ' ' || buf[after] == '\t' ||
+                   buf[after] == '\n' || buf[after] == '\r')) {
+                after++;
+            }
+            if (after >= len || buf[after] != '"') {
+                pos = after;
+                continue;
+            }
+            quote_start = after + 1U;
+            quote_end = quote_start;
+            while (quote_end < len && buf[quote_end] != '"') {
+                quote_end++;
+            }
+            if (quote_end >= len) {
+                break;
+            }
+
+            if (count <= capacity) {
+                if (count == capacity) {
+
+                    count = capacity + 1U;
+                    break;
+                }
+                if (composite_parse_path_text(buf + quote_start, quote_end - quote_start,
+                                             &oids[count], &iids[count], &rids[count]) == 0) {
+                    count++;
+                }
+            }
+            pos = quote_end + 1U;
+        }
     }
 
     return count;
@@ -458,10 +476,14 @@ static size_t composite_collect_cbor(const uint8_t *buf, size_t len, uint16_t *o
                 str_start = j + 3U;
             }
 
-            if (str_len > 0U && str_start + str_len <= len && count < capacity) {
-                if (composite_parse_path_text((const char *)(buf + str_start), str_len,
-                                             &oids[count], &iids[count], &rids[count]) == 0) {
-                    count++;
+            if (str_len > 0U && str_start + str_len <= len) {
+                if (count == capacity) {
+                    count = capacity + 1U;
+                } else if (count < capacity) {
+                    if (composite_parse_path_text((const char *)(buf + str_start), str_len,
+                                                 &oids[count], &iids[count], &rids[count]) == 0) {
+                        count++;
+                    }
                 }
             }
             i = str_start + str_len;
@@ -577,6 +599,10 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
                 accepted[0] == COAP_CONTENT_FORMAT_APP_LINK_FORMAT) {
                 allowed = true;
             }
+        }
+
+        if (coap_header_get_code(packet) == COAP_METHOD_FETCH) {
+            allowed = true;
         }
 
         if (allowed && path_count >= 1U) {
@@ -753,6 +779,13 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
                                                   iids, rids, CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES);
         }
 
+        if (target_count > CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
         if (target_count == 0U) {
             (void)endpoint_send_message(response_type, response_message_id, token_length, token,
                                         COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U,
@@ -773,12 +806,12 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
             }
 
             if (sirena_lwm2m_get(oids[target_index], iids[target_index], rids[target_index],
-                                 composite_raw, &raw_length) != 0) {
+                                 composite_raw[target_index], &raw_length) != 0) {
                 unknown = true;
                 continue;
             }
 
-            if (endpoint_value_from_resource(resource, composite_raw, raw_length,
+            if (endpoint_value_from_resource(resource, composite_raw[target_index], raw_length,
                                             &values[value_count]) != 0) {
                 unknown = true;
                 continue;
@@ -791,7 +824,7 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
             value_count++;
         }
 
-        if (unknown) {
+        if (value_count == 0U && unknown) {
             (void)endpoint_send_message(response_type, response_message_id, token_length, token,
                                         COAP_RESPONSE_CODE_NOT_FOUND, false, 0U, -1, NULL, 0U,
                                         peer, peer_length);
@@ -810,6 +843,11 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
                 bool ok = true;
                 size_t vi;
 
+                if (accepted[candidate] != SIRENA_LWM2M_CF_SENML_JSON &&
+                    accepted[candidate] != SIRENA_LWM2M_CF_SENML_CBOR) {
+                    continue;
+                }
+
                 for (vi = 0U; vi < value_count; ++vi) {
                     if (!sirena_lwm2m_codec_can_encode(accepted[candidate], values[vi].type)) {
                         ok = false;
@@ -825,26 +863,29 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         }
 
         if (!negotiated_found && accepted_count == 0U) {
-            if (sirena_lwm2m_codec_can_encode(CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT,
-                                              values[0].type)) {
+            uint16_t preferred = (uint16_t)CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
+            if (preferred != SIRENA_LWM2M_CF_SENML_JSON && preferred != SIRENA_LWM2M_CF_SENML_CBOR) {
+                preferred = SIRENA_LWM2M_CF_SENML_JSON;
+            }
+            if (sirena_lwm2m_codec_can_encode(preferred, values[0].type)) {
                 bool ok = true;
                 size_t vi;
                 for (vi = 0U; vi < value_count; ++vi) {
-                    if (!sirena_lwm2m_codec_can_encode(CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT,
+                    if (!sirena_lwm2m_codec_can_encode(preferred,
                                                        values[vi].type)) {
                         ok = false;
                         break;
                     }
                 }
                 if (ok) {
-                    negotiated = (int)CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
+                    negotiated = (int)preferred;
                     negotiated_found = true;
                 }
             }
         }
 
         if (!negotiated_found && accepted_count > 0U) {
-            /* no acceptable accepted format; refuse */
+
             unsupported_format = 1;
         }
 
