@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <stdlib.h>
 
 static int append(void *buffer, size_t capacity, size_t *used,
                   const void *data, size_t data_len)
@@ -932,6 +933,328 @@ static int decode_tlv_value(const uint8_t *buf, size_t len,
     return 0;
 }
 
+static int decode_cbor_value(const uint8_t *buf, size_t len,
+                            enum sirena_lwm2m_value_type expected,
+                            struct sirena_lwm2m_codec_value *v,
+                            size_t *consumed)
+{
+    size_t pos = 0U;
+    uint8_t head;
+    uint8_t major;
+    uint64_t arg = 0U;
+    bool has_arg = false;
+
+    if (len == 0U) {
+        return -EINVAL;
+    }
+    head = buf[0];
+    major = head >> 5;
+    if ((head & 0x1FU) <= 23U) {
+        arg = head & 0x1FU;
+        pos = 1U;
+        has_arg = true;
+    } else if ((head & 0x1FU) == 24U) {
+        if (pos + 2U > len) return -EINVAL;
+        arg = buf[1];
+        pos = 2U;
+        has_arg = true;
+    } else if ((head & 0x1FU) == 25U) {
+        if (pos + 3U > len) return -EINVAL;
+        arg = ((uint64_t)buf[1] << 8) | buf[2];
+        pos = 3U;
+        has_arg = true;
+    } else if ((head & 0x1FU) == 26U) {
+        if (pos + 5U > len) return -EINVAL;
+        arg = ((uint64_t)buf[1] << 24) | ((uint64_t)buf[2] << 16) |
+             ((uint64_t)buf[3] << 8) | buf[4];
+        pos = 5U;
+        has_arg = true;
+    } else if ((head & 0x1FU) == 27U) {
+        if (pos + 9U > len) return -EINVAL;
+        arg = 0U;
+        for (size_t i = 0U; i < 8U; ++i) {
+            arg = (arg << 8) | buf[1U + i];
+        }
+        pos = 9U;
+        has_arg = true;
+    } else {
+        return -EINVAL;
+    }
+
+    v->object_id = 0U;
+    v->instance_id = 0U;
+    v->resource_id = 0U;
+    v->id = 0U;
+
+    switch (expected) {
+    case SIRENA_LWM2M_VALUE_BOOLEAN:
+        if (head == 0xF4) {
+            v->type = SIRENA_LWM2M_VALUE_BOOLEAN;
+            v->data.boolean = false;
+        } else if (head == 0xF5) {
+            v->type = SIRENA_LWM2M_VALUE_BOOLEAN;
+            v->data.boolean = true;
+        } else {
+            return -EINVAL;
+        }
+        pos = 1U;
+        break;
+    case SIRENA_LWM2M_VALUE_INTEGER:
+        if (major == 0U) {
+            v->type = SIRENA_LWM2M_VALUE_INTEGER;
+            v->data.integer = (int64_t)arg;
+        } else if (major == 1U) {
+            v->type = SIRENA_LWM2M_VALUE_INTEGER;
+            if (arg == UINT64_MAX) return -EINVAL;
+            v->data.integer = -(int64_t)(arg + 1U);
+        } else {
+            return -EINVAL;
+        }
+        break;
+    case SIRENA_LWM2M_VALUE_UNSIGNED:
+        if (major != 0U) return -EINVAL;
+        v->type = SIRENA_LWM2M_VALUE_UNSIGNED;
+        v->data.unsigned_integer = arg;
+        break;
+    case SIRENA_LWM2M_VALUE_FLOAT:
+        pos = 1U;
+        if (head == 0xFB) {
+            uint64_t bits = 0U;
+            if (pos + 8U > len) return -EINVAL;
+            for (size_t i = 0U; i < 8U; ++i) {
+                bits = (bits << 8) | buf[pos + i];
+            }
+            memcpy(&v->data.floating_point, &bits, sizeof(v->data.floating_point));
+            v->type = SIRENA_LWM2M_VALUE_FLOAT;
+            pos += 8U;
+        } else if (head == 0xFA) {
+            uint32_t bits = 0U;
+            float single;
+            if (pos + 4U > len) return -EINVAL;
+            for (size_t i = 0U; i < 4U; ++i) {
+                bits = (bits << 8) | buf[pos + i];
+            }
+            memcpy(&single, &bits, sizeof(single));
+            v->data.floating_point = (double)single;
+            v->type = SIRENA_LWM2M_VALUE_FLOAT;
+            pos += 4U;
+        } else {
+            return -EINVAL;
+        }
+        break;
+    case SIRENA_LWM2M_VALUE_STRING:
+        if (major != 3U) return -EINVAL;
+        if (pos + arg > len) return -EINVAL;
+        v->type = SIRENA_LWM2M_VALUE_STRING;
+        v->data.string.value = (const char *)&buf[pos];
+        v->data.string.length = (size_t)arg;
+        pos += (size_t)arg;
+        break;
+    case SIRENA_LWM2M_VALUE_OPAQUE:
+        if (major != 2U) return -EINVAL;
+        if (pos + arg > len) return -EINVAL;
+        v->type = SIRENA_LWM2M_VALUE_OPAQUE;
+        v->data.opaque.value = &buf[pos];
+        v->data.opaque.length = (size_t)arg;
+        pos += (size_t)arg;
+        break;
+    case SIRENA_LWM2M_VALUE_OBJECT_LINK:
+        if (major != 2U || arg != 4U) return -EINVAL;
+        if (pos + 4U > len) return -EINVAL;
+        v->type = SIRENA_LWM2M_VALUE_OBJECT_LINK;
+        v->data.object_link.object_id = ((uint16_t)buf[pos] << 8) | buf[pos + 1];
+        v->data.object_link.instance_id = ((uint16_t)buf[pos + 2] << 8) | buf[pos + 3];
+        pos += 4U;
+        break;
+    default:
+        return -EINVAL;
+    }
+
+    *consumed = pos;
+    (void)has_arg;
+    return 0;
+}
+
+static int decode_json_value(const char *buf, size_t len,
+                            enum sirena_lwm2m_value_type expected,
+                            struct sirena_lwm2m_codec_value *v)
+{
+    size_t pos = 0U;
+    size_t key_start;
+    size_t key_len;
+    uint16_t id = 0U;
+
+    while (pos < len && (buf[pos] == ' ' || buf[pos] == '\t' || buf[pos] == '\n' || buf[pos] == '\r')) pos++;
+    if (pos >= len || buf[pos] != '{') return -EINVAL;
+    pos++;
+    while (pos < len && (buf[pos] == ' ' || buf[pos] == '\t' || buf[pos] == '\n' || buf[pos] == '\r')) pos++;
+    if (pos >= len || buf[pos] != '"') return -EINVAL;
+    pos++;
+    key_start = pos;
+    while (pos < len && buf[pos] != '"') {
+        if (buf[pos] == '\\') {
+            pos++;
+            if (pos >= len) return -EINVAL;
+        }
+        pos++;
+    }
+    if (pos >= len) return -EINVAL;
+    key_len = pos - key_start;
+    if (key_len == 0U) return -EINVAL;
+    for (size_t i = 0U; i < key_len; ++i) {
+        if (buf[key_start + i] < '0' || buf[key_start + i] > '9') return -EINVAL;
+        id = (uint16_t)(id * 10U + (uint16_t)(buf[key_start + i] - '0'));
+    }
+    pos++;
+    while (pos < len && (buf[pos] == ' ' || buf[pos] == '\t' || buf[pos] == '\n' || buf[pos] == '\r')) pos++;
+    if (pos >= len || buf[pos] != ':') return -EINVAL;
+    pos++;
+    while (pos < len && (buf[pos] == ' ' || buf[pos] == '\t' || buf[pos] == '\n' || buf[pos] == '\r')) pos++;
+
+    v->object_id = 0U;
+    v->instance_id = 0U;
+    v->resource_id = id;
+    v->id = id;
+    v->type = expected;
+
+    switch (expected) {
+    case SIRENA_LWM2M_VALUE_BOOLEAN:
+        if (pos + 4U <= len && strncmp(buf + pos, "true", 4U) == 0) {
+            v->data.boolean = true;
+            pos += 4U;
+        } else if (pos + 5U <= len && strncmp(buf + pos, "false", 5U) == 0) {
+            v->data.boolean = false;
+            pos += 5U;
+        } else {
+            return -EINVAL;
+        }
+        break;
+    case SIRENA_LWM2M_VALUE_INTEGER: {
+        size_t start = pos;
+        bool neg = false;
+        int64_t val = 0;
+        if (pos < len && buf[pos] == '-') { neg = true; pos++; }
+        if (pos >= len || buf[pos] < '0' || buf[pos] > '9') return -EINVAL;
+        while (pos < len && buf[pos] >= '0' && buf[pos] <= '9') {
+            val = val * 10 + (int64_t)(buf[pos] - '0');
+            pos++;
+        }
+        v->data.integer = neg ? -val : val;
+        (void)start;
+        break;
+    }
+    case SIRENA_LWM2M_VALUE_UNSIGNED: {
+        uint64_t val = 0U;
+        if (pos >= len || buf[pos] < '0' || buf[pos] > '9') return -EINVAL;
+        while (pos < len && buf[pos] >= '0' && buf[pos] <= '9') {
+            val = val * 10U + (uint64_t)(buf[pos] - '0');
+            pos++;
+        }
+        v->data.unsigned_integer = val;
+        break;
+    }
+    case SIRENA_LWM2M_VALUE_FLOAT: {
+        char tmp[65];
+        char *endptr = NULL;
+        size_t avail = len - pos;
+        double val;
+        if (avail == 0U || avail > (sizeof(tmp) - 1U)) return -EINVAL;
+        memcpy(tmp, buf + pos, avail);
+        tmp[avail] = '\0';
+        val = strtod(tmp, &endptr);
+        if (endptr == tmp) return -EINVAL;
+        pos += (size_t)(endptr - tmp);
+        v->data.floating_point = val;
+        break;
+    }
+    case SIRENA_LWM2M_VALUE_STRING: {
+        size_t start;
+        if (pos >= len || buf[pos] != '"') return -EINVAL;
+        pos++;
+        start = pos;
+        while (pos < len && buf[pos] != '"') {
+            if (buf[pos] == '\\') {
+                pos++;
+                if (pos >= len) return -EINVAL;
+            }
+            pos++;
+        }
+        if (pos >= len) return -EINVAL;
+        v->data.string.value = &buf[start];
+        v->data.string.length = pos - start;
+        pos++;
+        break;
+    }
+    case SIRENA_LWM2M_VALUE_OPAQUE: {
+        size_t start;
+        if (pos >= len || buf[pos] != '"') return -EINVAL;
+        pos++;
+        start = pos;
+        while (pos < len && buf[pos] != '"') {
+            if (buf[pos] == '\\') {
+                pos++;
+                if (pos >= len) return -EINVAL;
+            }
+            pos++;
+        }
+        if (pos >= len) return -EINVAL;
+        v->data.opaque.value = &buf[start];
+        v->data.opaque.length = pos - start;
+        pos++;
+        break;
+    }
+    case SIRENA_LWM2M_VALUE_OBJECT_LINK: {
+        size_t start;
+        size_t content_len;
+        const char *colon;
+        uint16_t oid = 0U;
+        uint16_t iid = 0U;
+        const char *p;
+        if (pos >= len || buf[pos] != '"') return -EINVAL;
+        pos++;
+        start = pos;
+        while (pos < len && buf[pos] != '"') {
+            if (buf[pos] == '\\') {
+                pos++;
+                if (pos >= len) return -EINVAL;
+            }
+            pos++;
+        }
+        if (pos >= len) return -EINVAL;
+        content_len = pos - start;
+        colon = memchr(&buf[start], ':', content_len);
+        if (colon == NULL) return -EINVAL;
+        p = &buf[start];
+        while (p < colon) {
+            if (*p < '0' || *p > '9') return -EINVAL;
+            oid = (uint16_t)(oid * 10U + (uint16_t)(*p - '0'));
+            p++;
+        }
+        if (p == &buf[start]) return -EINVAL;
+        p = colon + 1;
+        while (p < &buf[start] + content_len) {
+            if (*p < '0' || *p > '9') return -EINVAL;
+            iid = (uint16_t)(iid * 10U + (uint16_t)(*p - '0'));
+            p++;
+        }
+        if (p == colon + 1) return -EINVAL;
+        v->data.object_link.object_id = oid;
+        v->data.object_link.instance_id = iid;
+        pos++;
+        break;
+    }
+    default:
+        return -EINVAL;
+    }
+
+    while (pos < len && (buf[pos] == ' ' || buf[pos] == '\t' || buf[pos] == '\n' || buf[pos] == '\r')) pos++;
+    if (pos >= len || buf[pos] != '}') return -EINVAL;
+    pos++;
+    while (pos < len && (buf[pos] == ' ' || buf[pos] == '\t' || buf[pos] == '\n' || buf[pos] == '\r')) pos++;
+    if (pos != len) return -EINVAL;
+    return 0;
+}
+
 int sirena_lwm2m_codec_decode(uint16_t content_format,
                               enum sirena_lwm2m_value_type type,
                               const void *buffer,
@@ -1000,13 +1323,32 @@ int sirena_lwm2m_codec_decode(uint16_t content_format,
         return 0;
     }
 
+    if (content_format == SIRENA_LWM2M_CF_JSON) {
+        if (cap < 1U) return -ENOMEM;
+        if (decode_json_value((const char *)buffer, length, type, &values[0]) != 0) {
+            return -EINVAL;
+        }
+        *value_count = 1U;
+        return 0;
+    }
+
+    if (content_format == SIRENA_LWM2M_CF_CBOR) {
+        size_t consumed = 0U;
+        if (cap < 1U) return -ENOMEM;
+        if (decode_cbor_value((const uint8_t *)buffer, length, type, &values[0],
+                              &consumed) != 0) {
+            return -EINVAL;
+        }
+        if (consumed != length) return -EINVAL;
+        *value_count = 1U;
+        return 0;
+    }
+
     (void)buffer;
     (void)length;
     (void)values;
-    if (content_format == SIRENA_LWM2M_CF_CBOR ||
-        content_format == SIRENA_LWM2M_CF_SENML_CBOR ||
+    if (content_format == SIRENA_LWM2M_CF_SENML_CBOR ||
         content_format == SIRENA_LWM2M_CF_SENML_ETCH_CBOR ||
-        content_format == SIRENA_LWM2M_CF_JSON ||
         content_format == SIRENA_LWM2M_CF_SENML_JSON ||
         content_format == SIRENA_LWM2M_CF_SENML_ETCH_JSON) {
         return -ENOTSUP;
