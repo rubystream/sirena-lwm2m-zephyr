@@ -211,7 +211,8 @@ error codes of the API are the negative `errno` values of the table.
 - The creation and the deletion of object instances.
 - The block-wise transfer of large payloads.
 - The decoding of the structured content formats. The codec encodes them, but a
-  write in one of them is refused with 4.15.
+  write in one of them is refused with 4.15. A read composite parses the SenML
+  JSON and SenML CBOR target lists only.
 
 ## Tests
 
