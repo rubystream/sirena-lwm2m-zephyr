@@ -484,9 +484,9 @@ static size_t composite_collect_json(const char *buf, size_t len, uint16_t *oids
                 if (tlen == 0U || composite_parse_path_text(target, tlen, &oids[count], &iids[count],
                                                           &rids[count]) != 0) {
                     *invalid = true;
-                    continue;
+                } else {
+                    count++;
                 }
-                count++;
             }
             pos = quote_end + 1U;
         }
@@ -577,9 +577,9 @@ static size_t composite_collect_cbor(const uint8_t *buf, size_t len, uint16_t *o
                             composite_parse_path_text(target, tlen, &oids[count], &iids[count],
                                                      &rids[count]) != 0) {
                             *invalid = true;
-                            continue;
+                        } else {
+                            count++;
                         }
-                        count++;
                     }
                 }
             }

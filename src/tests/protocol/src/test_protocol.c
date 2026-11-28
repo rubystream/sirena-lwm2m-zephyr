@@ -1099,6 +1099,7 @@ ZTEST(sirena_lwm2m_protocol, test_read_composite_returns_every_requested_value)
 
     zassert_not_null(strstr(response, "\"/1/0/1\""), "the first target is missing: %s", response);
     zassert_not_null(strstr(response, "\"/3/0/1\""), "the second target is missing: %s", response);
+    zassert_not_null(strstr(response, "\"v\":300"), "the lifetime value is missing: %s", response);
 }
 
 ZTEST(sirena_lwm2m_protocol, test_read_composite_resolves_a_senml_base_name)
@@ -1277,5 +1278,41 @@ ZTEST(sirena_lwm2m_protocol, test_read_composite_with_a_malformed_target_is_refu
     zassert_equal(rc, 0, "composite read request failed: %d", rc);
 
     zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_BAD_REQUEST, "unexpected response code");
+    zassert_equal(peer_capture.payload_length, 0U, "a failure must not carry a payload");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_read_composite_skips_a_format_it_does_not_support)
+{
+    static const char payload[] = "[{\"n\":\"/1/0/1\"}]";
+    static const uint16_t accepted[] = { SIRENA_LWM2M_CF_TLV, SIRENA_LWM2M_CF_SENML_CBOR };
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_FETCH, "/1/0", SIRENA_LWM2M_CF_SENML_JSON, payload,
+                      sizeof(payload) - 1U, accepted, ARRAY_SIZE(accepted), -1, NULL);
+    zassert_equal(rc, 0, "composite read request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CONTENT, "unexpected response code");
+    zassert_equal(peer_capture.content_format, SIRENA_LWM2M_CF_SENML_CBOR,
+                  "the response must use the first supported composite format");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_read_composite_refuses_an_accept_list_without_a_composite_format)
+{
+    static const char payload[] = "[{\"n\":\"/1/0/1\"}]";
+    static const uint16_t accepted[] = { SIRENA_LWM2M_CF_TLV };
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_FETCH, "/1/0", SIRENA_LWM2M_CF_SENML_JSON, payload,
+                      sizeof(payload) - 1U, accepted, ARRAY_SIZE(accepted), -1, NULL);
+    zassert_equal(rc, 0, "composite read request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_NOT_ACCEPTABLE,
+                  "unexpected response code");
     zassert_equal(peer_capture.payload_length, 0U, "a failure must not carry a payload");
 }
