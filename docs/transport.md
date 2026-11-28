@@ -773,8 +773,8 @@ sends and the results it maps:
 | --- | --- | --- |
 | 201 | - | `0`, the registration succeeded |
 | 202 | - | `0`, the de-registration succeeded |
-| 204 | a successful write, execute, update or send | `0` |
-| 205 | a successful read, observe or cancel-observe | `0` |
+| 204 | a successful write, write composite, execute, update or send | `0` |
+| 205 | a successful read, read composite, observe or cancel-observe | `0` |
 | 400 | a malformed request or a malformed URI | `-EBADMSG` |
 | 403 | - | `-EACCES`, the registration is not allowed |
 | 404 | a resource that does not exist | `-ENOENT`, the URI is not found |
