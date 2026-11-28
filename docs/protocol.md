@@ -26,6 +26,7 @@ for every request it receives.
 | Write-Attributes | PUT (with URI-Query) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.04 Changed | 4.00, 4.04 |
 | Discover | GET (Accept: application/link-format) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.05 Content | 4.04, 4.06, 5.00 |
 | Read-Composite | FETCH | SenML JSON/CBOR target list | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 4.15, 5.00 |
+| Write-Composite | iPATCH | SenML JSON/CBOR target and value list | 2.04 Changed | 4.00, 4.04, 4.15, 5.00 |
 | Observe | GET with Observe = 0 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 5.03 |
 | Cancel Observation | GET with Observe = 1 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05 |
 | Notify | notification | the observed resource | 2.05 Content | |

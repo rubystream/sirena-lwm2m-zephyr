@@ -29,6 +29,7 @@
 #define PEER_SERVER_URI_RESOURCE 0U
 #define PEER_SERVER_LIFETIME_RESOURCE 1U
 #define PEER_SERVER_EXECUTE_RESOURCE 8U
+#define PEER_SERVER_BINDING_RESOURCE 6U
 #define PEER_DEVICE_REBOOT_RESOURCE 4U
 
 #define PEER_LOCATION "rd"
@@ -484,6 +485,7 @@ ZTEST(sirena_lwm2m_protocol, test_write_to_a_read_only_resource_is_refused)
 ZTEST(sirena_lwm2m_protocol, test_write_with_an_undecodable_content_format_is_refused)
 {
     static const uint8_t payload[] = { '{"bn":"/1/0/"}' };
+    char response[PEER_PAYLOAD_MAX + 1];
     int64_t lifetime = 0;
     int rc;
 
@@ -1331,4 +1333,214 @@ ZTEST(sirena_lwm2m_protocol, test_read_composite_of_an_instance_target_is_not_fo
 
     zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_NOT_FOUND, "unexpected response code");
     zassert_equal(peer_capture.payload_length, 0U, "a failure must not carry a payload");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_composite_applies_every_target)
+{
+    static const char payload[] =
+        "[{\"bn\":\"/1/0/\",\"n\":\"1\",\"v\":600},{\"bn\":\"/1/0/\",\"n\":\"6\",\"v\":true}]";
+    char response[PEER_PAYLOAD_MAX + 1];
+    int64_t lifetime = 0;
+    uint8_t binding[1] = {0};
+    size_t binding_length = sizeof(binding);
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_IPATCH, "/1/0", SIRENA_LWM2M_CF_SENML_JSON, payload,
+                      sizeof(payload) - 1U, NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "composite write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED, "unexpected response code");
+    zassert_equal(peer_capture.content_format, SIRENA_LWM2M_CF_SENML_JSON,
+                  "the response must carry the composite content format");
+    memcpy(response, peer_capture.payload, peer_capture.payload_length);
+    response[peer_capture.payload_length] = '\0';
+
+    zassert_not_null(strstr(response, "\"v\":204"),
+                     "the response must carry a status per target");
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME_UPDATED, "the stored value was not updated");
+
+    rc = sirena_lwm2m_get(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID, PEER_SERVER_BINDING_RESOURCE,
+                          binding, &binding_length);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_true(binding[0] != 0U, "the stored value was not updated");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_composite_reports_a_read_only_target)
+{
+    static const char payload[] =
+        "[{\"bn\":\"/1/0/\",\"n\":\"1\",\"v\":600},{\"bn\":\"/1/0/\",\"n\":\"0\",\"v\":\"urn:x\"}]";
+    char response[PEER_PAYLOAD_MAX + 1];
+    int64_t lifetime = 0;
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_IPATCH, "/1/0", SIRENA_LWM2M_CF_SENML_JSON, payload,
+                      sizeof(payload) - 1U, NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "composite write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED, "unexpected response code");
+    memcpy(response, peer_capture.payload, peer_capture.payload_length);
+    response[peer_capture.payload_length] = '\0';
+
+    zassert_not_null(strstr(response, "\"v\":405"),
+                     "the response must report the refused target");
+    zassert_not_null(strstr(response, "\"v\":204"),
+                     "the response must report the applied target");
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME_UPDATED, "the other target was not written");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_composite_reports_an_execute_only_target)
+{
+    static const char payload[] =
+        "[{\"bn\":\"/1/0/\",\"n\":\"1\",\"v\":600},{\"bn\":\"/1/0/\",\"n\":\"8\",\"v\":1}]";
+    char response[PEER_PAYLOAD_MAX + 1];
+    int64_t lifetime = 0;
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_IPATCH, "/1/0", SIRENA_LWM2M_CF_SENML_JSON, payload,
+                      sizeof(payload) - 1U, NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "composite write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED, "unexpected response code");
+    memcpy(response, peer_capture.payload, peer_capture.payload_length);
+    response[peer_capture.payload_length] = '\0';
+
+    zassert_not_null(strstr(response, "\"v\":405"),
+                     "the response must report the refused target");
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME_UPDATED, "the other target was not written");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_composite_reports_a_mismatched_value)
+{
+    static const char payload[] =
+        "[{\"bn\":\"/1/0/\",\"n\":\"1\",\"v\":\"not-a-number\"},{\"bn\":\"/1/0/\",\"n\":\"6\",\"v\":true}]";
+    char response[PEER_PAYLOAD_MAX + 1];
+    uint8_t binding[1] = {0};
+    size_t binding_length = sizeof(binding);
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_IPATCH, "/1/0", SIRENA_LWM2M_CF_SENML_JSON, payload,
+                      sizeof(payload) - 1U, NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "composite write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED, "unexpected response code");
+    memcpy(response, peer_capture.payload, peer_capture.payload_length);
+    response[peer_capture.payload_length] = '\0';
+
+    zassert_not_null(strstr(response, "\"v\":400"),
+                     "the response must report the mismatched target");
+
+    rc = sirena_lwm2m_get(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID, PEER_SERVER_BINDING_RESOURCE,
+                          binding, &binding_length);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_true(binding[0] != 0U, "the other target was not written");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_composite_reports_an_unknown_target)
+{
+    static const char payload[] =
+        "[{\"bn\":\"/1/0/\",\"n\":\"1\",\"v\":600},{\"bn\":\"/1/0/\",\"n\":\"99\",\"v\":1}]";
+    char response[PEER_PAYLOAD_MAX + 1];
+    int64_t lifetime = 0;
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_IPATCH, "/1/0", SIRENA_LWM2M_CF_SENML_JSON, payload,
+                      sizeof(payload) - 1U, NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "composite write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED, "unexpected response code");
+    memcpy(response, peer_capture.payload, peer_capture.payload_length);
+    response[peer_capture.payload_length] = '\0';
+
+    zassert_not_null(strstr(response, "\"v\":404"),
+                     "the response must report the unknown target");
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME_UPDATED, "the other target was not written");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_composite_refuses_an_unsupported_content_format)
+{
+    static const char payload[] = "[{\"bn\":\"/1/0/\",\"n\":\"1\",\"v\":600}]";
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_IPATCH, "/1/0", SIRENA_LWM2M_CF_TLV, payload,
+                      sizeof(payload) - 1U, NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "composite write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_UNSUPPORTED_CONTENT_FORMAT,
+                  "unexpected response code");
+    zassert_equal(peer_capture.payload_length, 0U, "a failure must not carry a payload");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_composite_accepts_a_senml_cbor_payload)
+{
+    struct sirena_lwm2m_codec_value request_value = {
+        .object_id = PEER_SERVER_OBJECT_ID,
+        .instance_id = PEER_INSTANCE_ID,
+        .resource_id = PEER_SERVER_LIFETIME_RESOURCE,
+        .id = PEER_SERVER_LIFETIME_RESOURCE,
+        .type = SIRENA_LWM2M_VALUE_INTEGER,
+    };
+    char response[PEER_PAYLOAD_MAX + 1];
+    uint8_t payload[PEER_PAYLOAD_MAX];
+    size_t payload_length = sizeof(payload);
+    int64_t lifetime = 0;
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    request_value.data.integer = PEER_LIFETIME_UPDATED;
+
+    rc = sirena_lwm2m_codec_encode(SIRENA_LWM2M_CF_SENML_CBOR, &request_value, 1U, payload,
+                                    &payload_length);
+    zassert_equal(rc, 0, "the senml cbor encoding failed: %d", rc);
+
+    rc = peer_request(COAP_METHOD_IPATCH, "/1/0", SIRENA_LWM2M_CF_SENML_CBOR, payload,
+                      payload_length, NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "composite write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED, "unexpected response code");
+
+    memcpy(response, peer_capture.payload, peer_capture.payload_length);
+    response[peer_capture.payload_length] = '\0';
+
+    zassert_not_null(strstr(response, "\"v\":204"), "the response must carry a status per target");
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME_UPDATED, "the stored value was not updated");
 }
