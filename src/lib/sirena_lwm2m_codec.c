@@ -2357,7 +2357,7 @@ static int senml_json_record(const char *buf, size_t len, size_t *pos, const cha
         return -EINVAL;
     }
 
-    if (!has_name || !has_value) {
+    if (!has_name) {
         return -EINVAL;
     }
 
@@ -2392,6 +2392,7 @@ static int senml_json_record(const char *buf, size_t len, size_t *pos, const cha
     records[*parsed].value_length = value_length;
     records[*parsed].value_is_string = value_is_string;
     records[*parsed].value_invalid = value_invalid;
+    records[*parsed].has_value = has_value;
     (*parsed)++;
 
     return 0;
@@ -2835,7 +2836,7 @@ static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, const 
         }
     }
 
-    if (!has_name || !has_value) {
+    if (!has_name) {
         return -EINVAL;
     }
 
@@ -2866,6 +2867,7 @@ static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, const 
     records[*parsed].value_length = value_length;
     records[*parsed].value_is_string = value_is_string;
     records[*parsed].value_invalid = value_invalid;
+    records[*parsed].has_value = has_value;
     (*parsed)++;
 
     return 0;

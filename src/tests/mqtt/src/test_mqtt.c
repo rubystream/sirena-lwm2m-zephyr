@@ -48,7 +48,7 @@
 #define PEER_PSK_IDENTITY "sirena-mqtt-psk"
 #define PEER_PSK_KEY "0123456789abcdef"
 #define PEER_LINK_FORMAT_CONTENT_FORMAT 40U
-#define PEER_OPERATION_READ_COMPOSITE 10U
+#define PEER_OPERATION_UNSUPPORTED 99U
 #define PEER_CBOR_MAX_DEPTH 8U
 
 struct peer_publish {
@@ -1495,7 +1495,7 @@ ZTEST(sirena_lwm2m_mqtt, test_an_unsupported_operation_is_answered_with_not_impl
 {
     struct sirena_lwm2m_mqtt_message request = {
         .has_operation = true,
-        .operation = PEER_OPERATION_READ_COMPOSITE,
+        .operation = PEER_OPERATION_UNSUPPORTED,
         .token = 63U,
     };
     struct sirena_lwm2m_mqtt_message answer;
@@ -1509,6 +1509,169 @@ ZTEST(sirena_lwm2m_mqtt, test_an_unsupported_operation_is_answered_with_not_impl
                  "the broker received no answer");
     zassert_equal(answer.result, SIRENA_LWM2M_MQTT_RESULT_NOT_IMPLEMENTED, "unexpected result");
     zassert_equal(answer.token, request.token, "unexpected token");
+    zassert_false(answer.has_payload, "a failure must not carry a value");
+}
+
+
+ZTEST(sirena_lwm2m_mqtt, test_a_composite_read_is_answered_with_the_requested_values)
+{
+    static const char payload[] = "[{\"n\":\"/1/0/1\"},{\"n\":\"/3/0/1\"}]";
+    struct sirena_lwm2m_mqtt_message request = {
+        .has_operation = true,
+        .operation = SIRENA_LWM2M_MQTT_OPERATION_READ_COMPOSITE,
+        .token = 70U,
+        .has_uri = true,
+        .has_content_format = true,
+        .content_format = SIRENA_LWM2M_CF_SENML_JSON,
+        .has_payload = true,
+        .payload = (const uint8_t *)payload,
+        .payload_length = sizeof(payload) - 1U,
+    };
+    struct sirena_lwm2m_mqtt_message answer;
+    struct peer_publish publish;
+    char response[PEER_PAYLOAD_MAX + 1];
+    int rc;
+
+    strcpy(request.uri, "/1/0");
+
+    rc = peer_publish_command(&request);
+    zassert_equal(rc, 0, "the composite read command could not be published: %d", rc);
+
+    zassert_true(peer_wait_publish(peer_match_result, 0U, &publish, &answer),
+                 "the broker received no answer");
+    zassert_true(answer.has_result, "the answer carries no result");
+    zassert_equal(answer.result, SIRENA_LWM2M_MQTT_RESULT_CONTENT, "unexpected result");
+    zassert_equal(answer.token, request.token, "unexpected token");
+    zassert_true(answer.has_content_format, "the answer carries no content format");
+    zassert_equal(answer.content_format, SIRENA_LWM2M_CF_SENML_JSON,
+                  "unexpected content format");
+    zassert_true(answer.has_payload, "the answer carries no value");
+
+    memcpy(response, answer.payload, answer.payload_length);
+    response[answer.payload_length] = '\0';
+
+    zassert_not_null(strstr(response, "\"/1/0/1\""), "the first target is missing: %s", response);
+    zassert_not_null(strstr(response, "\"/3/0/1\""), "the second target is missing: %s", response);
+    zassert_not_null(strstr(response, "\"v\":300"),
+                     "the lifetime value is missing: %s", response);
+}
+
+ZTEST(sirena_lwm2m_mqtt, test_a_composite_write_is_answered_with_the_target_statuses)
+{
+    static const char payload[] = "[{\"bn\":\"/1/0/\",\"n\":\"1\",\"v\":600}]";
+    struct sirena_lwm2m_mqtt_message request = {
+        .has_operation = true,
+        .operation = SIRENA_LWM2M_MQTT_OPERATION_WRITE_COMPOSITE,
+        .token = 71U,
+        .has_uri = true,
+        .has_content_format = true,
+        .content_format = SIRENA_LWM2M_CF_SENML_JSON,
+        .has_payload = true,
+        .payload = (const uint8_t *)payload,
+        .payload_length = sizeof(payload) - 1U,
+    };
+    struct sirena_lwm2m_mqtt_message answer;
+    struct peer_publish publish;
+    char response[PEER_PAYLOAD_MAX + 1];
+    int64_t lifetime = 0;
+    int rc;
+
+    strcpy(request.uri, "/1/0");
+
+    rc = peer_publish_command(&request);
+    zassert_equal(rc, 0, "the composite write command could not be published: %d", rc);
+
+    zassert_true(peer_wait_publish(peer_match_result, 0U, &publish, &answer),
+                 "the broker received no answer");
+    zassert_true(answer.has_result, "the answer carries no result");
+    zassert_equal(answer.result, SIRENA_LWM2M_MQTT_RESULT_CHANGED, "unexpected result");
+    zassert_equal(answer.token, request.token, "unexpected token");
+    zassert_true(answer.has_payload, "the answer carries no status");
+
+    memcpy(response, answer.payload, answer.payload_length);
+    response[answer.payload_length] = '\0';
+
+    zassert_not_null(strstr(response, "\"v\":204"), "the status is missing: %s", response);
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME_UPDATED, "the stored value was not updated");
+}
+
+ZTEST(sirena_lwm2m_mqtt, test_a_composite_write_reports_a_failing_target)
+{
+    static const char payload[] =
+        "[{\"bn\":\"/1/0/\",\"n\":\"0\",\"v\":\"urn:x\"},"
+        "{\"bn\":\"/1/0/\",\"n\":\"1\",\"v\":600}]";
+    struct sirena_lwm2m_mqtt_message request = {
+        .has_operation = true,
+        .operation = SIRENA_LWM2M_MQTT_OPERATION_WRITE_COMPOSITE,
+        .token = 72U,
+        .has_uri = true,
+        .has_content_format = true,
+        .content_format = SIRENA_LWM2M_CF_SENML_JSON,
+        .has_payload = true,
+        .payload = (const uint8_t *)payload,
+        .payload_length = sizeof(payload) - 1U,
+    };
+    struct sirena_lwm2m_mqtt_message answer;
+    struct peer_publish publish;
+    char response[PEER_PAYLOAD_MAX + 1];
+    int64_t lifetime = 0;
+    int rc;
+
+    strcpy(request.uri, "/1/0");
+
+    rc = peer_publish_command(&request);
+    zassert_equal(rc, 0, "the composite write command could not be published: %d", rc);
+
+    zassert_true(peer_wait_publish(peer_match_result, 0U, &publish, &answer),
+                 "the broker received no answer");
+    zassert_equal(answer.result, SIRENA_LWM2M_MQTT_RESULT_CHANGED, "unexpected result");
+    zassert_true(answer.has_payload, "the answer carries no status");
+
+    memcpy(response, answer.payload, answer.payload_length);
+    response[answer.payload_length] = '\0';
+
+    zassert_not_null(strstr(response, "\"v\":405"),
+                     "the refused target is missing: %s", response);
+    zassert_not_null(strstr(response, "\"v\":204"),
+                     "the applied target is missing: %s", response);
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME_UPDATED, "the other target was not written");
+}
+
+ZTEST(sirena_lwm2m_mqtt, test_a_composite_read_in_an_unsupported_format_is_refused)
+{
+    static const char payload[] = "[{\"n\":\"/1/0/1\"}]";
+    struct sirena_lwm2m_mqtt_message request = {
+        .has_operation = true,
+        .operation = SIRENA_LWM2M_MQTT_OPERATION_READ_COMPOSITE,
+        .token = 73U,
+        .has_uri = true,
+        .has_content_format = true,
+        .content_format = SIRENA_LWM2M_CF_TLV,
+        .has_payload = true,
+        .payload = (const uint8_t *)payload,
+        .payload_length = sizeof(payload) - 1U,
+    };
+    struct sirena_lwm2m_mqtt_message answer;
+    struct peer_publish publish;
+    int rc;
+
+    strcpy(request.uri, "/1/0");
+
+    rc = peer_publish_command(&request);
+    zassert_equal(rc, 0, "the composite read command could not be published: %d", rc);
+
+    zassert_true(peer_wait_publish(peer_match_result, 0U, &publish, &answer),
+                 "the broker received no answer");
+    zassert_equal(answer.result, SIRENA_LWM2M_MQTT_RESULT_UNSUPPORTED_FORMAT,
+                  "unexpected result");
     zassert_false(answer.has_payload, "a failure must not carry a value");
 }
 

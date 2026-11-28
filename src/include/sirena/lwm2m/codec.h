@@ -30,6 +30,7 @@ struct sirena_lwm2m_senml_record {
     size_t value_length;
     bool value_is_string;
     bool value_invalid;
+    bool has_value;
 };
 
 struct sirena_lwm2m_codec_value {

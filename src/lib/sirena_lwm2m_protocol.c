@@ -17,6 +17,8 @@ static uint8_t protocol_send_raw[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES][CONFIG_SI
 static struct sirena_lwm2m_codec_value protocol_send_values[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
 static struct sirena_lwm2m_senml_record protocol_composite_records[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
 static struct sirena_lwm2m_codec_value protocol_composite_status[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
+static struct sirena_lwm2m_codec_value protocol_composite_values[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
+static uint8_t protocol_composite_raw[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES][CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX];
 
 int sirena_lwm2m_protocol_value_from_resource(const struct sirena_lwm2m_resource *resource,
                                         const void *raw, size_t raw_length,
@@ -389,7 +391,7 @@ static int protocol_parse_path(const char *path, uint16_t *object_id, uint16_t *
         if (pos == length || path[pos] == '/') {
             if (any) {
                 if (part >= 3U) {
-                    return -EINVAL;
+                    return -ENOTSUP;
                 }
                 parts[part++] = value;
                 value = 0U;
@@ -409,12 +411,28 @@ static int protocol_parse_path(const char *path, uint16_t *object_id, uint16_t *
     }
 
     if (part != 3U) {
-        return -EINVAL;
+        return -ENOTSUP;
     }
 
     *object_id = (uint16_t)parts[0];
     *instance_id = (uint16_t)parts[1];
     *resource_id = (uint16_t)parts[2];
+
+    return 0;
+}
+
+static int64_t protocol_path_status(const char *path, uint16_t *object_id, uint16_t *instance_id,
+                                    uint16_t *resource_id)
+{
+    int rc = protocol_parse_path(path, object_id, instance_id, resource_id);
+
+    if (rc == -EINVAL) {
+        return 400;
+    }
+
+    if (rc != 0) {
+        return 404;
+    }
 
     return 0;
 }
@@ -543,7 +561,8 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         request->operation != SIRENA_LWM2M_OPERATION_DELETE &&
         request->operation != SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES &&
         request->operation != SIRENA_LWM2M_OPERATION_DISCOVER &&
-        request->operation != SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE) {
+        request->operation != SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE &&
+        request->operation != SIRENA_LWM2M_OPERATION_READ_COMPOSITE) {
         protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
         return 0;
     }
@@ -619,6 +638,123 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         protocol_set_status(response, SIRENA_LWM2M_STATUS_CHANGED);
         return 0;
     }
+    case SIRENA_LWM2M_OPERATION_READ_COMPOSITE: {
+        uint16_t read_format = request->content_format_present
+                                   ? request->content_format
+                                   : (uint16_t)SIRENA_LWM2M_CF_SENML_JSON;
+        size_t record_count = ARRAY_SIZE(protocol_composite_records);
+        size_t value_count = 0U;
+        size_t length;
+        size_t i;
+
+        if (read_format != (uint16_t)SIRENA_LWM2M_CF_SENML_JSON &&
+            read_format != (uint16_t)SIRENA_LWM2M_CF_SENML_CBOR) {
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_UNSUPPORTED_CONTENT_FORMAT);
+            return 0;
+        }
+
+        rc = sirena_lwm2m_codec_decode_senml_records(read_format, request->payload,
+                                                      request->payload_length,
+                                                      protocol_composite_records, &record_count);
+        if (rc != 0 || record_count == 0U) {
+            protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
+            return 0;
+        }
+
+        for (i = 0U; i < record_count; i++) {
+            struct sirena_lwm2m_resource *resource;
+            char target[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
+            const char *path = protocol_composite_records[i].path;
+            uint16_t object_id = 0U;
+            uint16_t instance_id = 0U;
+            uint16_t resource_id = 0U;
+            size_t raw_length = CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX;
+
+            if (path[0] != '/') {
+                int written = snprintf(target, sizeof(target), "/%u/%u/%s", request->object_id,
+                                       request->instance_id, path);
+
+                if (written < 0 || (size_t)written >= sizeof(target)) {
+                    protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+                    return 0;
+                }
+
+                path = target;
+            }
+
+            {
+                int64_t path_status = protocol_path_status(path, &object_id, &instance_id,
+                                                           &resource_id);
+
+                if (path_status == 400) {
+                    protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
+                    return 0;
+                }
+
+                if (path_status != 0) {
+                    protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+                    return 0;
+                }
+            }
+
+            if (sirena_lwm2m_find_resource(object_id, instance_id, resource_id, &resource) != 0) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
+                return 0;
+            }
+
+            if ((resource->operations & SIRENA_LWM2M_OP_READ) == 0U || resource->read == NULL) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_METHOD_NOT_ALLOWED);
+                return 0;
+            }
+
+            if (sirena_lwm2m_get(object_id, instance_id, resource_id,
+                                 protocol_composite_raw[value_count], &raw_length) != 0) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_INTERNAL_ERROR);
+                return 0;
+            }
+
+            if (sirena_lwm2m_protocol_value_from_resource(resource,
+                                                           protocol_composite_raw[value_count],
+                                                           raw_length,
+                                                           &protocol_composite_values[value_count]) != 0) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_INTERNAL_ERROR);
+                return 0;
+            }
+
+            protocol_composite_values[value_count].object_id = object_id;
+            protocol_composite_values[value_count].instance_id = instance_id;
+            protocol_composite_values[value_count].resource_id = resource_id;
+            protocol_composite_values[value_count].id = resource_id;
+            value_count++;
+        }
+
+        {
+            uint16_t preferred = (uint16_t)CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
+            uint16_t selected = (uint16_t)SIRENA_LWM2M_CF_SENML_JSON;
+
+            if (sirena_lwm2m_content_format_negotiate_multi(request->accepted_formats,
+                                                            request->accepted_format_count,
+                                                            preferred, protocol_composite_values,
+                                                            value_count, &selected) != 0) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_ACCEPTABLE);
+                return 0;
+            }
+
+            length = response->payload_capacity;
+            rc = sirena_lwm2m_codec_encode(selected, protocol_composite_values, value_count,
+                                           response->payload, &length);
+            if (rc != 0) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_INTERNAL_ERROR);
+                return 0;
+            }
+
+            response->status = SIRENA_LWM2M_STATUS_CONTENT;
+            response->content_format = selected;
+            response->payload_length = length;
+        }
+
+        return 0;
+    }
     case SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE: {
         uint16_t write_format = request->content_format_present
                                    ? request->content_format
@@ -683,30 +819,36 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
 
             if (path == NULL) {
                 status = 404;
-            } else if (protocol_parse_path(path, &object_id, &instance_id, &resource_id) != 0) {
-                status = 404;
-            } else if (sirena_lwm2m_find_resource(object_id, instance_id, resource_id,
-                                                  &resource) != 0) {
-                status = 404;
-            } else if ((resource->operations & SIRENA_LWM2M_OP_WRITE) == 0U ||
-                       resource->write == NULL) {
-                status = 405;
-            } else if (protocol_composite_records[i].value_invalid) {
-                status = 400;
-            } else if (protocol_value_from_text(resource->type,
-                                                protocol_composite_records[i].value,
-                                                protocol_composite_records[i].value_length,
-                                                protocol_composite_records[i].value_is_string,
-                                                &value) != 0) {
-                status = 400;
             } else {
-                int write_rc = protocol_write_resource(object_id, instance_id, resource_id,
-                                                       resource, &value);
+                int64_t path_status = protocol_path_status(path, &object_id, &instance_id,
+                                                           &resource_id);
 
-                if (write_rc == -ENOTSUP) {
+                if (path_status != 0) {
+                    status = path_status;
+                } else if (sirena_lwm2m_find_resource(object_id, instance_id, resource_id,
+                                                      &resource) != 0) {
+                    status = 404;
+                } else if ((resource->operations & SIRENA_LWM2M_OP_WRITE) == 0U ||
+                           resource->write == NULL) {
                     status = 405;
-                } else if (write_rc != 0) {
-                    status = 500;
+                } else if (protocol_composite_records[i].value_invalid ||
+                           !protocol_composite_records[i].has_value) {
+                    status = 400;
+                } else if (protocol_value_from_text(resource->type,
+                                                    protocol_composite_records[i].value,
+                                                    protocol_composite_records[i].value_length,
+                                                    protocol_composite_records[i].value_is_string,
+                                                    &value) != 0) {
+                    status = 400;
+                } else {
+                    int write_rc = protocol_write_resource(object_id, instance_id, resource_id,
+                                                           resource, &value);
+
+                    if (write_rc == -ENOTSUP) {
+                        status = 405;
+                    } else if (write_rc != 0) {
+                        status = 500;
+                    }
                 }
             }
 
