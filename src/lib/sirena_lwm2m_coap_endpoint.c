@@ -654,7 +654,8 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
             }
         }
 
-        if (coap_header_get_code(packet) == COAP_METHOD_FETCH) {
+        if (coap_header_get_code(packet) == COAP_METHOD_FETCH ||
+            coap_header_get_code(packet) == COAP_METHOD_IPATCH) {
             allowed = true;
         }
 
@@ -987,6 +988,9 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     case COAP_METHOD_POST:
         protocol_request.operation = SIRENA_LWM2M_OPERATION_EXECUTE;
         break;
+    case COAP_METHOD_IPATCH:
+        protocol_request.operation = SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE;
+        break;
     default:
         (void)endpoint_send_message(response_type, response_message_id, token_length, token,
                                     COAP_RESPONSE_CODE_NOT_ALLOWED, false, 0U, -1, NULL, 0U,
@@ -1072,7 +1076,8 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     }
 
     (void)endpoint_send_message(response_type, response_message_id, token_length, token, code,
-                                protocol_response.status == SIRENA_LWM2M_STATUS_CONTENT,
+                                protocol_response.status == SIRENA_LWM2M_STATUS_CONTENT ||
+                                    protocol_response.payload_length > 0U,
                                 protocol_response.content_format,
                                 observer != NULL ? (int)observer->sequence : -1,
                                 protocol_response.payload, protocol_response.payload_length, peer,

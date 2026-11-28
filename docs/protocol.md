@@ -26,6 +26,7 @@ for every request it receives.
 | Write-Attributes | PUT (with URI-Query) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.04 Changed | 4.00, 4.04 |
 | Discover | GET (Accept: application/link-format) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.05 Content | 4.04, 4.06, 5.00 |
 | Read-Composite | FETCH | SenML JSON/CBOR target list | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 4.15, 5.00 |
+| Write-Composite | iPATCH | SenML JSON/CBOR target and value list | 2.04 Changed | 4.00, 4.04, 4.05, 4.15, 5.00 |
 | Observe | GET with Observe = 0 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 5.03 |
 | Cancel Observation | GET with Observe = 1 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05 |
 | Notify | notification | the observed resource | 2.05 Content | |
@@ -65,7 +66,8 @@ account.
 | The request carries no Accept option | The client uses its preferred format, `CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT`, when the codec can encode the resource in it. Otherwise it uses the first format it supports that the codec can encode the resource in. |
 | No format of the Accept list is supported, or none of them encodes the resource | The client answers 4.06 Not Acceptable. |
 | The Accept list is longer than `CONFIG_SIRENA_LWM2M_ACCEPTED_FORMATS_MAX` | The client answers 4.06 Not Acceptable. It never ignores the formats it cannot hold. |
-| The request is a write | The payload is decoded with the Content-Format of the request. The TLV format carries no type of its own, so the type of the value comes from the object model of the resource the request addresses. Without a Content-Format option the preferred format is used. The Accept option of a write is ignored: the response of a write carries no representation, so there is nothing for the server to constrain. |
+| The request is a write | The payload is decoded with the Content-Format of the request. The TLV format carries no type of its own, so the type of the value comes from the object model of the resource the request addresses. Without a Content-Format option the preferred format is used. The Accept option of a write is ignored: the response of a single write carries no representation, so there is nothing for the server to constrain. |
+| The request is a write composite | The payload is decoded with the Content-Format of the request, which must be SenML JSON or SenML CBOR; another format is refused with 4.15. Every record names a target and its value, the type of the value comes from the object model of the resource the record addresses, and the response is a SenML JSON list with one status per target: 204 for an applied write, 400 for a value of the wrong type, 404 for an unknown target, 405 for a target that cannot be written and 500 for a failed write. |
 | The request is an execute | The payload is passed to the execute handler as it is. The Accept option of an execute is ignored, for the same reason. |
 
 The preferred format defaults to the TLV format, because the codec encodes every
@@ -207,12 +209,12 @@ error codes of the API are the negative `errno` values of the table.
 
 ## Not in this slice
 
-- The composite operations: Write-Composite and Observe-Composite.
+- The Observe-Composite operation.
 - The creation and the deletion of object instances.
 - The block-wise transfer of large payloads.
 - The decoding of the structured content formats. The codec encodes them, but a
-  write in one of them is refused with 4.15. A read composite parses the SenML
-  JSON and SenML CBOR target lists only.
+  single write in one of them is refused with 4.15. The composite operations
+  parse the SenML JSON and SenML CBOR record sets only.
 
 ## Tests
 
