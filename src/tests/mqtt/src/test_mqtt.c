@@ -1552,6 +1552,8 @@ ZTEST(sirena_lwm2m_mqtt, test_a_composite_read_is_answered_with_the_requested_va
 
     zassert_not_null(strstr(response, "\"/1/0/1\""), "the first target is missing: %s", response);
     zassert_not_null(strstr(response, "\"/3/0/1\""), "the second target is missing: %s", response);
+    zassert_not_null(strstr(response, "\"v\":300"),
+                     "the lifetime value is missing: %s", response);
 }
 
 ZTEST(sirena_lwm2m_mqtt, test_a_composite_write_is_answered_with_the_target_statuses)

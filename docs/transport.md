@@ -790,8 +790,8 @@ The results the client sends are the results of the operation it
 answered: a read answers with 205, a write and an execute answer with
 204, an observe and a cancel-observe answer with 205, and a failure
 answers with the result of the failure. An operation the client does not
-implement, for example a composite operation, a Create or a Delete, is
-answered with 501, as the generic errors of the specification ask. The
+implement, for example a Create or a Delete, is answered with 501, as the
+generic errors of the specification ask. The
 answer carries the token of the request it answers, so that the server
 can match it.
 
@@ -817,8 +817,7 @@ can match it.
 ### Not in this binding
 
 - The bootstrap interface, the `bs` topics.
-- The composite operations, the Create and the Delete operations. The
-  client answers them with 501.
+- The Create and the Delete operations. The client answers them with 501.
 - The block-wise transfer of large payloads.
 - The MQTT Server object (id 24) and the COSE object (id 23).
 

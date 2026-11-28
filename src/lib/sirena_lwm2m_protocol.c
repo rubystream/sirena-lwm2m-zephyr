@@ -561,7 +561,8 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         request->operation != SIRENA_LWM2M_OPERATION_DELETE &&
         request->operation != SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES &&
         request->operation != SIRENA_LWM2M_OPERATION_DISCOVER &&
-        request->operation != SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE) {
+        request->operation != SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE &&
+        request->operation != SIRENA_LWM2M_OPERATION_READ_COMPOSITE) {
         protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
         return 0;
     }
