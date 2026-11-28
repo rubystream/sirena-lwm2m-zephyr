@@ -797,170 +797,6 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         }
     }
 
-    if (coap_header_get_code(packet) == COAP_METHOD_FETCH) {
-        uint16_t oids[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
-        uint16_t iids[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
-        uint16_t rids[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
-        size_t target_count;
-        struct sirena_lwm2m_codec_value values[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
-        size_t value_count = 0U;
-        size_t target_index;
-        bool unknown_path = false;
-        bool not_readable = false;
-        bool resource_error = false;
-        bool invalid_target = false;
-        bool unresolved_target = false;
-        int negotiated = -1;
-        bool negotiated_found = false;
-
-        if (rc != 0) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_NOT_ACCEPTABLE, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
-        }
-
-        if (content_format < 0 || (content_format != (int)SIRENA_LWM2M_CF_SENML_JSON &&
-                                   content_format != (int)SIRENA_LWM2M_CF_SENML_CBOR)) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_UNSUPPORTED_CONTENT_FORMAT, false, 0U,
-                                        -1, NULL, 0U, peer, peer_length);
-            return;
-        }
-
-        if (content_format == (int)SIRENA_LWM2M_CF_SENML_JSON) {
-            target_count = composite_collect_json((const char *)payload, payload_length, oids, iids,
-                                                  rids, CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES,
-                                                  &invalid_target, &unresolved_target);
-        } else {
-            target_count = composite_collect_cbor((const uint8_t *)payload, payload_length, oids,
-                                                  iids, rids, CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES,
-                                                  &invalid_target, &unresolved_target);
-        }
-
-        if (invalid_target) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
-        }
-
-        if (unresolved_target) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_NOT_FOUND, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
-        }
-
-        if (target_count > CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
-        }
-
-        if (target_count == 0U) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
-        }
-
-        memset(values, 0, sizeof(values));
-        for (target_index = 0U; target_index < target_count; ++target_index) {
-            struct sirena_lwm2m_resource *resource;
-            size_t raw_length = CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX;
-
-            if (sirena_lwm2m_find_resource(oids[target_index], iids[target_index],
-                                            rids[target_index], &resource) != 0) {
-                unknown_path = true;
-                continue;
-            }
-
-            if ((resource->operations & SIRENA_LWM2M_OP_READ) == 0U || resource->read == NULL) {
-                not_readable = true;
-                continue;
-            }
-
-            if (sirena_lwm2m_get(oids[target_index], iids[target_index], rids[target_index],
-                                 composite_raw[target_index], &raw_length) != 0) {
-                resource_error = true;
-                continue;
-            }
-
-            if (sirena_lwm2m_protocol_value_from_resource(resource, composite_raw[target_index], raw_length,
-                                            &values[value_count]) != 0) {
-                resource_error = true;
-                continue;
-            }
-
-            values[value_count].object_id = oids[target_index];
-            values[value_count].instance_id = iids[target_index];
-            values[value_count].resource_id = rids[target_index];
-            values[value_count].id = rids[target_index];
-            value_count++;
-        }
-
-        if (unknown_path) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_NOT_FOUND, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
-        }
-
-        if (not_readable) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_NOT_ALLOWED, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
-        }
-
-        if (resource_error) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_INTERNAL_ERROR, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
-        }
-
-        if (value_count == 0U) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
-        }
-
-        {
-            uint16_t preferred = (uint16_t)CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
-            uint16_t selected = 0U;
-
-            if (sirena_lwm2m_content_format_negotiate_multi(accepted, accepted_count, preferred,
-                                                           values, value_count, &selected) == 0) {
-                negotiated = (int)selected;
-                negotiated_found = true;
-            }
-        }
-
-        if (!negotiated_found) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_NOT_ACCEPTABLE, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
-        }
-
-        size_t length = sizeof(response_payload);
-        if (sirena_lwm2m_codec_encode((uint16_t)negotiated, values, value_count, response_payload,
-                                     &length) != 0) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_INTERNAL_ERROR, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
-        }
-
-        (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                    COAP_RESPONSE_CODE_CONTENT, true, (uint16_t)negotiated, -1,
-                                    response_payload, length, peer, peer_length);
-        return;
-    }
 
     if (coap_header_get_code(packet) == COAP_METHOD_GET) {
         if (rc == 0 && accepted_count > 0U &&
@@ -989,6 +825,9 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     case COAP_METHOD_POST:
         protocol_request.operation = SIRENA_LWM2M_OPERATION_EXECUTE;
         break;
+    case COAP_METHOD_FETCH:
+        protocol_request.operation = SIRENA_LWM2M_OPERATION_READ_COMPOSITE;
+        break;
     case COAP_METHOD_IPATCH:
         protocol_request.operation = SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE;
         break;
@@ -1001,6 +840,7 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
 
     if (protocol_request.operation == SIRENA_LWM2M_OPERATION_READ ||
         protocol_request.operation == SIRENA_LWM2M_OPERATION_DISCOVER ||
+        protocol_request.operation == SIRENA_LWM2M_OPERATION_READ_COMPOSITE ||
         protocol_request.operation == SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE) {
         if (rc != 0) {
             (void)endpoint_send_message(response_type, response_message_id, token_length, token,

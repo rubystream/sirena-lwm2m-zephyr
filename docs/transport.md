@@ -637,8 +637,10 @@ The operation codes of the specification are:
 | Update | 7 | Registration |
 | De-register | 8 | Registration |
 | Read | 9 | Device management |
+| Read-Composite | 10 | Device management |
 | Discover | 11 | Device management |
 | Write Replace | 12 | Device management |
+| Write-Composite | 13 | Device management |
 | Write-Attributes | 14 | Device management |
 | Execute | 16 | Device management |
 | Observe | 20 | Information reporting |
@@ -691,8 +693,10 @@ example `/3/0/0`.
 | Operation | Code | Payload of the request | Answer |
 | --- | --- | --- | --- |
 | Read | 9 | `operation`, `token`, `uri` | `result`, `token`, `ct`, `payload` |
+| Read-Composite | 10 | `operation`, `token`, `uri`, `ct`, `payload` | `result`, `token`, `ct`, `payload` |
 | Discover | 11 | `operation`, `token`, `uri` | `result`, `token`, `ct`, `payload` |
 | Write Replace | 12 | `operation`, `token`, `uri`, `ct`, `payload` | `result`, `token` |
+| Write-Composite | 13 | `operation`, `token`, `uri`, `ct`, `payload` | `result`, `token`, `ct`, `payload` |
 | Write-Attributes | 14 | `operation`, `token`, `uri` | `result`, `token` |
 | Execute | 16 | `operation`, `token`, `uri`, `payload` | `result`, `token` |
 | Observe | 20 | `operation`, `token`, `uri` | `result`, `token` |
@@ -704,6 +708,17 @@ The content format of a value is the one the `ct` member carries. A read
 uses the content format the protocol core negotiates, which is the
 preferred content format of the client when the server states no
 acceptable format.
+
+A Read-Composite and a Write-Composite carry a SenML JSON or SenML CBOR
+record set in the `payload` member and the content format of that record
+set in the `ct` member. The `uri` member carries the path the relative
+names of the records are resolved against. The answer of a Read-Composite
+carries the SenML record set with the values of the targets in the
+`payload` member, and the answer of a Write-Composite carries the record
+set with one status per target in the `payload` member: 204 for an applied
+write, 400 for a value of the wrong type, 404 for an unknown target, 405
+for a target that cannot be written and 500 for a failed write. A request
+in another content format is refused with the result 415.
 
 An Observe registers an observation in the binding. The observation is
 removed when the server sends a Cancel-Observe with its token, or when
