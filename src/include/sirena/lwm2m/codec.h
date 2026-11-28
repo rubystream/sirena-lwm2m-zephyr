@@ -17,6 +17,22 @@
 #define SIRENA_LWM2M_CF_OPAQUE 42
 #define SIRENA_LWM2M_CF_LINK_FORMAT 40
 
+#define SIRENA_LWM2M_COMPOSITE_PATH_MAX 48U
+#define SIRENA_LWM2M_COMPOSITE_MAX_DEPTH 8U
+#define SIRENA_LWM2M_COMPOSITE_VALUE_MAX \
+    (CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUE_SIZE < 255U \
+         ? CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUE_SIZE + 1U \
+         : 256U)
+
+struct sirena_lwm2m_senml_record {
+    char path[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
+    char value[SIRENA_LWM2M_COMPOSITE_VALUE_MAX];
+    size_t value_length;
+    bool value_is_string;
+    bool value_invalid;
+    bool has_value;
+};
+
 struct sirena_lwm2m_codec_value {
     uint16_t object_id;
     uint16_t instance_id;
@@ -51,6 +67,19 @@ int sirena_lwm2m_content_format_negotiate(const uint16_t *accepted,
                                             size_t count,
                                             uint16_t preferred,
                                             enum sirena_lwm2m_value_type type);
+
+int sirena_lwm2m_content_format_negotiate_multi(const uint16_t *accepted,
+                                              size_t accepted_count,
+                                              uint16_t preferred,
+                                              const struct sirena_lwm2m_codec_value *values,
+                                              size_t value_count,
+                                              uint16_t *selected);
+
+int sirena_lwm2m_codec_decode_senml_records(uint16_t content_format,
+                                             const void *buffer,
+                                             size_t length,
+                                             struct sirena_lwm2m_senml_record *records,
+                                             size_t *count);
 
 int sirena_lwm2m_codec_encode(uint16_t content_format,
                               const struct sirena_lwm2m_codec_value *values,

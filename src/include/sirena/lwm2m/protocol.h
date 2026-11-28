@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <sirena/lwm2m/object_registry.h>
+#include <sirena/lwm2m/codec.h>
 
 enum sirena_lwm2m_status {
     SIRENA_LWM2M_STATUS_CHANGED = 0,
@@ -27,6 +28,8 @@ enum sirena_lwm2m_operation {
     SIRENA_LWM2M_OPERATION_DELETE,
     SIRENA_LWM2M_OPERATION_WRITE_ATTRIBUTES,
     SIRENA_LWM2M_OPERATION_DISCOVER,
+    SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE,
+    SIRENA_LWM2M_OPERATION_READ_COMPOSITE,
 };
 
 struct sirena_lwm2m_protocol_request {

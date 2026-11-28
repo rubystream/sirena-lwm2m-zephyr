@@ -124,6 +124,9 @@ npm run deploy   # same as npm run flash (opt-in profile)
 npm run smoke    # init, update, and build the smoke target
 npm run build:sample  # build the native simulator sample
 npm run run:sample   # build and run the native simulator sample
+npm run test:protocol  # build and run the protocol tests
+npm run test:protocol-bounds  # build and run the protocol bounds tests
+npm run test:mqtt  # build and run the MQTT transport tests
 npm run test:sample  # build and run the end-to-end sample tests
 npm run test:conformance  # build and run the two-tier conformance harness
 npm run test:conformance:leshan  # run the Leshan tier of the conformance harness

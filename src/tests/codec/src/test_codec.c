@@ -1,4 +1,5 @@
 #include <zephyr/ztest.h>
+#include <zephyr/sys/util.h>
 #include <sirena/lwm2m/codec.h>
 #include <string.h>
 #include <errno.h>
@@ -365,6 +366,67 @@ ZTEST(sirena_lwm2m_codec, test_tlv_type_comes_from_the_object_model)
     zassert_equal(rc, 0, "dec");
     zassert_equal(dec[0].type, SIRENA_LWM2M_VALUE_INTEGER,
                   "the expected type decides, not the length");
+}
+
+ZTEST(sirena_lwm2m_codec, test_negotiate_multi_uses_the_preferred_composite_format)
+{
+    struct sirena_lwm2m_codec_value values[2] = {
+        { .type = SIRENA_LWM2M_VALUE_INTEGER },
+        { .type = SIRENA_LWM2M_VALUE_INTEGER },
+    };
+    uint16_t selected = 0U;
+
+    zassert_equal(sirena_lwm2m_content_format_negotiate_multi(NULL, 0U,
+                                                              SIRENA_LWM2M_CF_SENML_CBOR,
+                                                              values, 2U, &selected),
+                   0, "the preferred composite format must be used");
+    zassert_equal(selected, SIRENA_LWM2M_CF_SENML_CBOR, "unexpected format");
+}
+
+ZTEST(sirena_lwm2m_codec, test_negotiate_multi_falls_back_to_the_first_encodable_format)
+{
+    struct sirena_lwm2m_codec_value values[2] = {
+        { .type = SIRENA_LWM2M_VALUE_INTEGER },
+        { .type = SIRENA_LWM2M_VALUE_INTEGER },
+    };
+    uint16_t selected = 0U;
+
+    zassert_equal(sirena_lwm2m_content_format_negotiate_multi(NULL, 0U, SIRENA_LWM2M_CF_TLV,
+                                                              values, 2U, &selected),
+                   0, "the negotiation must fall back to a composite format");
+    zassert_equal(selected, SIRENA_LWM2M_CF_SENML_JSON, "unexpected format");
+}
+
+ZTEST(sirena_lwm2m_codec, test_negotiate_multi_skips_a_format_it_does_not_support)
+{
+    struct sirena_lwm2m_codec_value values[2] = {
+        { .type = SIRENA_LWM2M_VALUE_INTEGER },
+        { .type = SIRENA_LWM2M_VALUE_INTEGER },
+    };
+    const uint16_t accepted[] = { SIRENA_LWM2M_CF_TLV, SIRENA_LWM2M_CF_SENML_CBOR };
+    uint16_t selected = 0U;
+
+    zassert_equal(sirena_lwm2m_content_format_negotiate_multi(accepted, ARRAY_SIZE(accepted),
+                                                              SIRENA_LWM2M_CF_TLV, values, 2U,
+                                                              &selected),
+                   0, "the negotiation must pick the first supported composite format");
+    zassert_equal(selected, SIRENA_LWM2M_CF_SENML_CBOR, "unexpected format");
+}
+
+ZTEST(sirena_lwm2m_codec, test_negotiate_multi_refuses_a_list_without_a_composite_format)
+{
+    struct sirena_lwm2m_codec_value values[2] = {
+        { .type = SIRENA_LWM2M_VALUE_INTEGER },
+        { .type = SIRENA_LWM2M_VALUE_INTEGER },
+    };
+    const uint16_t accepted[] = { SIRENA_LWM2M_CF_TLV, SIRENA_LWM2M_CF_JSON };
+    uint16_t selected = 0U;
+
+    zassert_equal(sirena_lwm2m_content_format_negotiate_multi(accepted, ARRAY_SIZE(accepted),
+                                                              SIRENA_LWM2M_CF_TLV, values, 2U,
+                                                              &selected),
+                   -ENOTSUP, "a list without a composite format must be refused");
+    zassert_equal(selected, 0U, "a refused negotiation must not select a format");
 }
 
 ZTEST_SUITE(sirena_lwm2m_codec, NULL, NULL, NULL, NULL, NULL);

@@ -369,7 +369,9 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         return;
     }
 
-    if (coap_header_get_code(packet) == COAP_METHOD_GET) {
+    if (coap_header_get_code(packet) == COAP_METHOD_GET ||
+        coap_header_get_code(packet) == COAP_METHOD_FETCH ||
+        coap_header_get_code(packet) == COAP_METHOD_IPATCH) {
         rc = endpoint_parse_accept(packet, accepted, ARRAY_SIZE(accepted), &accepted_count);
     }
 
@@ -381,6 +383,11 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
                 accepted[0] == COAP_CONTENT_FORMAT_APP_LINK_FORMAT) {
                 allowed = true;
             }
+        }
+
+        if (coap_header_get_code(packet) == COAP_METHOD_FETCH ||
+            coap_header_get_code(packet) == COAP_METHOD_IPATCH) {
+            allowed = true;
         }
 
         if (allowed && path_count >= 1U) {
@@ -547,6 +554,12 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     case COAP_METHOD_POST:
         protocol_request.operation = SIRENA_LWM2M_OPERATION_EXECUTE;
         break;
+    case COAP_METHOD_FETCH:
+        protocol_request.operation = SIRENA_LWM2M_OPERATION_READ_COMPOSITE;
+        break;
+    case COAP_METHOD_IPATCH:
+        protocol_request.operation = SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE;
+        break;
     default:
         (void)endpoint_send_message(response_type, response_message_id, token_length, token,
                                     COAP_RESPONSE_CODE_NOT_ALLOWED, false, 0U, -1, NULL, 0U,
@@ -555,7 +568,9 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     }
 
     if (protocol_request.operation == SIRENA_LWM2M_OPERATION_READ ||
-        protocol_request.operation == SIRENA_LWM2M_OPERATION_DISCOVER) {
+        protocol_request.operation == SIRENA_LWM2M_OPERATION_DISCOVER ||
+        protocol_request.operation == SIRENA_LWM2M_OPERATION_READ_COMPOSITE ||
+        protocol_request.operation == SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE) {
         if (rc != 0) {
             (void)endpoint_send_message(response_type, response_message_id, token_length, token,
                                         COAP_RESPONSE_CODE_NOT_ACCEPTABLE, false, 0U, -1, NULL,
@@ -632,7 +647,8 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     }
 
     (void)endpoint_send_message(response_type, response_message_id, token_length, token, code,
-                                protocol_response.status == SIRENA_LWM2M_STATUS_CONTENT,
+                                protocol_response.status == SIRENA_LWM2M_STATUS_CONTENT ||
+                                    protocol_response.payload_length > 0U,
                                 protocol_response.content_format,
                                 observer != NULL ? (int)observer->sequence : -1,
                                 protocol_response.payload, protocol_response.payload_length, peer,
@@ -954,7 +970,6 @@ int sirena_lwm2m_coap_endpoint_notify(uint16_t object_id, uint16_t instance_id,
 
     return sent;
 }
-
 
 void sirena_lwm2m_coap_endpoint_enforce_pmax(void)
 {

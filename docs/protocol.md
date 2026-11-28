@@ -25,6 +25,8 @@ for every request it receives.
 | Execute | POST | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.04 Changed | 4.00, 4.04, 4.05 |
 | Write-Attributes | PUT (with URI-Query) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.04 Changed | 4.00, 4.04 |
 | Discover | GET (Accept: application/link-format) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.05 Content | 4.04, 4.06, 5.00 |
+| Read-Composite | FETCH | the request URI is the base of the names, SenML JSON/CBOR target list | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 4.15, 5.00 |
+| Write-Composite | iPATCH | the request URI is the base of the names, SenML JSON/CBOR target and value list | 2.04 Changed | 4.00, 4.06, 4.15, 5.00 |
 | Observe | GET with Observe = 0 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 5.03 |
 | Cancel Observation | GET with Observe = 1 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05 |
 | Notify | notification | the observed resource | 2.05 Content | |
@@ -49,6 +51,37 @@ The access mode of the registry decides what a resource allows. A resource that
 the registry marks as read-only is readable over the wire and refuses a write,
 and a resource that it marks as executable is neither readable nor writable.
 
+## The composite operations
+
+A Read-Composite and a Write-Composite carry several resources in one
+request. The CoAP binding serves the Read-Composite with the FETCH method
+and the Write-Composite with the iPATCH method, and the MQTT binding serves
+both with the operation codes of the specification. The protocol core
+resolves the targets and applies the writes, so both bindings answer with
+the same status codes and the same SenML record sets.
+
+The payload of a composite request is a SenML record set in the SenML JSON
+or the SenML CBOR format, and the Content-Format option of the request
+names that format. Another format is refused with 4.15 Unsupported
+Content-Format. A record of a read names the target it addresses and a
+record of a write names the target and its value.
+
+A record names its target either with an absolute path, for example
+`"n":"/3/0/1"`, or with a name relative to the base of the record set,
+for example `"bn":"/3/0/"` with `"n":"1"`. A name without a base is
+resolved against the object and the object instance of the request URI, so
+a request to `/3/0` with the record `"n":"1"` addresses the resource
+`/3/0/1`. A target that names more
+segments than the endpoint can hold is refused with 4.04 Not Found, the
+same code a single read answers with.
+
+The response of a Read-Composite carries the values of the targets in the
+negotiated SenML format, and the response of a Write-Composite carries one
+status per target in the negotiated SenML format: 204 for an applied write,
+400 for a value of the wrong type or a malformed target, 404 for an unknown
+target, 405 for a target that cannot be written and 500 for a failed write.
+A failing target never cancels the other targets of the same request.
+
 ## Content format negotiation
 
 The server tells the client which encoding it accepts with the CoAP Accept
@@ -64,7 +97,9 @@ account.
 | The request carries no Accept option | The client uses its preferred format, `CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT`, when the codec can encode the resource in it. Otherwise it uses the first format it supports that the codec can encode the resource in. |
 | No format of the Accept list is supported, or none of them encodes the resource | The client answers 4.06 Not Acceptable. |
 | The Accept list is longer than `CONFIG_SIRENA_LWM2M_ACCEPTED_FORMATS_MAX` | The client answers 4.06 Not Acceptable. It never ignores the formats it cannot hold. |
-| The request is a write | The payload is decoded with the Content-Format of the request. The TLV format carries no type of its own, so the type of the value comes from the object model of the resource the request addresses. Without a Content-Format option the preferred format is used. The Accept option of a write is ignored: the response of a write carries no representation, so there is nothing for the server to constrain. |
+| The request is a write | The payload is decoded with the Content-Format of the request. The TLV format carries no type of its own, so the type of the value comes from the object model of the resource the request addresses. Without a Content-Format option the preferred format is used. The Accept option of a write is ignored: the response of a single write carries no representation, so there is nothing for the server to constrain. |
+| The request is a read composite | The payload is decoded with the Content-Format of the request, which must be SenML JSON or SenML CBOR; another format is refused with 4.15. Without a Content-Format option the SenML JSON format is used. The records name the targets, and the response carries their values in the negotiated SenML format. |
+| The request is a write composite | The payload is decoded with the Content-Format of the request, which must be SenML JSON or SenML CBOR; another format is refused with 4.15. Every record names a target and its value, the type of the value comes from the object model of the resource the record addresses, and the response is a SenML list in the negotiated format with one status per target: 204 for an applied write, 400 for a value of the wrong type or a malformed target, 404 for an unknown target, 405 for a target that cannot be written and 500 for a failed write. An Accept list that names no composite format is refused with 4.06. |
 | The request is an execute | The payload is passed to the execute handler as it is. The Accept option of an execute is ignored, for the same reason. |
 
 The preferred format defaults to the TLV format, because the codec encodes every
@@ -200,23 +235,26 @@ error codes of the API are the negative `errno` values of the table.
 | `CONFIG_SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX` | Size of the buffer that holds an encoded resource value. | 256 |
 | `CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX` | Size of the buffer that holds a raw resource value. | 64 |
 | `CONFIG_SIRENA_LWM2M_ACCEPTED_FORMATS_MAX` | Number of acceptable content formats the client reads from one request. | 4 |
+| `CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES` | Number of targets one composite request may carry. | 8 |
+| `CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUE_SIZE` | Size of the value one composite record may carry, up to 256 bytes. A longer value is refused for that target with 400. | 64 |
 | `CONFIG_SIRENA_LWM2M_ENGINE_POLL_INTERVAL_MS` | Interval the engine thread polls the transport socket with. | 20 |
 | `CONFIG_SIRENA_LWM2M_COAP_MESSAGE_MAX` | Size of the buffer that holds a CoAP message. | 512 |
 | `CONFIG_SIRENA_LWM2M_LWM2M_VERSION` | The LwM2M version the client announces in the registration. | 1.2 |
 
 ## Not in this slice
 
-- The composite operations: Read-Composite, Write-Composite and
-  Observe-Composite.
+- The Observe-Composite operation.
 - The creation and the deletion of object instances.
 - The block-wise transfer of large payloads.
 - The decoding of the structured content formats. The codec encodes them, but a
-  write in one of them is refused with 4.15.
+  single write in one of them is refused with 4.15. The composite operations
+  parse the SenML JSON and SenML CBOR record sets only.
 
 ## Tests
 
 ```sh
 npm run test:protocol
+npm run test:protocol-bounds
 ```
 
 The suite runs a real CoAP peer on 127.0.0.1 in the same process. The peer is a
@@ -226,7 +264,16 @@ notifications, so the assertions are made on the bytes the client sent back:
 the response code, the content format, the observe option, the token and the
 payload.
 
+The bounds suite runs the same peer with a smaller value buffer, a smaller
+payload buffer and a smaller Accept list, so the outcomes that only a bound
+can produce are covered: a read of a value that does not fit the value buffer
+and an encoded response that does not fit the payload buffer are refused with
+5.00, and an Accept list that does not fit is refused with 4.06.
+
 The suite covers the read, the write and the execute with their status codes,
+the composite read and the composite write with their status codes, the
+per-target statuses of a mixed composite write, a write value that does
+not fit the value buffer and the refusal of an oversized Accept list,
 the content format negotiation with and without an Accept option, the refusal
 of a format the codec cannot encode for the resource, the refusal of an Accept
 list the client cannot hold, a path with too many segments, the observation
