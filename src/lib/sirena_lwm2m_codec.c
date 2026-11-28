@@ -2217,7 +2217,7 @@ static int senml_json_skip_value(const char *buf, size_t len, size_t *pos)
     return 0;
 }
 
-static int senml_json_record(const char *buf, size_t len, size_t *pos, const char *base,
+static int senml_json_record(const char *buf, size_t len, size_t *pos, char *base,
                               struct sirena_lwm2m_senml_record *records, size_t *parsed,
                               size_t capacity)
 {
@@ -2268,7 +2268,14 @@ static int senml_json_record(const char *buf, size_t len, size_t *pos, const cha
             return -EINVAL;
         }
 
-        if (strcmp(key, "n") == 0) {
+        if (strcmp(key, "bn") == 0) {
+            int base_length = senml_json_read_string(buf, len, pos, base,
+                                                     SIRENA_LWM2M_COMPOSITE_PATH_MAX);
+
+            if (base_length < 0) {
+                return base_length;
+            }
+        } else if (strcmp(key, "n") == 0) {
             int name_length = senml_json_read_string(buf, len, pos, name, sizeof(name));
 
             if (name_length < 0) {
@@ -2545,10 +2552,14 @@ static int senml_json_records(const char *buf, size_t len,
     return 0;
 }
 
-static int senml_cbor_skip_value(const uint8_t *buf, size_t len, size_t *pos)
+static int senml_cbor_skip_value(const uint8_t *buf, size_t len, size_t *pos, size_t depth)
 {
     uint8_t major;
     uint64_t arg;
+
+    if (depth >= SIRENA_LWM2M_COMPOSITE_MAX_DEPTH) {
+        return -EINVAL;
+    }
 
     if (read_cbor_head(buf, len, pos, &major, &arg) != 0) {
         return -EINVAL;
@@ -2576,7 +2587,7 @@ static int senml_cbor_skip_value(const uint8_t *buf, size_t len, size_t *pos)
                 return -EINVAL;
             }
 
-            if (senml_cbor_skip_value(buf, len, pos) != 0) {
+            if (senml_cbor_skip_value(buf, len, pos, depth + 1U) != 0) {
                 return -EINVAL;
             }
         }
@@ -2592,7 +2603,7 @@ static int senml_cbor_skip_value(const uint8_t *buf, size_t len, size_t *pos)
                 return -EINVAL;
             }
 
-            if (senml_cbor_skip_value(buf, len, pos) != 0) {
+            if (senml_cbor_skip_value(buf, len, pos, depth + 1U) != 0) {
                 return -EINVAL;
             }
 
@@ -2600,7 +2611,7 @@ static int senml_cbor_skip_value(const uint8_t *buf, size_t len, size_t *pos)
                 return -EINVAL;
             }
 
-            if (senml_cbor_skip_value(buf, len, pos) != 0) {
+            if (senml_cbor_skip_value(buf, len, pos, depth + 1U) != 0) {
                 return -EINVAL;
             }
         }
@@ -2711,7 +2722,7 @@ static int senml_cbor_value_text(const uint8_t *buf, size_t len, size_t *pos, ch
     return 0;
 }
 
-static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, const char *base,
+static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, char *base,
                              struct sirena_lwm2m_senml_record *records, size_t *parsed,
                              size_t capacity)
 {
@@ -2740,7 +2751,14 @@ static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, const 
             return -EINVAL;
         }
 
-        if (strcmp(key, "n") == 0) {
+        if (strcmp(key, "bn") == 0) {
+            int base_length = senml_cbor_text(buf, len, pos, base,
+                                              SIRENA_LWM2M_COMPOSITE_PATH_MAX);
+
+            if (base_length < 0) {
+                return base_length;
+            }
+        } else if (strcmp(key, "n") == 0) {
             int name_length = senml_cbor_text(buf, len, pos, name, sizeof(name));
 
             if (name_length < 0) {
@@ -2757,7 +2775,7 @@ static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, const 
 
             has_value = true;
         } else {
-            if (senml_cbor_skip_value(buf, len, pos) != 0) {
+            if (senml_cbor_skip_value(buf, len, pos, 0U) != 0) {
                 return -EINVAL;
             }
         }
@@ -2861,7 +2879,7 @@ static int senml_cbor_records(const uint8_t *buf, size_t len,
                     }
                 }
             } else {
-                if (senml_cbor_skip_value(buf, len, &pos) != 0) {
+                if (senml_cbor_skip_value(buf, len, &pos, 0U) != 0) {
                     return -EINVAL;
                 }
             }

@@ -6,6 +6,7 @@
 #include <zephyr/sys/util.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT
