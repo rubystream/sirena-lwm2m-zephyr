@@ -716,9 +716,10 @@ names of the records are resolved against. The answer of a Read-Composite
 carries the SenML record set with the values of the targets in the
 `payload` member, and the answer of a Write-Composite carries the record
 set with one status per target in the `payload` member: 204 for an applied
-write, 400 for a value of the wrong type, 404 for an unknown target, 405
-for a target that cannot be written and 500 for a failed write. A request
-in another content format is refused with the result 415.
+write, 400 for a value of the wrong type or a malformed target, 404 for an
+unknown target, 405 for a target that cannot be written and 500 for a
+failed write. A request in another content format is refused with the
+result 415.
 
 An Observe registers an observation in the binding. The observation is
 removed when the server sends a Cancel-Observe with its token, or when
@@ -772,8 +773,8 @@ sends and the results it maps:
 | --- | --- | --- |
 | 201 | - | `0`, the registration succeeded |
 | 202 | - | `0`, the de-registration succeeded |
-| 204 | a successful write, execute, update or send | `0` |
-| 205 | a successful read, observe or cancel-observe | `0` |
+| 204 | a successful write, write composite, execute, update or send | `0` |
+| 205 | a successful read, read composite, observe or cancel-observe | `0` |
 | 400 | a malformed request or a malformed URI | `-EBADMSG` |
 | 403 | - | `-EACCES`, the registration is not allowed |
 | 404 | a resource that does not exist | `-ENOENT`, the URI is not found |
@@ -787,9 +788,10 @@ sends and the results it maps:
 | 503 | an observation that does not fit the observation capacity | `-EIO`, the service is unavailable |
 
 The results the client sends are the results of the operation it
-answered: a read answers with 205, a write and an execute answer with
-204, an observe and a cancel-observe answer with 205, and a failure
-answers with the result of the failure. An operation the client does not
+answered: a read and a read composite answer with 205, a write, an
+execute and a write composite answer with 204, an observe and a
+cancel-observe answer with 205, and a failure answers with the result of
+the failure. An operation the client does not
 implement, for example a Create or a Delete, is answered with 501, as the
 generic errors of the specification ask. The
 answer carries the token of the request it answers, so that the server
@@ -944,8 +946,8 @@ The MQTT suite runs a minimal MQTT broker in the same process on
 the bytes the broker received: the client identifier of the CONNECT, the
 topic of the SUBSCRIBE, the topic and the CBOR payload of every PUBLISH.
 The broker also publishes the commands of the server, so the read, write,
-execute and observe operations are answered on the wire and the answers
-are read back from the broker. The suite raises the size of the file
+execute, observe and composite operations are answered on the wire and the
+answers are read back from the broker. The suite raises the size of the file
 descriptor table and of the network connection tables, because the broker
 and the client open and close a connection per test case.
 
