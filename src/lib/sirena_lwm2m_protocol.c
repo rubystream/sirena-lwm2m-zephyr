@@ -623,6 +623,7 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         uint16_t write_format = request->content_format_present
                                    ? request->content_format
                                    : (uint16_t)SIRENA_LWM2M_CF_SENML_JSON;
+        uint16_t response_format = (uint16_t)SIRENA_LWM2M_CF_SENML_JSON;
         size_t record_count = ARRAY_SIZE(protocol_composite_records);
         size_t length;
         size_t i;
@@ -700,17 +701,28 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
             protocol_composite_status[i].data.integer = status;
         }
 
+        {
+            uint16_t preferred = (uint16_t)CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
+            uint16_t selected = (uint16_t)SIRENA_LWM2M_CF_SENML_JSON;
+
+            if (sirena_lwm2m_content_format_negotiate_multi(request->accepted_formats,
+                                                            request->accepted_format_count,
+                                                            preferred, protocol_composite_status,
+                                                            record_count, &selected) == 0) {
+                response_format = selected;
+            }
+        }
+
         length = response->payload_capacity;
-        rc = sirena_lwm2m_codec_encode((uint16_t)SIRENA_LWM2M_CF_SENML_JSON,
-                                       protocol_composite_status, record_count, response->payload,
-                                       &length);
+        rc = sirena_lwm2m_codec_encode(response_format, protocol_composite_status, record_count,
+                                       response->payload, &length);
         if (rc != 0) {
             protocol_set_status(response, SIRENA_LWM2M_STATUS_INTERNAL_ERROR);
             return 0;
         }
 
         response->status = SIRENA_LWM2M_STATUS_CHANGED;
-        response->content_format = (uint16_t)SIRENA_LWM2M_CF_SENML_JSON;
+        response->content_format = response_format;
         response->payload_length = length;
         return 0;
     }

@@ -2086,6 +2086,11 @@ int sirena_lwm2m_codec_decode(uint16_t content_format,
     return -ENOTSUP;
 }
 
+static char senml_decode_base[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
+static char senml_record_base[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
+static char senml_decode_name[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
+static char senml_decode_value[SIRENA_LWM2M_COMPOSITE_VALUE_MAX];
+
 static int senml_json_skip_ws(const char *buf, size_t len, size_t *pos)
 {
     while (*pos < len) {
@@ -2221,9 +2226,9 @@ static int senml_json_record(const char *buf, size_t len, size_t *pos, const cha
                               struct sirena_lwm2m_senml_record *records, size_t *parsed,
                               size_t capacity)
 {
-    char base[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
-    char name[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
-    char value[SIRENA_LWM2M_COMPOSITE_VALUE_MAX];
+    char *base = senml_record_base;
+    char *name = senml_decode_name;
+    char *value = senml_decode_value;
     size_t value_length = 0U;
     bool value_is_string = false;
     bool value_invalid = false;
@@ -2280,7 +2285,8 @@ static int senml_json_record(const char *buf, size_t len, size_t *pos, const cha
                 return base_length;
             }
         } else if (strcmp(key, "n") == 0) {
-            int name_length = senml_json_read_string(buf, len, pos, name, sizeof(name));
+            int name_length = senml_json_read_string(buf, len, pos, name,
+                                                     SIRENA_LWM2M_COMPOSITE_PATH_MAX);
 
             if (name_length < 0) {
                 return name_length;
@@ -2289,7 +2295,8 @@ static int senml_json_record(const char *buf, size_t len, size_t *pos, const cha
             has_name = true;
         } else if (strcmp(key, "v") == 0) {
             if (buf[*pos] == '"') {
-                int written = senml_json_read_string(buf, len, pos, value, sizeof(value));
+                int written = senml_json_read_string(buf, len, pos, value,
+                                                     SIRENA_LWM2M_COMPOSITE_VALUE_MAX);
 
                 if (written == -ENOSPC) {
                     value_invalid = true;
@@ -2318,7 +2325,7 @@ static int senml_json_record(const char *buf, size_t len, size_t *pos, const cha
                     value_length--;
                 }
 
-                if (value_length >= sizeof(value)) {
+                if (value_length >= SIRENA_LWM2M_COMPOSITE_VALUE_MAX) {
                     value_invalid = true;
                     value_length = 0U;
                     value[0] = '\0';
@@ -2395,7 +2402,7 @@ static int senml_json_records(const char *buf, size_t len,
 {
     size_t pos = 0U;
     size_t parsed = 0U;
-    char base[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
+    char *base = senml_decode_base;
 
     base[0] = '\0';
 
@@ -2482,7 +2489,8 @@ static int senml_json_records(const char *buf, size_t len,
             }
 
             if (strcmp(key, "bn") == 0) {
-                int base_length = senml_json_read_string(buf, len, &pos, base, sizeof(base));
+                int base_length = senml_json_read_string(buf, len, &pos, base,
+                                                         SIRENA_LWM2M_COMPOSITE_PATH_MAX);
 
                 if (base_length < 0) {
                     return base_length;
@@ -2685,6 +2693,7 @@ static int senml_cbor_value_text(const uint8_t *buf, size_t len, size_t *pos, ch
             *value_length = 0U;
             *value_is_string = true;
             out[0] = '\0';
+            *pos += (size_t)arg;
 
             return -ENOSPC;
         }
@@ -2764,9 +2773,9 @@ static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, const 
                              struct sirena_lwm2m_senml_record *records, size_t *parsed,
                              size_t capacity)
 {
-    char base[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
-    char name[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
-    char value[SIRENA_LWM2M_COMPOSITE_VALUE_MAX];
+    char *base = senml_record_base;
+    char *name = senml_decode_name;
+    char *value = senml_decode_value;
     size_t value_length = 0U;
     bool value_is_string = false;
     bool value_invalid = false;
@@ -2801,7 +2810,8 @@ static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, const 
                 return base_length;
             }
         } else if (strcmp(key, "n") == 0) {
-            int name_length = senml_cbor_text(buf, len, pos, name, sizeof(name));
+            int name_length = senml_cbor_text(buf, len, pos, name,
+                                              SIRENA_LWM2M_COMPOSITE_PATH_MAX);
 
             if (name_length < 0) {
                 return name_length;
@@ -2866,7 +2876,7 @@ static int senml_cbor_records(const uint8_t *buf, size_t len,
 {
     size_t pos = 0U;
     size_t parsed = 0U;
-    char base[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
+    char *base = senml_decode_base;
     uint8_t major;
     uint64_t arg;
 
@@ -2898,7 +2908,8 @@ static int senml_cbor_records(const uint8_t *buf, size_t len,
             }
 
             if (strcmp(key, "bn") == 0) {
-                int base_length = senml_cbor_text(buf, len, &pos, base, sizeof(base));
+                int base_length = senml_cbor_text(buf, len, &pos, base,
+                                                  SIRENA_LWM2M_COMPOSITE_PATH_MAX);
 
                 if (base_length < 0) {
                     return base_length;

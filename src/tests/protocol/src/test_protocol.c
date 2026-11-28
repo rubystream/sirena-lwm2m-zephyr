@@ -1871,3 +1871,96 @@ ZTEST(sirena_lwm2m_protocol, test_write_composite_reports_a_value_that_does_not_
     zassert_equal(rc, 0, "the stored value is not readable");
     zassert_true(binding[0] != 0U, "the other target was not written");
 }
+
+ZTEST(sirena_lwm2m_protocol, test_write_composite_honors_the_acceptable_formats)
+{
+    static const char payload[] = "[{\"bn\":\"/1/0/\",\"n\":\"1\",\"v\":600}]";
+    static const uint16_t accepted[] = { SIRENA_LWM2M_CF_SENML_CBOR };
+    int64_t lifetime = 0;
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_IPATCH, "/1/0", SIRENA_LWM2M_CF_SENML_JSON, payload,
+                      sizeof(payload) - 1U, accepted, ARRAY_SIZE(accepted), -1, NULL);
+    zassert_equal(rc, 0, "composite write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED, "unexpected response code");
+    zassert_equal(peer_capture.content_format, SIRENA_LWM2M_CF_SENML_CBOR,
+                  "the response must use the acceptable composite format");
+    zassert_true(peer_capture.payload_length > 0U, "the response must carry a payload");
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME_UPDATED, "the stored value was not updated");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_composite_reports_a_cbor_value_that_does_not_fit)
+{
+    uint8_t payload[256];
+    uint8_t binding[1] = {0};
+    size_t binding_length = sizeof(binding);
+    size_t offset = 0U;
+    size_t index;
+    char response[PEER_PAYLOAD_MAX + 1];
+    int64_t lifetime = 0;
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    payload[offset++] = 0xA2U;
+    payload[offset++] = 0x62U;
+    payload[offset++] = (uint8_t)'b';
+    payload[offset++] = (uint8_t)'n';
+    payload[offset++] = 0x66U;
+    memcpy(&payload[offset], "/1/0/", 6U);
+    offset += 6U;
+    payload[offset++] = 0x61U;
+    payload[offset++] = (uint8_t)'e';
+    payload[offset++] = 0x82U;
+    payload[offset++] = 0xA2U;
+    payload[offset++] = 0x61U;
+    payload[offset++] = (uint8_t)'n';
+    payload[offset++] = 0x61U;
+    payload[offset++] = (uint8_t)'1';
+    payload[offset++] = 0x61U;
+    payload[offset++] = (uint8_t)'v';
+    payload[offset++] = 0x78U;
+    payload[offset++] = 100U;
+    for (index = 0U; index < 100U; index++) {
+        payload[offset++] = (uint8_t)('0' + (index % 10U));
+    }
+    payload[offset++] = 0xA2U;
+    payload[offset++] = 0x61U;
+    payload[offset++] = (uint8_t)'n';
+    payload[offset++] = 0x61U;
+    payload[offset++] = (uint8_t)'6';
+    payload[offset++] = 0x61U;
+    payload[offset++] = (uint8_t)'v';
+    payload[offset++] = 0xF5U;
+
+    rc = peer_request(COAP_METHOD_IPATCH, "/1/0", SIRENA_LWM2M_CF_SENML_CBOR, payload, offset,
+                      NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "composite write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED, "unexpected response code");
+
+    memcpy(response, peer_capture.payload, peer_capture.payload_length);
+    response[peer_capture.payload_length] = '\0';
+
+    zassert_not_null(strstr(response, "\"v\":400"),
+                     "the response must report the value that does not fit");
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME, "the refused target was written");
+
+    rc = sirena_lwm2m_get(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID, PEER_SERVER_BINDING_RESOURCE,
+                          binding, &binding_length);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_true(binding[0] != 0U, "the other target was not written");
+}
