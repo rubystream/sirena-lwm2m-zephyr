@@ -26,7 +26,7 @@ for every request it receives.
 | Write-Attributes | PUT (with URI-Query) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.04 Changed | 4.00, 4.04 |
 | Discover | GET (Accept: application/link-format) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.05 Content | 4.04, 4.06, 5.00 |
 | Read-Composite | FETCH | SenML JSON/CBOR target list | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 4.15, 5.00 |
-| Write-Composite | iPATCH | SenML JSON/CBOR target and value list | 2.04 Changed | 4.00, 4.06, 4.15, 5.00 |
+| Write-Composite | iPATCH | SenML JSON/CBOR target and value list | 2.04 Changed | 4.00, 4.04, 4.06, 4.15, 5.00 |
 | Observe | GET with Observe = 0 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 5.03 |
 | Cancel Observation | GET with Observe = 1 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05 |
 | Notify | notification | the observed resource | 2.05 Content | |
@@ -232,9 +232,10 @@ payload.
 
 The bounds suite runs the same peer with a smaller value buffer, a smaller
 payload buffer and a smaller Accept list, so the outcomes that only a bound
-can produce are covered: a value that does not fit the value buffer and an
-encoded response that does not fit the payload buffer are refused with 5.00,
-and an Accept list that does not fit is refused with 4.06.
+can produce are covered: a read of a value that does not fit the value buffer
+and an encoded response that does not fit the payload buffer are refused with
+5.00, and an Accept list that does not fit is refused with 4.06. A write
+value that does not fit is reported for that target with 400.
 
 The suite covers the read, the write and the execute with their status codes,
 the content format negotiation with and without an Accept option, the refusal
