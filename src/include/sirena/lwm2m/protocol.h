@@ -82,8 +82,4 @@ int sirena_lwm2m_protocol_send_encode(const struct sirena_lwm2m_send_record *rec
                                        size_t count, void *buffer, size_t *length);
 int sirena_lwm2m_send(const struct sirena_lwm2m_send_record *records, size_t count);
 
-int sirena_lwm2m_protocol_value_from_resource(const struct sirena_lwm2m_resource *resource,
-                                        const void *raw, size_t raw_length,
-                                        struct sirena_lwm2m_codec_value *value);
-
 #endif

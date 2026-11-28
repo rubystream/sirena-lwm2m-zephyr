@@ -2091,7 +2091,7 @@ static char senml_record_base[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
 static char senml_decode_name[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
 static char senml_decode_value[SIRENA_LWM2M_COMPOSITE_VALUE_MAX];
 
-static int senml_json_skip_ws(const char *buf, size_t len, size_t *pos)
+static void senml_json_skip_ws(const char *buf, size_t len, size_t *pos)
 {
     while (*pos < len) {
         char c = buf[*pos];
@@ -2101,8 +2101,6 @@ static int senml_json_skip_ws(const char *buf, size_t len, size_t *pos)
         }
         (*pos)++;
     }
-
-    return 0;
 }
 
 static int senml_json_read_string(const char *buf, size_t len, size_t *pos, char *out,

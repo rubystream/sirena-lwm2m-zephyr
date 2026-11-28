@@ -236,7 +236,7 @@ error codes of the API are the negative `errno` values of the table.
 | `CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX` | Size of the buffer that holds a raw resource value. | 64 |
 | `CONFIG_SIRENA_LWM2M_ACCEPTED_FORMATS_MAX` | Number of acceptable content formats the client reads from one request. | 4 |
 | `CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES` | Number of targets one composite request may carry. | 8 |
-| `CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUE_SIZE` | Size of the value one composite record may carry. | 64 |
+| `CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUE_SIZE` | Size of the value one composite record may carry, up to 256 bytes. A longer value is refused for that target with 400. | 64 |
 | `CONFIG_SIRENA_LWM2M_ENGINE_POLL_INTERVAL_MS` | Interval the engine thread polls the transport socket with. | 20 |
 | `CONFIG_SIRENA_LWM2M_COAP_MESSAGE_MAX` | Size of the buffer that holds a CoAP message. | 512 |
 | `CONFIG_SIRENA_LWM2M_LWM2M_VERSION` | The LwM2M version the client announces in the registration. | 1.2 |
