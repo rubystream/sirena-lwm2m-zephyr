@@ -788,9 +788,10 @@ sends and the results it maps:
 | 503 | an observation that does not fit the observation capacity | `-EIO`, the service is unavailable |
 
 The results the client sends are the results of the operation it
-answered: a read answers with 205, a write and an execute answer with
-204, an observe and a cancel-observe answer with 205, and a failure
-answers with the result of the failure. An operation the client does not
+answered: a read and a read composite answer with 205, a write, an
+execute and a write composite answer with 204, an observe and a
+cancel-observe answer with 205, and a failure answers with the result of
+the failure. An operation the client does not
 implement, for example a Create or a Delete, is answered with 501, as the
 generic errors of the specification ask. The
 answer carries the token of the request it answers, so that the server
@@ -945,8 +946,8 @@ The MQTT suite runs a minimal MQTT broker in the same process on
 the bytes the broker received: the client identifier of the CONNECT, the
 topic of the SUBSCRIBE, the topic and the CBOR payload of every PUBLISH.
 The broker also publishes the commands of the server, so the read, write,
-execute and observe operations are answered on the wire and the answers
-are read back from the broker. The suite raises the size of the file
+execute, observe and composite operations are answered on the wire and the
+answers are read back from the broker. The suite raises the size of the file
 descriptor table and of the network connection tables, because the broker
 and the client open and close a connection per test case.
 

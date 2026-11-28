@@ -26,7 +26,7 @@ for every request it receives.
 | Write-Attributes | PUT (with URI-Query) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.04 Changed | 4.00, 4.04 |
 | Discover | GET (Accept: application/link-format) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.05 Content | 4.04, 4.06, 5.00 |
 | Read-Composite | FETCH | the request URI is the base of the names, SenML JSON/CBOR target list | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 4.15, 5.00 |
-| Write-Composite | iPATCH | the request URI is the base of the names, SenML JSON/CBOR target and value list | 2.04 Changed | 4.00, 4.04, 4.06, 4.15, 5.00 |
+| Write-Composite | iPATCH | the request URI is the base of the names, SenML JSON/CBOR target and value list | 2.04 Changed | 4.00, 4.06, 4.15, 5.00 |
 | Observe | GET with Observe = 0 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 5.03 |
 | Cancel Observation | GET with Observe = 1 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05 |
 | Notify | notification | the observed resource | 2.05 Content | |
@@ -58,7 +58,7 @@ request. The CoAP binding serves the Read-Composite with the FETCH method
 and the Write-Composite with the iPATCH method, and the MQTT binding serves
 both with the operation codes of the specification. The protocol core
 resolves the targets and applies the writes, so both bindings answer with
-the same status codes and the same SenML payloads.
+the same status codes and the same SenML record sets.
 
 The payload of a composite request is a SenML record set in the SenML JSON
 or the SenML CBOR format, and the Content-Format option of the request
@@ -69,8 +69,9 @@ record of a write names the target and its value.
 A record names its target either with an absolute path, for example
 `"n":"/3/0/1"`, or with a name relative to the base of the record set,
 for example `"bn":"/3/0/"` with `"n":"1"`. A name without a base is
-resolved against the request URI, so a request to `/3/0` with the record
-`"n":"1"` addresses the resource `/3/0/1`. A target that names more
+resolved against the object and the object instance of the request URI, so
+a request to `/3/0` with the record `"n":"1"` addresses the resource
+`/3/0/1`. A target that names more
 segments than the endpoint can hold is refused with 4.04 Not Found, the
 same code a single read answers with.
 
