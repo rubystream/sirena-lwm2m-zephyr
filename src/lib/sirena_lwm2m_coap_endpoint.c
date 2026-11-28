@@ -387,7 +387,8 @@ static int composite_parse_path_text(const char *text, size_t length, uint16_t *
 }
 
 static size_t composite_collect_json(const char *buf, size_t len, uint16_t *oids,
-                                     uint16_t *iids, uint16_t *rids, size_t capacity)
+                                     uint16_t *iids, uint16_t *rids, size_t capacity,
+                                     bool *invalid)
 {
     size_t count = 0U;
     size_t pos = 0U;
@@ -480,10 +481,12 @@ static size_t composite_collect_json(const char *buf, size_t len, uint16_t *oids
                     count = capacity + 1U;
                     break;
                 }
-                if (tlen > 0U && composite_parse_path_text(target, tlen, &oids[count], &iids[count],
-                                                          &rids[count]) == 0) {
-                    count++;
+                if (tlen == 0U || composite_parse_path_text(target, tlen, &oids[count], &iids[count],
+                                                          &rids[count]) != 0) {
+                    *invalid = true;
+                    continue;
                 }
+                count++;
             }
             pos = quote_end + 1U;
         }
@@ -493,7 +496,8 @@ static size_t composite_collect_json(const char *buf, size_t len, uint16_t *oids
 }
 
 static size_t composite_collect_cbor(const uint8_t *buf, size_t len, uint16_t *oids,
-                                     uint16_t *iids, uint16_t *rids, size_t capacity)
+                                     uint16_t *iids, uint16_t *rids, size_t capacity,
+                                     bool *invalid)
 {
     size_t count = 0U;
     size_t i = 0U;
@@ -569,11 +573,13 @@ static size_t composite_collect_cbor(const uint8_t *buf, size_t len, uint16_t *o
                             tlen = 0U;
                         }
 
-                        if (tlen > 0U &&
+                        if (tlen == 0U ||
                             composite_parse_path_text(target, tlen, &oids[count], &iids[count],
-                                                     &rids[count]) == 0) {
-                            count++;
+                                                     &rids[count]) != 0) {
+                            *invalid = true;
+                            continue;
                         }
+                        count++;
                     }
                 }
             }
@@ -791,11 +797,18 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         size_t value_count = 0U;
         size_t target_index;
         bool unknown_path = false;
+        bool not_readable = false;
         bool resource_error = false;
-        bool unsupported_format = false;
+        bool invalid_target = false;
         int negotiated = -1;
-        size_t candidate;
         bool negotiated_found = false;
+
+        if (rc != 0) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_NOT_ACCEPTABLE, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
 
         if (content_format < 0 || (content_format != (int)SIRENA_LWM2M_CF_SENML_JSON &&
                                    content_format != (int)SIRENA_LWM2M_CF_SENML_CBOR)) {
@@ -805,19 +818,21 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
             return;
         }
 
-        if (rc != 0) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_NOT_ACCEPTABLE, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
-        }
-
         if (content_format == (int)SIRENA_LWM2M_CF_SENML_JSON) {
             target_count = composite_collect_json((const char *)payload, payload_length, oids, iids,
-                                                  rids, CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES);
+                                                  rids, CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES,
+                                                  &invalid_target);
         } else {
             target_count = composite_collect_cbor((const uint8_t *)payload, payload_length, oids,
-                                                  iids, rids, CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES);
+                                                  iids, rids, CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES,
+                                                  &invalid_target);
+        }
+
+        if (invalid_target) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
         }
 
         if (target_count > CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES) {
@@ -840,9 +855,13 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
             size_t raw_length = CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX;
 
             if (sirena_lwm2m_find_resource(oids[target_index], iids[target_index],
-                                            rids[target_index], &resource) != 0 ||
-                (resource->operations & SIRENA_LWM2M_OP_READ) == 0U || resource->read == NULL) {
+                                            rids[target_index], &resource) != 0) {
                 unknown_path = true;
+                continue;
+            }
+
+            if ((resource->operations & SIRENA_LWM2M_OP_READ) == 0U || resource->read == NULL) {
+                not_readable = true;
                 continue;
             }
 
@@ -872,6 +891,13 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
             return;
         }
 
+        if (not_readable) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_NOT_ALLOWED, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
         if (resource_error) {
             (void)endpoint_send_message(response_type, response_message_id, token_length, token,
                                         COAP_RESPONSE_CODE_INTERNAL_ERROR, false, 0U, -1, NULL, 0U,
@@ -894,16 +920,7 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
                                                            values, value_count, &selected) == 0) {
                 negotiated = (int)selected;
                 negotiated_found = true;
-            } else if (accepted_count > 0U) {
-                unsupported_format = 1;
             }
-        }
-
-        if (unsupported_format) {
-            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
-                                        COAP_RESPONSE_CODE_NOT_ACCEPTABLE, false, 0U, -1, NULL, 0U,
-                                        peer, peer_length);
-            return;
         }
 
         if (!negotiated_found) {
