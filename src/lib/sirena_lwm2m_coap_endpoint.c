@@ -347,7 +347,7 @@ static int composite_parse_path_text(const char *text, size_t length, uint16_t *
         if (pos == length || text[pos] == '/') {
             if (any) {
                 if (part >= 3U) {
-                    return -EINVAL;
+                    return -ENOTSUP;
                 }
                 parts[part++] = value;
                 value = 0U;
@@ -366,18 +366,9 @@ static int composite_parse_path_text(const char *text, size_t length, uint16_t *
         pos++;
     }
 
-    if (part == 0U || part > 3U) {
-        return -EINVAL;
+    if (part != 3U) {
+        return -ENOTSUP;
     }
-
-    if (part == 1U) {
-        *instance_id = 0U;
-        *resource_id = 0U;
-    } else if (part == 2U) {
-        *resource_id = 0U;
-    }
-
-
 
     *object_id = (uint16_t)parts[0];
     *instance_id = (uint16_t)parts[1];
@@ -388,7 +379,7 @@ static int composite_parse_path_text(const char *text, size_t length, uint16_t *
 
 static size_t composite_collect_json(const char *buf, size_t len, uint16_t *oids,
                                      uint16_t *iids, uint16_t *rids, size_t capacity,
-                                     bool *invalid)
+                                     bool *invalid, bool *unknown)
 {
     size_t count = 0U;
     size_t pos = 0U;
@@ -481,11 +472,19 @@ static size_t composite_collect_json(const char *buf, size_t len, uint16_t *oids
                     count = capacity + 1U;
                     break;
                 }
-                if (tlen == 0U || composite_parse_path_text(target, tlen, &oids[count], &iids[count],
-                                                          &rids[count]) != 0) {
-                    *invalid = true;
-                } else {
-                    count++;
+                {
+                    int path_rc = tlen == 0U
+                                      ? -EINVAL
+                                      : composite_parse_path_text(target, tlen, &oids[count],
+                                                                  &iids[count], &rids[count]);
+
+                    if (path_rc == -ENOTSUP) {
+                        *unknown = true;
+                    } else if (path_rc != 0) {
+                        *invalid = true;
+                    } else {
+                        count++;
+                    }
                 }
             }
             pos = quote_end + 1U;
@@ -497,7 +496,7 @@ static size_t composite_collect_json(const char *buf, size_t len, uint16_t *oids
 
 static size_t composite_collect_cbor(const uint8_t *buf, size_t len, uint16_t *oids,
                                      uint16_t *iids, uint16_t *rids, size_t capacity,
-                                     bool *invalid)
+                                     bool *invalid, bool *unknown)
 {
     size_t count = 0U;
     size_t i = 0U;
@@ -573,12 +572,20 @@ static size_t composite_collect_cbor(const uint8_t *buf, size_t len, uint16_t *o
                             tlen = 0U;
                         }
 
-                        if (tlen == 0U ||
-                            composite_parse_path_text(target, tlen, &oids[count], &iids[count],
-                                                     &rids[count]) != 0) {
-                            *invalid = true;
-                        } else {
-                            count++;
+                        {
+                            int path_rc = tlen == 0U
+                                              ? -EINVAL
+                                              : composite_parse_path_text(target, tlen,
+                                                                          &oids[count], &iids[count],
+                                                                          &rids[count]);
+
+                            if (path_rc == -ENOTSUP) {
+                                *unknown = true;
+                            } else if (path_rc != 0) {
+                                *invalid = true;
+                            } else {
+                                count++;
+                            }
                         }
                     }
                 }
@@ -800,6 +807,7 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         bool not_readable = false;
         bool resource_error = false;
         bool invalid_target = false;
+        bool unresolved_target = false;
         int negotiated = -1;
         bool negotiated_found = false;
 
@@ -821,16 +829,23 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         if (content_format == (int)SIRENA_LWM2M_CF_SENML_JSON) {
             target_count = composite_collect_json((const char *)payload, payload_length, oids, iids,
                                                   rids, CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES,
-                                                  &invalid_target);
+                                                  &invalid_target, &unresolved_target);
         } else {
             target_count = composite_collect_cbor((const uint8_t *)payload, payload_length, oids,
                                                   iids, rids, CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES,
-                                                  &invalid_target);
+                                                  &invalid_target, &unresolved_target);
         }
 
         if (invalid_target) {
             (void)endpoint_send_message(response_type, response_message_id, token_length, token,
                                         COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
+        if (unresolved_target) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_NOT_FOUND, false, 0U, -1, NULL, 0U,
                                         peer, peer_length);
             return;
         }

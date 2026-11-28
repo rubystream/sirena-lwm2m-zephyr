@@ -1316,3 +1316,19 @@ ZTEST(sirena_lwm2m_protocol, test_read_composite_refuses_an_accept_list_without_
                   "unexpected response code");
     zassert_equal(peer_capture.payload_length, 0U, "a failure must not carry a payload");
 }
+
+ZTEST(sirena_lwm2m_protocol, test_read_composite_of_an_instance_target_is_not_found)
+{
+    static const char payload[] = "[{\"n\":\"/1/0\"}]";
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_FETCH, "/1/0", SIRENA_LWM2M_CF_SENML_JSON, payload,
+                      sizeof(payload) - 1U, NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "composite read request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_NOT_FOUND, "unexpected response code");
+    zassert_equal(peer_capture.payload_length, 0U, "a failure must not carry a payload");
+}
