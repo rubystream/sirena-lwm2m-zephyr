@@ -24,6 +24,7 @@ struct sirena_lwm2m_senml_record {
     char path[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
     char value[SIRENA_LWM2M_COMPOSITE_VALUE_MAX];
     size_t value_length;
+    bool value_is_string;
 };
 
 struct sirena_lwm2m_codec_value {

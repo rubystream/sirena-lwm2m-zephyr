@@ -419,13 +419,17 @@ static int protocol_parse_path(const char *path, uint16_t *object_id, uint16_t *
 }
 
 static int protocol_value_from_text(enum sirena_lwm2m_value_type type, const char *text,
-                                    size_t length, struct sirena_lwm2m_codec_value *value)
+                                    size_t length, bool is_string,
+                                    struct sirena_lwm2m_codec_value *value)
 {
     memset(value, 0, sizeof(*value));
     value->type = type;
 
     switch (type) {
     case SIRENA_LWM2M_VALUE_BOOLEAN:
+        if (is_string) {
+            return -EINVAL;
+        }
         if (length == 4U && strncmp(text, "true", 4U) == 0) {
             value->data.boolean = true;
             return 0;
@@ -440,7 +444,7 @@ static int protocol_value_from_text(enum sirena_lwm2m_value_type type, const cha
         bool negative = false;
         int64_t number = 0;
 
-        if (length == 0U) {
+        if (is_string || length == 0U) {
             return -EINVAL;
         }
         if (text[0] == '-') {
@@ -454,6 +458,9 @@ static int protocol_value_from_text(enum sirena_lwm2m_value_type type, const cha
             if (text[i] < '0' || text[i] > '9') {
                 return -EINVAL;
             }
+            if (number > (INT64_MAX - (int64_t)(text[i] - '0')) / 10) {
+                return -EINVAL;
+            }
             number = number * 10 + (int64_t)(text[i] - '0');
         }
         value->data.integer = negative ? -number : number;
@@ -463,11 +470,14 @@ static int protocol_value_from_text(enum sirena_lwm2m_value_type type, const cha
         size_t i;
         uint64_t number = 0;
 
-        if (length == 0U) {
+        if (is_string || length == 0U) {
             return -EINVAL;
         }
         for (i = 0U; i < length; i++) {
             if (text[i] < '0' || text[i] > '9') {
+                return -EINVAL;
+            }
+            if (number > (UINT64_MAX - (uint64_t)(text[i] - '0')) / 10U) {
                 return -EINVAL;
             }
             number = number * 10U + (uint64_t)(text[i] - '0');
@@ -480,7 +490,7 @@ static int protocol_value_from_text(enum sirena_lwm2m_value_type type, const cha
         char *end = NULL;
         double number;
 
-        if (length == 0U || length >= sizeof(buffer)) {
+        if (is_string || length == 0U || length >= sizeof(buffer)) {
             return -EINVAL;
         }
         memcpy(buffer, text, length);
@@ -493,10 +503,16 @@ static int protocol_value_from_text(enum sirena_lwm2m_value_type type, const cha
         return 0;
     }
     case SIRENA_LWM2M_VALUE_STRING:
+        if (!is_string) {
+            return -EINVAL;
+        }
         value->data.string.value = text;
         value->data.string.length = length;
         return 0;
     case SIRENA_LWM2M_VALUE_OPAQUE:
+        if (!is_string) {
+            return -EINVAL;
+        }
         value->data.opaque.value = text;
         value->data.opaque.length = length;
         return 0;
@@ -627,13 +643,28 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         for (i = 0U; i < record_count; i++) {
             struct sirena_lwm2m_resource *resource;
             struct sirena_lwm2m_codec_value value;
+            char target[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
+            const char *path = protocol_composite_records[i].path;
             uint16_t object_id = 0U;
             uint16_t instance_id = 0U;
             uint16_t resource_id = 0U;
             int64_t status = 204;
 
-            if (protocol_parse_path(protocol_composite_records[i].path, &object_id, &instance_id,
-                                    &resource_id) != 0) {
+            if (path[0] != '/') {
+                int written = snprintf(target, sizeof(target), "/%u/%u/%s", request->object_id,
+                                       request->instance_id, path);
+
+                if (written < 0 || (size_t)written >= sizeof(target)) {
+                    status = 404;
+                    path = NULL;
+                } else {
+                    path = target;
+                }
+            }
+
+            if (path == NULL) {
+                status = 404;
+            } else if (protocol_parse_path(path, &object_id, &instance_id, &resource_id) != 0) {
                 status = 404;
             } else if (sirena_lwm2m_find_resource(object_id, instance_id, resource_id,
                                                   &resource) != 0) {
@@ -644,6 +675,7 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
             } else if (protocol_value_from_text(resource->type,
                                                 protocol_composite_records[i].value,
                                                 protocol_composite_records[i].value_length,
+                                                protocol_composite_records[i].value_is_string,
                                                 &value) != 0) {
                 status = 400;
             } else {
