@@ -331,7 +331,6 @@ static int endpoint_parse_accept(const struct coap_packet *packet, uint16_t *acc
     return 0;
 }
 
-
 static void endpoint_handle_request(struct coap_packet *packet, const struct net_sockaddr *peer,
                                     net_socklen_t peer_length)
 {
@@ -527,7 +526,6 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
             }
         }
     }
-
 
     if (coap_header_get_code(packet) == COAP_METHOD_GET) {
         if (rc == 0 && accepted_count > 0U &&
@@ -972,7 +970,6 @@ int sirena_lwm2m_coap_endpoint_notify(uint16_t object_id, uint16_t instance_id,
 
     return sent;
 }
-
 
 void sirena_lwm2m_coap_endpoint_enforce_pmax(void)
 {

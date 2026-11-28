@@ -1512,7 +1512,6 @@ ZTEST(sirena_lwm2m_mqtt, test_an_unsupported_operation_is_answered_with_not_impl
     zassert_false(answer.has_payload, "a failure must not carry a value");
 }
 
-
 ZTEST(sirena_lwm2m_mqtt, test_a_composite_read_is_answered_with_the_requested_values)
 {
     static const char payload[] = "[{\"n\":\"/1/0/1\"},{\"n\":\"/3/0/1\"}]";

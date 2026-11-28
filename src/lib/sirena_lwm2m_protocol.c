@@ -377,6 +377,14 @@ static int discover_instance_visitor(uint16_t object_id, uint16_t instance_id, v
     return discover_append_entry(context, object_id, instance_id, 0U, false);
 }
 
+static void protocol_path_ids(const unsigned long *parts, uint16_t *object_id,
+                              uint16_t *instance_id, uint16_t *resource_id)
+{
+    *object_id = (uint16_t)parts[0];
+    *instance_id = (uint16_t)parts[1];
+    *resource_id = (uint16_t)parts[2];
+}
+
 static int protocol_parse_path(const char *path, uint16_t *object_id, uint16_t *instance_id,
                                uint16_t *resource_id)
 {
@@ -391,6 +399,7 @@ static int protocol_parse_path(const char *path, uint16_t *object_id, uint16_t *
         if (pos == length || path[pos] == '/') {
             if (any) {
                 if (part >= 3U) {
+                    protocol_path_ids(parts, object_id, instance_id, resource_id);
                     return -ENOTSUP;
                 }
                 parts[part++] = value;
@@ -399,10 +408,12 @@ static int protocol_parse_path(const char *path, uint16_t *object_id, uint16_t *
             }
         } else {
             if (path[pos] < '0' || path[pos] > '9') {
+                protocol_path_ids(parts, object_id, instance_id, resource_id);
                 return -EINVAL;
             }
             value = value * 10UL + (unsigned long)(path[pos] - '0');
             if (value > 65535UL) {
+                protocol_path_ids(parts, object_id, instance_id, resource_id);
                 return -EINVAL;
             }
             any = true;
@@ -411,12 +422,11 @@ static int protocol_parse_path(const char *path, uint16_t *object_id, uint16_t *
     }
 
     if (part != 3U) {
+        protocol_path_ids(parts, object_id, instance_id, resource_id);
         return -ENOTSUP;
     }
 
-    *object_id = (uint16_t)parts[0];
-    *instance_id = (uint16_t)parts[1];
-    *resource_id = (uint16_t)parts[2];
+    protocol_path_ids(parts, object_id, instance_id, resource_id);
 
     return 0;
 }

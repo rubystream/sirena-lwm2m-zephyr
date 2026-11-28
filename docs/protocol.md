@@ -268,13 +268,12 @@ The bounds suite runs the same peer with a smaller value buffer, a smaller
 payload buffer and a smaller Accept list, so the outcomes that only a bound
 can produce are covered: a read of a value that does not fit the value buffer
 and an encoded response that does not fit the payload buffer are refused with
-5.00, and an Accept list that does not fit is refused with 4.06. A write
-value that does not fit is reported for that target with 400.
+5.00, and an Accept list that does not fit is refused with 4.06.
 
 The suite covers the read, the write and the execute with their status codes,
 the composite read and the composite write with their status codes, the
-per-target statuses of a mixed composite write and the refusal of an
-oversized Accept list,
+per-target statuses of a mixed composite write, a write value that does
+not fit the value buffer and the refusal of an oversized Accept list,
 the content format negotiation with and without an Accept option, the refusal
 of a format the codec cannot encode for the resource, the refusal of an Accept
 list the client cannot hold, a path with too many segments, the observation

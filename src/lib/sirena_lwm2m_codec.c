@@ -2451,6 +2451,7 @@ static int senml_json_records(const char *buf, size_t len,
             return -EINVAL;
         }
     } else if (buf[pos] == '{') {
+        size_t entries_pos = 0U;
         bool has_entries = false;
 
         pos++;
@@ -2501,40 +2502,9 @@ static int senml_json_records(const char *buf, size_t len,
                     return -EINVAL;
                 }
 
-                pos++;
+                entries_pos = pos + 1U;
 
-                for (;;) {
-                    int rc;
-
-                    (void)senml_json_skip_ws(buf, len, &pos);
-
-                    if (pos >= len) {
-                        return -EINVAL;
-                    }
-
-                    if (buf[pos] == ']') {
-                        pos++;
-                        break;
-                    }
-
-                    rc = senml_json_record(buf, len, &pos, base, records, &parsed, *count);
-
-                    if (rc != 0) {
-                        return rc;
-                    }
-
-                    (void)senml_json_skip_ws(buf, len, &pos);
-
-                    if (pos < len && buf[pos] == ',') {
-                        pos++;
-                        continue;
-                    }
-
-                    if (pos < len && buf[pos] == ']') {
-                        pos++;
-                        break;
-                    }
-
+                if (senml_json_skip_value(buf, len, &pos) != 0) {
                     return -EINVAL;
                 }
 
@@ -2563,6 +2533,43 @@ static int senml_json_records(const char *buf, size_t len,
         if (!has_entries) {
             return -EINVAL;
         }
+
+        {
+            size_t element_pos = entries_pos;
+
+            for (;;) {
+                int rc;
+
+                (void)senml_json_skip_ws(buf, len, &element_pos);
+
+                if (element_pos >= len) {
+                    return -EINVAL;
+                }
+
+                if (buf[element_pos] == ']') {
+                    break;
+                }
+
+                rc = senml_json_record(buf, len, &element_pos, base, records, &parsed, *count);
+
+                if (rc != 0) {
+                    return rc;
+                }
+
+                (void)senml_json_skip_ws(buf, len, &element_pos);
+
+                if (element_pos < len && buf[element_pos] == ',') {
+                    element_pos++;
+                    continue;
+                }
+
+                if (element_pos < len && buf[element_pos] == ']') {
+                    break;
+                }
+
+                return -EINVAL;
+            }
+        }
     } else {
         return -EINVAL;
     }
@@ -2585,7 +2592,7 @@ static int senml_cbor_skip_value(const uint8_t *buf, size_t len, size_t *pos, si
         return -EINVAL;
     }
 
-    if (major == 0U || major == 1U) {
+    if (major == 0U || major == 1U || major == 7U) {
         return 0;
     }
 
@@ -2603,7 +2610,7 @@ static int senml_cbor_skip_value(const uint8_t *buf, size_t len, size_t *pos, si
         uint64_t i;
 
         for (i = 0U; i < arg; i++) {
-            if (i >= (uint64_t)(len - *pos)) {
+            if (*pos >= len) {
                 return -EINVAL;
             }
 
@@ -2619,7 +2626,7 @@ static int senml_cbor_skip_value(const uint8_t *buf, size_t len, size_t *pos, si
         uint64_t i;
 
         for (i = 0U; i < arg; i++) {
-            if (i >= (uint64_t)(len - *pos)) {
+            if (*pos >= len) {
                 return -EINVAL;
             }
 
@@ -2627,7 +2634,7 @@ static int senml_cbor_skip_value(const uint8_t *buf, size_t len, size_t *pos, si
                 return -EINVAL;
             }
 
-            if (i >= (uint64_t)(len - *pos)) {
+            if (*pos >= len) {
                 return -EINVAL;
             }
 
@@ -2901,6 +2908,8 @@ static int senml_cbor_records(const uint8_t *buf, size_t len,
     } else if (major == 5U) {
         uint64_t member;
         uint64_t members = arg;
+        size_t entries_pos = 0U;
+        bool has_entries = false;
 
         for (member = 0U; member < members; member++) {
             char key[8];
@@ -2921,6 +2930,8 @@ static int senml_cbor_records(const uint8_t *buf, size_t len,
                 uint64_t items;
                 uint64_t item;
 
+                entries_pos = pos;
+
                 if (read_cbor_head(buf, len, &pos, &items_major, &items) != 0) {
                     return -EINVAL;
                 }
@@ -2930,15 +2941,41 @@ static int senml_cbor_records(const uint8_t *buf, size_t len,
                 }
 
                 for (item = 0U; item < items; item++) {
-                    int rc = senml_cbor_record(buf, len, &pos, base, records, &parsed, *count);
+                    int src = senml_cbor_skip_value(buf, len, &pos, 0U);
 
-                    if (rc != 0) {
-                        return rc;
+                    if (src != 0) {
+                        return -EINVAL;
                     }
                 }
+
+                has_entries = true;
             } else {
                 if (senml_cbor_skip_value(buf, len, &pos, 0U) != 0) {
                     return -EINVAL;
+                }
+            }
+        }
+
+        if (has_entries) {
+            size_t element_pos = entries_pos;
+            uint8_t items_major;
+            uint64_t items;
+            uint64_t item;
+
+            if (read_cbor_head(buf, len, &element_pos, &items_major, &items) != 0) {
+                return -EINVAL;
+            }
+
+            if (items_major != 4U) {
+                return -EINVAL;
+            }
+
+            for (item = 0U; item < items; item++) {
+                int rc = senml_cbor_record(buf, len, &element_pos, base, records, &parsed,
+                                           *count);
+
+                if (rc != 0) {
+                    return rc;
                 }
             }
         }
