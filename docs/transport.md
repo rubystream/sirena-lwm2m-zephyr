@@ -716,9 +716,10 @@ names of the records are resolved against. The answer of a Read-Composite
 carries the SenML record set with the values of the targets in the
 `payload` member, and the answer of a Write-Composite carries the record
 set with one status per target in the `payload` member: 204 for an applied
-write, 400 for a value of the wrong type, 404 for an unknown target, 405
-for a target that cannot be written and 500 for a failed write. A request
-in another content format is refused with the result 415.
+write, 400 for a value of the wrong type or a malformed target, 404 for an
+unknown target, 405 for a target that cannot be written and 500 for a
+failed write. A request in another content format is refused with the
+result 415.
 
 An Observe registers an observation in the binding. The observation is
 removed when the server sends a Cancel-Observe with its token, or when
