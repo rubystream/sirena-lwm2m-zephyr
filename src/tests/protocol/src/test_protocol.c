@@ -1728,3 +1728,34 @@ ZTEST(sirena_lwm2m_protocol, test_write_composite_applies_a_record_level_base_na
     zassert_not_null(strstr(response, "\"v\":405"),
                      "the read-only target must be refused");
 }
+
+ZTEST(sirena_lwm2m_protocol, test_write_composite_keeps_a_record_base_name_local)
+{
+    static const char payload[] =
+        "[{\"bn\":\"/3/0/\",\"n\":\"1\",\"v\":\"other\"},{\"n\":\"1\",\"v\":600}]";
+    char response[PEER_PAYLOAD_MAX + 1];
+    int64_t lifetime = 0;
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_IPATCH, "/1/0", SIRENA_LWM2M_CF_SENML_JSON, payload,
+                      sizeof(payload) - 1U, NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "composite write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_CHANGED, "unexpected response code");
+
+    memcpy(response, peer_capture.payload, peer_capture.payload_length);
+    response[peer_capture.payload_length] = '\0';
+
+    zassert_not_null(strstr(response, "\"v\":405"),
+                     "the record with its own base name must address the other object");
+    zassert_not_null(strstr(response, "\"v\":204"),
+                     "the record without a base name must address the request path");
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME_UPDATED, "the stored value was not updated");
+}

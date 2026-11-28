@@ -2217,16 +2217,19 @@ static int senml_json_skip_value(const char *buf, size_t len, size_t *pos)
     return 0;
 }
 
-static int senml_json_record(const char *buf, size_t len, size_t *pos, char *base,
+static int senml_json_record(const char *buf, size_t len, size_t *pos, const char *pack_base,
                               struct sirena_lwm2m_senml_record *records, size_t *parsed,
                               size_t capacity)
 {
+    char base[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
     char name[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
     char value[SIRENA_LWM2M_COMPOSITE_VALUE_MAX];
     size_t value_length = 0U;
     bool value_is_string = false;
     bool has_name = false;
     bool has_value = false;
+
+    strcpy(base, pack_base);
 
     if (*pos >= len || buf[*pos] != '{') {
         return -EINVAL;
@@ -2693,21 +2696,33 @@ static int senml_cbor_value_text(const uint8_t *buf, size_t len, size_t *pos, ch
         written = snprintf(out, SIRENA_LWM2M_COMPOSITE_VALUE_MAX, "true");
     } else if (major == 7U && arg == 26U) {
         float number;
+        uint32_t bits = 0U;
+        size_t i;
 
         if (start + 5U > len) {
             return -EINVAL;
         }
 
-        memcpy(&number, buf + start + 1U, sizeof(number));
+        for (i = 0U; i < sizeof(bits); i++) {
+            bits = (bits << 8) | (uint32_t)buf[start + 1U + i];
+        }
+
+        memcpy(&number, &bits, sizeof(number));
         written = snprintf(out, SIRENA_LWM2M_COMPOSITE_VALUE_MAX, "%g", (double)number);
     } else if (major == 7U && arg == 27U) {
         double number;
+        uint64_t bits = 0U;
+        size_t i;
 
         if (start + 9U > len) {
             return -EINVAL;
         }
 
-        memcpy(&number, buf + start + 1U, sizeof(number));
+        for (i = 0U; i < sizeof(bits); i++) {
+            bits = (bits << 8) | (uint64_t)buf[start + 1U + i];
+        }
+
+        memcpy(&number, &bits, sizeof(number));
         written = snprintf(out, SIRENA_LWM2M_COMPOSITE_VALUE_MAX, "%g", number);
     } else {
         return -ENOTSUP;
@@ -2722,10 +2737,11 @@ static int senml_cbor_value_text(const uint8_t *buf, size_t len, size_t *pos, ch
     return 0;
 }
 
-static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, char *base,
+static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, const char *pack_base,
                              struct sirena_lwm2m_senml_record *records, size_t *parsed,
                              size_t capacity)
 {
+    char base[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
     char name[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
     char value[SIRENA_LWM2M_COMPOSITE_VALUE_MAX];
     size_t value_length = 0U;
@@ -2735,6 +2751,8 @@ static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, char *
     uint8_t major;
     uint64_t arg;
     uint64_t member;
+
+    strcpy(base, pack_base);
 
     if (read_cbor_head(buf, len, pos, &major, &arg) != 0) {
         return -EINVAL;
