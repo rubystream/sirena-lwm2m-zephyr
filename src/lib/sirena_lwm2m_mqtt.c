@@ -803,45 +803,11 @@ static void mqtt_handle_cancel_observe(const struct sirena_lwm2m_mqtt_message *m
     (void)mqtt_send_response(message->token, SIRENA_LWM2M_MQTT_RESULT_CONTENT, false, 0U, NULL, 0U);
 }
 
-static void mqtt_handle_read_composite(const struct sirena_lwm2m_mqtt_message *message)
+static void mqtt_handle_composite(const struct sirena_lwm2m_mqtt_message *message,
+                                  enum sirena_lwm2m_operation operation)
 {
     struct sirena_lwm2m_protocol_request request = {
-        .operation = SIRENA_LWM2M_OPERATION_READ_COMPOSITE,
-        .payload = message->payload,
-        .payload_length = message->payload_length,
-        .content_format_present = message->has_content_format,
-        .content_format = (uint16_t)message->content_format,
-        .accepted_formats = NULL,
-        .accepted_format_count = 0U,
-    };
-    struct sirena_lwm2m_protocol_response response = {
-        .status = SIRENA_LWM2M_STATUS_INTERNAL_ERROR,
-        .content_format = 0U,
-        .payload = value_buffer,
-        .payload_capacity = sizeof(value_buffer),
-        .payload_length = 0U,
-    };
-    int rc;
-
-    rc = mqtt_parse_uri(message->uri, &request.object_id, &request.instance_id,
-                        &request.resource_id, &request.path_count, &request.attributes);
-    if (rc != 0) {
-        (void)mqtt_send_response(message->token, SIRENA_LWM2M_MQTT_RESULT_BAD_REQUEST, false, 0U,
-                                  NULL, 0U);
-        return;
-    }
-
-    (void)sirena_lwm2m_protocol_execute(&request, &response);
-
-    (void)mqtt_send_response(message->token, mqtt_result_from_status(response.status),
-                              response.payload_length > 0U, response.content_format,
-                              response.payload, response.payload_length);
-}
-
-static void mqtt_handle_write_composite(const struct sirena_lwm2m_mqtt_message *message)
-{
-    struct sirena_lwm2m_protocol_request request = {
-        .operation = SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE,
+        .operation = operation,
         .payload = message->payload,
         .payload_length = message->payload_length,
         .content_format_present = message->has_content_format,
@@ -902,10 +868,10 @@ static void mqtt_handle_message(const struct sirena_lwm2m_mqtt_message *message)
         mqtt_handle_write(message);
         break;
     case SIRENA_LWM2M_MQTT_OPERATION_READ_COMPOSITE:
-        mqtt_handle_read_composite(message);
+        mqtt_handle_composite(message, SIRENA_LWM2M_OPERATION_READ_COMPOSITE);
         break;
     case SIRENA_LWM2M_MQTT_OPERATION_WRITE_COMPOSITE:
-        mqtt_handle_write_composite(message);
+        mqtt_handle_composite(message, SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE);
         break;
     case SIRENA_LWM2M_MQTT_OPERATION_WRITE_ATTRIBUTES:
         mqtt_handle_write_attributes(message);

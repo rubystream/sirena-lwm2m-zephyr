@@ -683,14 +683,15 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
             }
 
             {
-                int path_rc = protocol_parse_path(path, &object_id, &instance_id, &resource_id);
+                int64_t path_status = protocol_path_status(path, &object_id, &instance_id,
+                                                           &resource_id);
 
-                if (path_rc == -EINVAL) {
+                if (path_status == 400) {
                     protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
                     return 0;
                 }
 
-                if (path_rc != 0) {
+                if (path_status != 0) {
                     protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_FOUND);
                     return 0;
                 }
