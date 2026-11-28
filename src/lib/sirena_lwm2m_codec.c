@@ -2226,6 +2226,7 @@ static int senml_json_record(const char *buf, size_t len, size_t *pos, const cha
     char value[SIRENA_LWM2M_COMPOSITE_VALUE_MAX];
     size_t value_length = 0U;
     bool value_is_string = false;
+    bool value_invalid = false;
     bool has_name = false;
     bool has_value = false;
 
@@ -2290,12 +2291,16 @@ static int senml_json_record(const char *buf, size_t len, size_t *pos, const cha
             if (buf[*pos] == '"') {
                 int written = senml_json_read_string(buf, len, pos, value, sizeof(value));
 
-                if (written < 0) {
+                if (written == -ENOSPC) {
+                    value_invalid = true;
+                    value_length = 0U;
+                    value[0] = '\0';
+                } else if (written < 0) {
                     return written;
+                } else {
+                    value_length = (size_t)written;
+                    value_is_string = true;
                 }
-
-                value_length = (size_t)written;
-                value_is_string = true;
             } else {
                 size_t start = *pos;
 
@@ -2314,11 +2319,13 @@ static int senml_json_record(const char *buf, size_t len, size_t *pos, const cha
                 }
 
                 if (value_length >= sizeof(value)) {
-                    return -ENOSPC;
+                    value_invalid = true;
+                    value_length = 0U;
+                    value[0] = '\0';
+                } else {
+                    memcpy(value, buf + start, value_length);
+                    value[value_length] = '\0';
                 }
-
-                memcpy(value, buf + start, value_length);
-                value[value_length] = '\0';
             }
 
             has_value = true;
@@ -2377,6 +2384,7 @@ static int senml_json_record(const char *buf, size_t len, size_t *pos, const cha
     records[*parsed].value[value_length] = '\0';
     records[*parsed].value_length = value_length;
     records[*parsed].value_is_string = value_is_string;
+    records[*parsed].value_invalid = value_invalid;
     (*parsed)++;
 
     return 0;
@@ -2665,12 +2673,20 @@ static int senml_cbor_value_text(const uint8_t *buf, size_t len, size_t *pos, ch
     *value_is_string = false;
 
     if (major == 3U) {
-        if (arg == 0U || arg >= SIRENA_LWM2M_COMPOSITE_VALUE_MAX) {
+        if (arg == 0U) {
             return -EINVAL;
         }
 
         if (arg > (uint64_t)(len - *pos)) {
             return -EINVAL;
+        }
+
+        if (arg >= SIRENA_LWM2M_COMPOSITE_VALUE_MAX) {
+            *value_length = 0U;
+            *value_is_string = true;
+            out[0] = '\0';
+
+            return -ENOSPC;
         }
 
         memcpy(out, buf + *pos, (size_t)arg);
@@ -2728,7 +2744,14 @@ static int senml_cbor_value_text(const uint8_t *buf, size_t len, size_t *pos, ch
         return -ENOTSUP;
     }
 
-    if (written < 0 || (size_t)written >= SIRENA_LWM2M_COMPOSITE_VALUE_MAX) {
+    if (written < 0) {
+        return -EINVAL;
+    }
+
+    if ((size_t)written >= SIRENA_LWM2M_COMPOSITE_VALUE_MAX) {
+        *value_length = 0U;
+        out[0] = '\0';
+
         return -ENOSPC;
     }
 
@@ -2746,6 +2769,7 @@ static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, const 
     char value[SIRENA_LWM2M_COMPOSITE_VALUE_MAX];
     size_t value_length = 0U;
     bool value_is_string = false;
+    bool value_invalid = false;
     bool has_name = false;
     bool has_value = false;
     uint8_t major;
@@ -2787,7 +2811,9 @@ static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, const 
         } else if (strcmp(key, "v") == 0) {
             int rc = senml_cbor_value_text(buf, len, pos, value, &value_length, &value_is_string);
 
-            if (rc != 0) {
+            if (rc == -ENOSPC) {
+                value_invalid = true;
+            } else if (rc != 0) {
                 return rc;
             }
 
@@ -2829,6 +2855,7 @@ static int senml_cbor_record(const uint8_t *buf, size_t len, size_t *pos, const 
     records[*parsed].value[value_length] = '\0';
     records[*parsed].value_length = value_length;
     records[*parsed].value_is_string = value_is_string;
+    records[*parsed].value_invalid = value_invalid;
     (*parsed)++;
 
     return 0;

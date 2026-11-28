@@ -673,6 +673,8 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
             } else if ((resource->operations & SIRENA_LWM2M_OP_WRITE) == 0U ||
                        resource->write == NULL) {
                 status = 405;
+            } else if (protocol_composite_records[i].value_invalid) {
+                status = 400;
             } else if (protocol_value_from_text(resource->type,
                                                 protocol_composite_records[i].value,
                                                 protocol_composite_records[i].value_length,

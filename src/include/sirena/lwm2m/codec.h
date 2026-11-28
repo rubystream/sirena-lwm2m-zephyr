@@ -19,13 +19,14 @@
 
 #define SIRENA_LWM2M_COMPOSITE_PATH_MAX 48U
 #define SIRENA_LWM2M_COMPOSITE_MAX_DEPTH 8U
-#define SIRENA_LWM2M_COMPOSITE_VALUE_MAX 48U
+#define SIRENA_LWM2M_COMPOSITE_VALUE_MAX CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUE_SIZE
 
 struct sirena_lwm2m_senml_record {
     char path[SIRENA_LWM2M_COMPOSITE_PATH_MAX];
     char value[SIRENA_LWM2M_COMPOSITE_VALUE_MAX];
     size_t value_length;
     bool value_is_string;
+    bool value_invalid;
 };
 
 struct sirena_lwm2m_codec_value {

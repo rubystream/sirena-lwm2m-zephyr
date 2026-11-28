@@ -89,6 +89,7 @@ A successful run prints `sirena zephyr smoke ok`.
 | Build and run DTLS transport tests | `npm run test:dtls` |
 | Build and run DTLS transport tests with the noSec development gate open | `npm run test:dtls-nosec` |
 | Build and run protocol tests | `npm run test:protocol` |
+| Build and run the protocol bounds tests | `npm run test:protocol-bounds` |
 | Build and run MQTT transport tests | `npm run test:mqtt` |
 | Build the native simulator sample | `npm run build:sample` |
 | Run the native simulator sample | `npm run run:sample` |

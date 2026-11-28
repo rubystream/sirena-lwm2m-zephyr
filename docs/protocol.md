@@ -220,6 +220,7 @@ error codes of the API are the negative `errno` values of the table.
 
 ```sh
 npm run test:protocol
+npm run test:protocol-bounds
 ```
 
 The suite runs a real CoAP peer on 127.0.0.1 in the same process. The peer is a
@@ -228,6 +229,12 @@ sends the server initiated requests and receives the responses and the
 notifications, so the assertions are made on the bytes the client sent back:
 the response code, the content format, the observe option, the token and the
 payload.
+
+The bounds suite runs the same peer with a smaller value buffer, a smaller
+payload buffer and a smaller Accept list, so the outcomes that only a bound
+can produce are covered: a value that does not fit the value buffer and an
+encoded response that does not fit the payload buffer are refused with 5.00,
+and an Accept list that does not fit is refused with 4.06.
 
 The suite covers the read, the write and the execute with their status codes,
 the content format negotiation with and without an Accept option, the refusal
