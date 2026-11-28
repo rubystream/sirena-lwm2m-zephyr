@@ -640,7 +640,8 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     }
 
     if (coap_header_get_code(packet) == COAP_METHOD_GET ||
-        coap_header_get_code(packet) == COAP_METHOD_FETCH) {
+        coap_header_get_code(packet) == COAP_METHOD_FETCH ||
+        coap_header_get_code(packet) == COAP_METHOD_IPATCH) {
         rc = endpoint_parse_accept(packet, accepted, ARRAY_SIZE(accepted), &accepted_count);
     }
 
@@ -999,7 +1000,8 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
     }
 
     if (protocol_request.operation == SIRENA_LWM2M_OPERATION_READ ||
-        protocol_request.operation == SIRENA_LWM2M_OPERATION_DISCOVER) {
+        protocol_request.operation == SIRENA_LWM2M_OPERATION_DISCOVER ||
+        protocol_request.operation == SIRENA_LWM2M_OPERATION_WRITE_COMPOSITE) {
         if (rc != 0) {
             (void)endpoint_send_message(response_type, response_message_id, token_length, token,
                                         COAP_RESPONSE_CODE_NOT_ACCEPTABLE, false, 0U, -1, NULL,

@@ -623,6 +623,7 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         uint16_t write_format = request->content_format_present
                                    ? request->content_format
                                    : (uint16_t)SIRENA_LWM2M_CF_SENML_JSON;
+        uint16_t response_format = (uint16_t)SIRENA_LWM2M_CF_SENML_JSON;
         size_t record_count = ARRAY_SIZE(protocol_composite_records);
         size_t length;
         size_t i;
@@ -639,6 +640,23 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         if (rc != 0 || record_count == 0U) {
             protocol_set_status(response, SIRENA_LWM2M_STATUS_BAD_REQUEST);
             return 0;
+        }
+
+        {
+            uint16_t preferred = (uint16_t)CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
+            uint16_t selected = (uint16_t)SIRENA_LWM2M_CF_SENML_JSON;
+
+            protocol_composite_status[0].type = SIRENA_LWM2M_VALUE_INTEGER;
+
+            if (sirena_lwm2m_content_format_negotiate_multi(request->accepted_formats,
+                                                            request->accepted_format_count,
+                                                            preferred, protocol_composite_status, 1U,
+                                                            &selected) == 0) {
+                response_format = selected;
+            } else if (request->accepted_format_count > 0U) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_ACCEPTABLE);
+                return 0;
+            }
         }
 
         for (i = 0U; i < record_count; i++) {
@@ -673,6 +691,8 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
             } else if ((resource->operations & SIRENA_LWM2M_OP_WRITE) == 0U ||
                        resource->write == NULL) {
                 status = 405;
+            } else if (protocol_composite_records[i].value_invalid) {
+                status = 400;
             } else if (protocol_value_from_text(resource->type,
                                                 protocol_composite_records[i].value,
                                                 protocol_composite_records[i].value_length,
@@ -699,16 +719,15 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
         }
 
         length = response->payload_capacity;
-        rc = sirena_lwm2m_codec_encode((uint16_t)SIRENA_LWM2M_CF_SENML_JSON,
-                                       protocol_composite_status, record_count, response->payload,
-                                       &length);
+        rc = sirena_lwm2m_codec_encode(response_format, protocol_composite_status, record_count,
+                                       response->payload, &length);
         if (rc != 0) {
             protocol_set_status(response, SIRENA_LWM2M_STATUS_INTERNAL_ERROR);
             return 0;
         }
 
         response->status = SIRENA_LWM2M_STATUS_CHANGED;
-        response->content_format = (uint16_t)SIRENA_LWM2M_CF_SENML_JSON;
+        response->content_format = response_format;
         response->payload_length = length;
         return 0;
     }
