@@ -15,7 +15,7 @@ static struct sirena_lwm2m_codec_value protocol_values[CONFIG_SIRENA_LWM2M_CODEC
 static uint8_t protocol_send_raw[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES][CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX];
 static struct sirena_lwm2m_codec_value protocol_send_values[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
 
-static int protocol_value_from_resource(const struct sirena_lwm2m_resource *resource,
+int sirena_lwm2m_protocol_value_from_resource(const struct sirena_lwm2m_resource *resource,
                                         const void *raw, size_t raw_length,
                                         struct sirena_lwm2m_codec_value *value)
 {
@@ -91,7 +91,7 @@ int sirena_lwm2m_protocol_read(uint16_t object_id, uint16_t instance_id, uint16_
         return rc;
     }
 
-    rc = protocol_value_from_resource(resource, protocol_raw, raw_length, &value);
+    rc = sirena_lwm2m_protocol_value_from_resource(resource, protocol_raw, raw_length, &value);
     if (rc != 0) {
         return rc;
     }
@@ -796,7 +796,7 @@ int sirena_lwm2m_protocol_send_encode(const struct sirena_lwm2m_send_record *rec
         }
 
         value = &protocol_send_values[i];
-        rc = protocol_value_from_resource(resource, protocol_send_raw[i], raw_length, value);
+        rc = sirena_lwm2m_protocol_value_from_resource(resource, protocol_send_raw[i], raw_length, value);
         if (rc != 0) {
             return rc;
         }

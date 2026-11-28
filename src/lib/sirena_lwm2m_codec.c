@@ -197,6 +197,85 @@ int sirena_lwm2m_content_format_negotiate(const uint16_t *accepted,
     return -ENOTSUP;
 }
 
+int sirena_lwm2m_content_format_negotiate_multi(const uint16_t *accepted,
+                                                size_t accepted_count,
+                                                uint16_t preferred,
+                                                const struct sirena_lwm2m_codec_value *values,
+                                                size_t value_count, uint16_t *selected)
+{
+    size_t vi;
+    size_t candidate;
+
+    if (selected == NULL || values == NULL || value_count == 0U) {
+        return -EINVAL;
+    }
+
+    *selected = 0U;
+
+    if (accepted != NULL && accepted_count > 0U) {
+        for (candidate = 0U; candidate < accepted_count; ++candidate) {
+            bool ok = true;
+
+            if (accepted[candidate] != SIRENA_LWM2M_CF_SENML_JSON &&
+                accepted[candidate] != SIRENA_LWM2M_CF_SENML_CBOR) {
+                continue;
+            }
+            for (vi = 0U; vi < value_count; ++vi) {
+                if (!sirena_lwm2m_codec_can_encode(accepted[candidate], values[vi].type)) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) {
+                *selected = accepted[candidate];
+                return 0;
+            }
+        }
+        return -ENOTSUP;
+    }
+
+    {
+        uint16_t pref = preferred;
+
+        if (pref != SIRENA_LWM2M_CF_SENML_JSON && pref != SIRENA_LWM2M_CF_SENML_CBOR) {
+            pref = SIRENA_LWM2M_CF_SENML_JSON;
+        }
+        {
+            bool ok = true;
+            for (vi = 0U; vi < value_count; ++vi) {
+                if (!sirena_lwm2m_codec_can_encode(pref, values[vi].type)) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) {
+                *selected = pref;
+                return 0;
+            }
+        }
+    }
+
+    {
+        const uint16_t formats[] = { SIRENA_LWM2M_CF_SENML_JSON, SIRENA_LWM2M_CF_SENML_CBOR };
+
+        for (candidate = 0U; candidate < ARRAY_SIZE(formats); ++candidate) {
+            bool ok = true;
+            for (vi = 0U; vi < value_count; ++vi) {
+                if (!sirena_lwm2m_codec_can_encode(formats[candidate], values[vi].type)) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) {
+                *selected = formats[candidate];
+                return 0;
+            }
+        }
+    }
+
+    return -ENOTSUP;
+}
+
 static int encode_tlv_value(void *buffer, size_t capacity, size_t *used,
                            const struct sirena_lwm2m_codec_value *v)
 {
@@ -528,31 +607,55 @@ int sirena_lwm2m_codec_encode(uint16_t content_format,
     }
 
     if (content_format == SIRENA_LWM2M_CF_SENML_CBOR) {
-        char base[64];
-        snprintf(base, sizeof(base), "/%u/%u/", values[0].object_id, values[0].instance_id);
-        uint8_t map = 0xA0 | 2U;
-        rc = append_byte(buffer, cap, &used, map);
-        if (rc != 0) return rc;
-        rc = cbor_length(buffer, cap, &used, 3, 2);
-        if (rc != 0) return rc;
-        rc = append(buffer, cap, &used, "bn", 2U);
-        if (rc != 0) return rc;
-        rc = cbor_length(buffer, cap, &used, 3, strlen(base));
-        if (rc != 0) return rc;
-        rc = append(buffer, cap, &used, base, strlen(base));
-        if (rc != 0) return rc;
-        rc = cbor_length(buffer, cap, &used, 3, 1);
-        if (rc != 0) return rc;
-        rc = append(buffer, cap, &used, "e", 1U);
-        if (rc != 0) return rc;
+        bool same_base = true;
+        size_t si;
+        for (si = 1U; si < value_count; ++si) {
+            if (values[si].object_id != values[0].object_id ||
+                values[si].instance_id != values[0].instance_id) {
+                same_base = false;
+                break;
+            }
+        }
+        if (same_base) {
+            char base[64];
+            snprintf(base, sizeof(base), "/%u/%u/", values[0].object_id, values[0].instance_id);
+            uint8_t map = 0xA0 | 2U;
+            rc = append_byte(buffer, cap, &used, map);
+            if (rc != 0) return rc;
+            rc = cbor_length(buffer, cap, &used, 3, 2);
+            if (rc != 0) return rc;
+            rc = append(buffer, cap, &used, "bn", 2U);
+            if (rc != 0) return rc;
+            rc = cbor_length(buffer, cap, &used, 3, strlen(base));
+            if (rc != 0) return rc;
+            rc = append(buffer, cap, &used, base, strlen(base));
+            if (rc != 0) return rc;
+            rc = cbor_length(buffer, cap, &used, 3, 1);
+            if (rc != 0) return rc;
+            rc = append(buffer, cap, &used, "e", 1U);
+            if (rc != 0) return rc;
+        } else {
+            uint8_t map = 0xA0 | 1U;
+            rc = append_byte(buffer, cap, &used, map);
+            if (rc != 0) return rc;
+            rc = cbor_length(buffer, cap, &used, 3, 1);
+            if (rc != 0) return rc;
+            rc = append(buffer, cap, &used, "e", 1U);
+            if (rc != 0) return rc;
+        }
         uint8_t arr = 0x80 | (uint8_t)(value_count <= 23U ? value_count : 23U);
         if (value_count > 23U) return -ENOTSUP;
         rc = append_byte(buffer, cap, &used, arr);
         if (rc != 0) return rc;
         for (i = 0U; i < value_count; ++i) {
             uint8_t rec = 0xA0 | 2U;
-            char rid[16];
-            snprintf(rid, sizeof(rid), "%u", effective_resource_id(&values[i]));
+            char rid[64];
+            if (values[i].object_id != values[0].object_id || values[i].instance_id != values[0].instance_id || !same_base) {
+                snprintf(rid, sizeof(rid), "/%u/%u/%u", values[i].object_id, values[i].instance_id,
+                         effective_resource_id(&values[i]));
+            } else {
+                snprintf(rid, sizeof(rid), "%u", effective_resource_id(&values[i]));
+            }
             rc = append_byte(buffer, cap, &used, rec);
             if (rc != 0) return rc;
             rc = cbor_length(buffer, cap, &used, 3, 1);
@@ -667,16 +770,47 @@ int sirena_lwm2m_codec_encode(uint16_t content_format,
     }
 
     if (content_format == SIRENA_LWM2M_CF_SENML_JSON) {
-        char bn[64];
-        snprintf(bn, sizeof(bn), "{\"bn\":\"/%u/%u/\",\"e\":[", values[0].object_id, values[0].instance_id);
-        if (append(buffer, cap, &used, bn, strlen(bn)) != 0) return -ENOMEM;
+        {
+            bool same_base = true;
+            size_t si;
+            for (si = 1U; si < value_count; ++si) {
+                if (values[si].object_id != values[0].object_id ||
+                    values[si].instance_id != values[0].instance_id) {
+                    same_base = false;
+                    break;
+                }
+            }
+            if (same_base) {
+                char bn[64];
+                snprintf(bn, sizeof(bn), "{\"bn\":\"/%u/%u/\",\"e\":[", values[0].object_id, values[0].instance_id);
+                if (append(buffer, cap, &used, bn, strlen(bn)) != 0) return -ENOMEM;
+            } else {
+                if (append(buffer, cap, &used, "{\"e\":[", 6U) != 0) return -ENOMEM;
+            }
+        }
         for (i = 0U; i < value_count; ++i) {
             char tmp[128];
             int n;
             if (i != 0U) {
                 if (append_byte(buffer, cap, &used, ',') != 0) return -ENOMEM;
             }
-            n = snprintf(tmp, sizeof(tmp), "{\"n\":\"%u\",\"v\":", effective_resource_id(&values[i]));
+            {
+                bool same_base = true;
+                size_t si;
+                for (si = 1U; si < value_count; ++si) {
+                    if (values[si].object_id != values[0].object_id ||
+                        values[si].instance_id != values[0].instance_id) {
+                        same_base = false;
+                        break;
+                    }
+                }
+                if (same_base) {
+                    n = snprintf(tmp, sizeof(tmp), "{\"n\":\"%u\",\"v\":", effective_resource_id(&values[i]));
+                } else {
+                    n = snprintf(tmp, sizeof(tmp), "{\"n\":\"/%u/%u/%u\",\"v\":", values[i].object_id,
+                                 values[i].instance_id, effective_resource_id(&values[i]));
+                }
+            }
             if (n < 0 || append(buffer, cap, &used, tmp, (size_t)n) != 0) return -ENOMEM;
             switch (values[i].type) {
             case SIRENA_LWM2M_VALUE_BOOLEAN: {
@@ -1766,7 +1900,6 @@ static int decode_senml_etch_cbor(const uint8_t *buf, size_t len,
     uint8_t major;
     uint64_t arg;
     char path[64];
-    size_t path_len;
     int object_id = 0;
     int instance_id = 0;
     int resource_id = 0;

@@ -1,5 +1,6 @@
 #include "sirena_lwm2m_coap_endpoint.h"
 #include <sirena/lwm2m/protocol.h>
+#include <sirena/lwm2m/codec.h>
 #include <zephyr/kernel.h>
 #include <sirena/lwm2m/object_registry.h>
 #include <zephyr/net/coap.h>
@@ -53,6 +54,7 @@ static struct sirena_lwm2m_coap_observer observers[CONFIG_SIRENA_LWM2M_MAX_OBSER
 static uint8_t receive_buffer[CONFIG_SIRENA_LWM2M_COAP_MESSAGE_MAX];
 static uint8_t send_buffer[CONFIG_SIRENA_LWM2M_COAP_MESSAGE_MAX];
 static uint8_t response_payload[CONFIG_SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX];
+static uint8_t composite_raw[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES][CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX];
 static uint8_t notify_payload[CONFIG_SIRENA_LWM2M_PROTOCOL_PAYLOAD_MAX];
 static struct coap_option dispatch_options[SIRENA_LWM2M_COAP_OPTIONS];
 
@@ -331,6 +333,274 @@ static int endpoint_parse_accept(const struct coap_packet *packet, uint16_t *acc
     return 0;
 }
 
+
+static int composite_parse_path_text(const char *text, size_t length, uint16_t *object_id,
+                                     uint16_t *instance_id, uint16_t *resource_id)
+{
+    size_t pos = 0U;
+    unsigned long parts[3] = {0, 0, 0};
+    size_t part = 0U;
+    unsigned long value = 0U;
+    bool any = false;
+
+    while (pos <= length) {
+        if (pos == length || text[pos] == '/') {
+            if (any) {
+                if (part >= 3U) {
+                    return -ENOTSUP;
+                }
+                parts[part++] = value;
+                value = 0U;
+                any = false;
+            }
+        } else {
+            if (text[pos] < '0' || text[pos] > '9') {
+                return -EINVAL;
+            }
+            value = value * 10UL + (unsigned long)(text[pos] - '0');
+            if (value > 65535UL) {
+                return -EINVAL;
+            }
+            any = true;
+        }
+        pos++;
+    }
+
+    if (part != 3U) {
+        return -ENOTSUP;
+    }
+
+    *object_id = (uint16_t)parts[0];
+    *instance_id = (uint16_t)parts[1];
+    *resource_id = (uint16_t)parts[2];
+
+    return 0;
+}
+
+static size_t composite_collect_json(const char *buf, size_t len, uint16_t *oids,
+                                     uint16_t *iids, uint16_t *rids, size_t capacity,
+                                     bool *invalid, bool *unknown)
+{
+    size_t count = 0U;
+    size_t pos = 0U;
+    char base[128];
+    base[0] = '\0';
+
+    while (pos < len) {
+        size_t key_pos = pos;
+        bool found = false;
+        bool is_base = false;
+
+        while (key_pos + 2U < len) {
+            if (buf[key_pos] == '"' && buf[key_pos + 1U] == 'b' &&
+                buf[key_pos + 2U] == 'n' && key_pos + 3U < len && buf[key_pos + 3U] == '"') {
+                found = true;
+                is_base = true;
+                break;
+            }
+            if (buf[key_pos] == '"' && buf[key_pos + 1U] == 'n' &&
+                buf[key_pos + 2U] == '"') {
+                found = true;
+                is_base = false;
+                break;
+            }
+            key_pos++;
+        }
+
+        if (!found) {
+            break;
+        }
+
+        {
+            size_t after = is_base ? key_pos + 4U : key_pos + 3U;
+            size_t quote_start;
+            size_t quote_end;
+
+            while (after < len && (buf[after] == ' ' || buf[after] == '\t' ||
+                   buf[after] == '\n' || buf[after] == '\r')) {
+                after++;
+            }
+            if (after >= len || buf[after] != ':') {
+                pos = key_pos + (is_base ? 4U : 3U);
+                continue;
+            }
+            after++;
+            while (after < len && (buf[after] == ' ' || buf[after] == '\t' ||
+                   buf[after] == '\n' || buf[after] == '\r')) {
+                after++;
+            }
+            if (after >= len || buf[after] != '"') {
+                pos = after;
+                continue;
+            }
+            quote_start = after + 1U;
+            quote_end = quote_start;
+            while (quote_end < len && buf[quote_end] != '"') {
+                quote_end++;
+            }
+            if (quote_end >= len) {
+                break;
+            }
+
+            if (is_base) {
+                size_t bl = quote_end - quote_start;
+                if (bl < sizeof(base)) {
+                    memcpy(base, buf + quote_start, bl);
+                    base[bl] = '\0';
+                }
+            } else if (count <= capacity) {
+                char target[256];
+                size_t tlen = 0U;
+
+                if (base[0] != '\0' && !(quote_start < len && buf[quote_start] == '/')) {
+                    size_t blen = strlen(base);
+                    if (blen + (quote_end - quote_start) < sizeof(target)) {
+                        memcpy(target, base, blen);
+                        tlen = blen;
+                    }
+                }
+                if (tlen + (quote_end - quote_start) < sizeof(target)) {
+                    memcpy(target + tlen, buf + quote_start, quote_end - quote_start);
+                    tlen += (quote_end - quote_start);
+                    target[tlen] = '\0';
+                } else {
+                    target[0] = '\0';
+                    tlen = 0U;
+                }
+
+                if (count == capacity) {
+                    count = capacity + 1U;
+                    break;
+                }
+                {
+                    int path_rc = tlen == 0U
+                                      ? -EINVAL
+                                      : composite_parse_path_text(target, tlen, &oids[count],
+                                                                  &iids[count], &rids[count]);
+
+                    if (path_rc == -ENOTSUP) {
+                        *unknown = true;
+                    } else if (path_rc != 0) {
+                        *invalid = true;
+                    } else {
+                        count++;
+                    }
+                }
+            }
+            pos = quote_end + 1U;
+        }
+    }
+
+    return count;
+}
+
+static size_t composite_collect_cbor(const uint8_t *buf, size_t len, uint16_t *oids,
+                                     uint16_t *iids, uint16_t *rids, size_t capacity,
+                                     bool *invalid, bool *unknown)
+{
+    size_t count = 0U;
+    size_t i = 0U;
+    char base[128];
+    base[0] = '\0';
+
+    while (i + 2U < len) {
+        bool is_base = false;
+        bool is_name = false;
+
+        if (buf[i] == 0x62U && buf[i + 1U] == (uint8_t)'b' && buf[i + 2U] == (uint8_t)'n') {
+            is_base = true;
+        } else if (buf[i] == 0x61U && buf[i + 1U] == (uint8_t)'n') {
+            is_name = true;
+        }
+
+        if (!is_base && !is_name) {
+            i++;
+            continue;
+        }
+
+        {
+            size_t j = is_base ? i + 3U : i + 2U;
+            size_t str_len = 0U;
+            size_t str_start = 0U;
+
+            if (j >= len) {
+                break;
+            }
+            if (buf[j] >= 0x60U && buf[j] <= 0x77U) {
+                str_len = (size_t)(buf[j] - 0x60U);
+                str_start = j + 1U;
+            } else if (buf[j] == 0x78U && j + 1U < len) {
+                str_len = buf[j + 1U];
+                str_start = j + 2U;
+            } else if (buf[j] == 0x79U && j + 2U < len) {
+                str_len = ((size_t)buf[j + 1U] << 8) | buf[j + 2U];
+                str_start = j + 3U;
+            }
+
+            if (str_len > 0U && str_start + str_len <= len) {
+                if (is_base) {
+                    if (str_len < sizeof(base)) {
+                        memcpy(base, buf + str_start, str_len);
+                        base[str_len] = '\0';
+                    }
+                } else {
+                    if (count == capacity) {
+                        count = capacity + 1U;
+                        i = str_start + str_len;
+                        if (i <= j) {
+                            i = j + 1U;
+                        }
+                        continue;
+                    }
+                    if (count < capacity) {
+                        char target[256];
+                        size_t tlen = 0U;
+
+                        if (base[0] != '\0' && buf[str_start] != (uint8_t)'/') {
+                            size_t blen = strlen(base);
+                            if (blen + str_len < sizeof(target)) {
+                                memcpy(target, base, blen);
+                                tlen = blen;
+                            }
+                        }
+                        if (tlen + str_len < sizeof(target)) {
+                            memcpy(target + tlen, buf + str_start, str_len);
+                            tlen += str_len;
+                            target[tlen] = '\0';
+                        } else {
+                            target[0] = '\0';
+                            tlen = 0U;
+                        }
+
+                        {
+                            int path_rc = tlen == 0U
+                                              ? -EINVAL
+                                              : composite_parse_path_text(target, tlen,
+                                                                          &oids[count], &iids[count],
+                                                                          &rids[count]);
+
+                            if (path_rc == -ENOTSUP) {
+                                *unknown = true;
+                            } else if (path_rc != 0) {
+                                *invalid = true;
+                            } else {
+                                count++;
+                            }
+                        }
+                    }
+                }
+            }
+            i = str_start + str_len;
+            if (i <= j) {
+                i = j + 1U;
+            }
+            continue;
+        }
+    }
+
+    return count;
+}
+
 static void endpoint_handle_request(struct coap_packet *packet, const struct net_sockaddr *peer,
                                     net_socklen_t peer_length)
 {
@@ -369,7 +639,8 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
         return;
     }
 
-    if (coap_header_get_code(packet) == COAP_METHOD_GET) {
+    if (coap_header_get_code(packet) == COAP_METHOD_GET ||
+        coap_header_get_code(packet) == COAP_METHOD_FETCH) {
         rc = endpoint_parse_accept(packet, accepted, ARRAY_SIZE(accepted), &accepted_count);
     }
 
@@ -381,6 +652,10 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
                 accepted[0] == COAP_CONTENT_FORMAT_APP_LINK_FORMAT) {
                 allowed = true;
             }
+        }
+
+        if (coap_header_get_code(packet) == COAP_METHOD_FETCH) {
+            allowed = true;
         }
 
         if (allowed && path_count >= 1U) {
@@ -518,6 +793,171 @@ static void endpoint_handle_request(struct coap_packet *packet, const struct net
                 }
             }
         }
+    }
+
+    if (coap_header_get_code(packet) == COAP_METHOD_FETCH) {
+        uint16_t oids[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
+        uint16_t iids[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
+        uint16_t rids[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
+        size_t target_count;
+        struct sirena_lwm2m_codec_value values[CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES];
+        size_t value_count = 0U;
+        size_t target_index;
+        bool unknown_path = false;
+        bool not_readable = false;
+        bool resource_error = false;
+        bool invalid_target = false;
+        bool unresolved_target = false;
+        int negotiated = -1;
+        bool negotiated_found = false;
+
+        if (rc != 0) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_NOT_ACCEPTABLE, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
+        if (content_format < 0 || (content_format != (int)SIRENA_LWM2M_CF_SENML_JSON &&
+                                   content_format != (int)SIRENA_LWM2M_CF_SENML_CBOR)) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_UNSUPPORTED_CONTENT_FORMAT, false, 0U,
+                                        -1, NULL, 0U, peer, peer_length);
+            return;
+        }
+
+        if (content_format == (int)SIRENA_LWM2M_CF_SENML_JSON) {
+            target_count = composite_collect_json((const char *)payload, payload_length, oids, iids,
+                                                  rids, CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES,
+                                                  &invalid_target, &unresolved_target);
+        } else {
+            target_count = composite_collect_cbor((const uint8_t *)payload, payload_length, oids,
+                                                  iids, rids, CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES,
+                                                  &invalid_target, &unresolved_target);
+        }
+
+        if (invalid_target) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
+        if (unresolved_target) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_NOT_FOUND, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
+        if (target_count > CONFIG_SIRENA_LWM2M_CODEC_MAX_VALUES) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
+        if (target_count == 0U) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
+        memset(values, 0, sizeof(values));
+        for (target_index = 0U; target_index < target_count; ++target_index) {
+            struct sirena_lwm2m_resource *resource;
+            size_t raw_length = CONFIG_SIRENA_LWM2M_PROTOCOL_VALUE_MAX;
+
+            if (sirena_lwm2m_find_resource(oids[target_index], iids[target_index],
+                                            rids[target_index], &resource) != 0) {
+                unknown_path = true;
+                continue;
+            }
+
+            if ((resource->operations & SIRENA_LWM2M_OP_READ) == 0U || resource->read == NULL) {
+                not_readable = true;
+                continue;
+            }
+
+            if (sirena_lwm2m_get(oids[target_index], iids[target_index], rids[target_index],
+                                 composite_raw[target_index], &raw_length) != 0) {
+                resource_error = true;
+                continue;
+            }
+
+            if (sirena_lwm2m_protocol_value_from_resource(resource, composite_raw[target_index], raw_length,
+                                            &values[value_count]) != 0) {
+                resource_error = true;
+                continue;
+            }
+
+            values[value_count].object_id = oids[target_index];
+            values[value_count].instance_id = iids[target_index];
+            values[value_count].resource_id = rids[target_index];
+            values[value_count].id = rids[target_index];
+            value_count++;
+        }
+
+        if (unknown_path) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_NOT_FOUND, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
+        if (not_readable) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_NOT_ALLOWED, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
+        if (resource_error) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_INTERNAL_ERROR, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
+        if (value_count == 0U) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_BAD_REQUEST, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
+        {
+            uint16_t preferred = (uint16_t)CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
+            uint16_t selected = 0U;
+
+            if (sirena_lwm2m_content_format_negotiate_multi(accepted, accepted_count, preferred,
+                                                           values, value_count, &selected) == 0) {
+                negotiated = (int)selected;
+                negotiated_found = true;
+            }
+        }
+
+        if (!negotiated_found) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_NOT_ACCEPTABLE, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
+        size_t length = sizeof(response_payload);
+        if (sirena_lwm2m_codec_encode((uint16_t)negotiated, values, value_count, response_payload,
+                                     &length) != 0) {
+            (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                        COAP_RESPONSE_CODE_INTERNAL_ERROR, false, 0U, -1, NULL, 0U,
+                                        peer, peer_length);
+            return;
+        }
+
+        (void)endpoint_send_message(response_type, response_message_id, token_length, token,
+                                    COAP_RESPONSE_CODE_CONTENT, true, (uint16_t)negotiated, -1,
+                                    response_payload, length, peer, peer_length);
+        return;
     }
 
     if (coap_header_get_code(packet) == COAP_METHOD_GET) {

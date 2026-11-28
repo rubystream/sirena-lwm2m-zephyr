@@ -52,6 +52,13 @@ int sirena_lwm2m_content_format_negotiate(const uint16_t *accepted,
                                             uint16_t preferred,
                                             enum sirena_lwm2m_value_type type);
 
+int sirena_lwm2m_content_format_negotiate_multi(const uint16_t *accepted,
+                                              size_t accepted_count,
+                                              uint16_t preferred,
+                                              const struct sirena_lwm2m_codec_value *values,
+                                              size_t value_count,
+                                              uint16_t *selected);
+
 int sirena_lwm2m_codec_encode(uint16_t content_format,
                               const struct sirena_lwm2m_codec_value *values,
                               size_t value_count, void *buffer,

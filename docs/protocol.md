@@ -25,6 +25,7 @@ for every request it receives.
 | Execute | POST | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.04 Changed | 4.00, 4.04, 4.05 |
 | Write-Attributes | PUT (with URI-Query) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.04 Changed | 4.00, 4.04 |
 | Discover | GET (Accept: application/link-format) | `/{ObjectID}[/{ObjectInstanceID}][/{ResourceID}]` | 2.05 Content | 4.04, 4.06, 5.00 |
+| Read-Composite | FETCH | SenML JSON/CBOR target list | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 4.15, 5.00 |
 | Observe | GET with Observe = 0 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05, 4.06, 5.03 |
 | Cancel Observation | GET with Observe = 1 | `/{ObjectID}/{ObjectInstanceID}/{ResourceID}` | 2.05 Content | 4.00, 4.04, 4.05 |
 | Notify | notification | the observed resource | 2.05 Content | |
@@ -206,12 +207,12 @@ error codes of the API are the negative `errno` values of the table.
 
 ## Not in this slice
 
-- The composite operations: Read-Composite, Write-Composite and
-  Observe-Composite.
+- The composite operations: Write-Composite and Observe-Composite.
 - The creation and the deletion of object instances.
 - The block-wise transfer of large payloads.
 - The decoding of the structured content formats. The codec encodes them, but a
-  write in one of them is refused with 4.15.
+  write in one of them is refused with 4.15. A read composite parses the SenML
+  JSON and SenML CBOR target lists only.
 
 ## Tests
 
