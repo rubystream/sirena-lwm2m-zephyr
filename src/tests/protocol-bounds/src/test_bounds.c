@@ -159,13 +159,6 @@ static int peer_request(enum coap_method method, const char *path, uint16_t cont
 
 static int peer_register(void)
 {
-    struct sirena_lwm2m_provisioning provisioning = {
-        .server_uri = server_uri,
-        .security_mode = SIRENA_LWM2M_SECURITY_MODE_NOSEC,
-        .short_server_id = 1U,
-        .lifetime = 300U,
-        .binding = "U",
-    };
     int rc;
 
     rc = sirena_lwm2m_coap_set_endpoint_name(BOUNDS_ENDPOINT_NAME);

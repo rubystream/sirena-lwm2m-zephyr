@@ -1964,3 +1964,49 @@ ZTEST(sirena_lwm2m_protocol, test_write_composite_reports_a_cbor_value_that_does
     zassert_equal(rc, 0, "the stored value is not readable");
     zassert_true(binding[0] != 0U, "the other target was not written");
 }
+
+ZTEST(sirena_lwm2m_protocol, test_write_composite_with_a_malformed_payload_is_refused)
+{
+    static const char payload[] = "[{\"bn\":\"/1/0/\",\"n\":";
+    int64_t lifetime = 0;
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_IPATCH, "/1/0", SIRENA_LWM2M_CF_SENML_JSON, payload,
+                      sizeof(payload) - 1U, NULL, 0U, -1, NULL);
+    zassert_equal(rc, 0, "composite write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_BAD_REQUEST, "unexpected response code");
+    zassert_equal(peer_capture.payload_length, 0U, "a failure must not carry a payload");
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME, "a refused request must not write");
+}
+
+ZTEST(sirena_lwm2m_protocol, test_write_composite_refuses_an_accept_list_without_a_composite_format)
+{
+    static const char payload[] = "[{\"bn\":\"/1/0/\",\"n\":\"1\",\"v\":600}]";
+    static const uint16_t accepted[] = { SIRENA_LWM2M_CF_TLV };
+    int64_t lifetime = 0;
+    int rc;
+
+    rc = peer_register();
+    zassert_equal(rc, 0, "registration failed");
+
+    rc = peer_request(COAP_METHOD_IPATCH, "/1/0", SIRENA_LWM2M_CF_SENML_JSON, payload,
+                      sizeof(payload) - 1U, accepted, ARRAY_SIZE(accepted), -1, NULL);
+    zassert_equal(rc, 0, "composite write request failed: %d", rc);
+
+    zassert_equal(peer_capture.code, COAP_RESPONSE_CODE_NOT_ACCEPTABLE,
+                  "unexpected response code");
+    zassert_equal(peer_capture.payload_length, 0U, "a failure must not carry a payload");
+
+    rc = sirena_lwm2m_get_integer(PEER_SERVER_OBJECT_ID, PEER_INSTANCE_ID,
+                                   PEER_SERVER_LIFETIME_RESOURCE, &lifetime);
+    zassert_equal(rc, 0, "the stored value is not readable");
+    zassert_equal(lifetime, PEER_LIFETIME, "a refused request must not write");
+}

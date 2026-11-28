@@ -642,6 +642,23 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
             return 0;
         }
 
+        {
+            uint16_t preferred = (uint16_t)CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
+            uint16_t selected = (uint16_t)SIRENA_LWM2M_CF_SENML_JSON;
+
+            protocol_composite_status[0].type = SIRENA_LWM2M_VALUE_INTEGER;
+
+            if (sirena_lwm2m_content_format_negotiate_multi(request->accepted_formats,
+                                                            request->accepted_format_count,
+                                                            preferred, protocol_composite_status, 1U,
+                                                            &selected) == 0) {
+                response_format = selected;
+            } else if (request->accepted_format_count > 0U) {
+                protocol_set_status(response, SIRENA_LWM2M_STATUS_NOT_ACCEPTABLE);
+                return 0;
+            }
+        }
+
         for (i = 0U; i < record_count; i++) {
             struct sirena_lwm2m_resource *resource;
             struct sirena_lwm2m_codec_value value;
@@ -699,18 +716,6 @@ int sirena_lwm2m_protocol_execute(const struct sirena_lwm2m_protocol_request *re
             protocol_composite_status[i].id = resource_id;
             protocol_composite_status[i].type = SIRENA_LWM2M_VALUE_INTEGER;
             protocol_composite_status[i].data.integer = status;
-        }
-
-        {
-            uint16_t preferred = (uint16_t)CONFIG_SIRENA_LWM2M_PREFERRED_CONTENT_FORMAT;
-            uint16_t selected = (uint16_t)SIRENA_LWM2M_CF_SENML_JSON;
-
-            if (sirena_lwm2m_content_format_negotiate_multi(request->accepted_formats,
-                                                            request->accepted_format_count,
-                                                            preferred, protocol_composite_status,
-                                                            record_count, &selected) == 0) {
-                response_format = selected;
-            }
         }
 
         length = response->payload_capacity;
